@@ -1,0 +1,78 @@
+name: Set Bot Version
+
+on:
+  push:
+    # change this to the branch you deploy from
+    branches: [ main ]
+
+jobs:
+  set-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: ver
+        run: |
+          VERSION=""
+          if [ -f package.json ]; then
+            VERSION=$(jq -r .version package.json 2>/dev/null || true)
+          fi
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            VERSION=${GITHUB_SHA::7}
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update Pterodactyl BOT_VERSION
+        env:
+          PANEL_URL: https://panel.newlifesmp.com/api
+          API_KEY: ${{ secrets.PTERODACTYL_API_KEY }}
+          SERVER_ID: 0b7ac013-ba3f-40f7-bd16-d3cf448461fe
+          BOT_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          if [ -z "$PANEL_URL" ] || [ -z "$API_KEY" ] || [ -z "$SERVER_ID" ]; then
+            echo "Missing required values: ensure API key secret PTERODACTYL_API_KEY is set"
+            exit 1
+          fi
+
+          echo "Setting BOT_VERSION=$BOT_VERSION on server $SERVER_ID"
+
+          # Fetch current environment payload from panel. Endpoint may vary by panel version.
+          # Common pattern: GET <PANEL_URL>/servers/<SERVER_ID>/environment
+          curl -s -H "Authorization: Bearer $API_KEY" -H "Accept: application/json" "$PANEL_URL/servers/$SERVER_ID/environment" -o env.json
+
+          # Build new environment payload by merging BOT_VERSION into existing environment map.
+          python3 - <<'PY'
+import json,sys
+try:
+    data=json.load(open('env.json'))
+except Exception:
+    data={}
+# attempt to find environment map
+env=None
+if isinstance(data,dict):
+    # Common shapes: {"attributes": {"environment": {...}}} or direct map
+    if 'attributes' in data and isinstance(data['attributes'], dict) and 'environment' in data['attributes']:
+        env = data['attributes']['environment']
+    elif 'environment' in data and isinstance(data['environment'], dict):
+        env = data['environment']
+    else:
+        # fallback to using data as env map
+        env = data if isinstance(data, dict) else {}
+else:
+    env={}
+if env is None:
+    env={}
+# set BOT_VERSION
+env['BOT_VERSION'] = "$BOT_VERSION"
+# payload shape expected by many panels: {"environment": { ... }} or {"environment": env}
+payload = {"environment": env}
+print(json.dumps(payload))
+PY > payload.json
+
+          # Send update request (PATCH). The exact endpoint may differ on your panel; adjust if necessary.
+          curl -s -X PATCH -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" -d @payload.json "$PANEL_URL/servers/$SERVER_ID/environment" -o /dev/null -w "%{http_code}\n" | { read code; if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then echo "Updated"; else echo "Failed (HTTP $code)"; exit 1; fi }
+
+      - name: Done
+        run: echo "Pterodactyl BOT_VERSION set to ${{ steps.ver.outputs.version }}"

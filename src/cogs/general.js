@@ -1,10 +1,10 @@
 /**
  * General Cog
  * Handles help, history, and utility commands for NewLife Management Bot
- * 
- * Permissions:
- * - /help: Everyone
- * - /history: Moderator+
+        }
+    },
+
+    // !update - Pull latest code, install deps, and restart (Admin only)
  * - /lookup: Moderator+
  * - /stats: Admin+
  * - /ping: Everyone
@@ -13,6 +13,10 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const Warning = require('../database/models/Warning');
 const Ban = require('../database/models/Ban');
+const { exec } = require('child_process');
+const util = require('util');
+const execAsync = util.promisify(exec);
+const path = require('path');
 const { 
     createHistoryEmbed, 
     createErrorEmbed,
@@ -321,7 +325,47 @@ const commands = {
                 embeds: [embed]
             });
         }
-    }
+    },
+
+    // !update - Pull latest code, install deps, and restart (Admin only)
+    update: {
+        name: 'update',
+        description: 'Pull latest from git, install deps, and restart the bot (Admin only)',
+        usage: '!update',
+        async execute(message, args, client) {
+            const ownerId = process.env.OWNER_USER_ID || process.env.BOT_OWNER_ID;
+            if (!ownerId) {
+                return message.reply({ embeds: [createErrorEmbed('Not Configured', 'OWNER_USER_ID is not set in the environment. Set it to the Discord user ID allowed to run `!update`.')], allowedMentions: { repliedUser: false } });
+            }
+
+            if (message.author.id !== String(ownerId)) {
+                return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'Only the configured bot owner can run this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            const repoDir = path.resolve(__dirname, '..', '..');
+            const branch = process.env.GIT_BRANCH || 'main';
+
+            const status = await message.reply({ content: `🔄 Updating from \`${branch}\`...`, allowedMentions: { repliedUser: false } });
+
+            try {
+                // Fetch and reset to remote branch to avoid merge conflicts
+                await execAsync(`git fetch --all`, { cwd: repoDir, timeout: 5 * 60 * 1000 });
+                await execAsync(`git reset --hard origin/${branch}`, { cwd: repoDir, timeout: 5 * 60 * 1000 });
+
+                // Install production dependencies
+                await execAsync(`npm install --production`, { cwd: repoDir, timeout: 10 * 60 * 1000 });
+
+                await status.edit({ content: '✅ Update applied. Restarting now...', allowedMentions: { repliedUser: false } });
+
+                // Give Discord a moment to deliver the message then exit so Pterodactyl restarts the server
+                setTimeout(() => process.exit(0), 2000);
+            } catch (err) {
+                console.error('Update failed:', err);
+                const short = String(err.stderr || err.message || err).slice(0, 1900);
+                return status.edit({ content: `❌ Update failed:\n\n${short}` });
+            }
+        }
+    },
 };
 
 /**

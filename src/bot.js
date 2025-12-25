@@ -1,6 +1,9 @@
 ﻿require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const util = require('util');
+const { exec } = require('child_process');
+const execAsync = util.promisify(exec);
 const { Client, GatewayIntentBits, Collection, Routes } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 
@@ -192,6 +195,36 @@ process.on('SIGINT', async () => {
 
 // Main startup
 async function main() {
+    // Version check / auto-update flow
+    try {
+        const botVersion = process.env.BOT_VERSION;
+        if (botVersion) {
+            const repoRoot = path.resolve(__dirname, '..');
+            const deployedFile = path.join(repoRoot, '.deployed_version');
+            const current = fs.existsSync(deployedFile) ? fs.readFileSync(deployedFile, 'utf8').trim() : null;
+            if (current !== botVersion) {
+                console.log(`🔄 BOT_VERSION mismatch (deployed=${current || 'none'} target=${botVersion}). Attempting update...`);
+                const branch = process.env.GIT_BRANCH || 'main';
+
+                try {
+                    await execAsync('git fetch --all', { cwd: repoRoot, timeout: 5 * 60 * 1000 });
+                    await execAsync(`git reset --hard origin/${branch}`, { cwd: repoRoot, timeout: 5 * 60 * 1000 });
+                    await execAsync('npm install --production', { cwd: repoRoot, timeout: 10 * 60 * 1000 });
+
+                    // record deployed version so we don't loop
+                    fs.writeFileSync(deployedFile, String(botVersion), { encoding: 'utf8' });
+
+                    console.log('✅ Update applied, exiting so process manager (Pterodactyl) can restart the server.');
+                    process.exit(0);
+                } catch (updateErr) {
+                    console.error('❌ Auto-update failed:', updateErr);
+                    console.error('Continuing startup with existing files. Fix update and restart manually.');
+                }
+            }
+        }
+    } catch (verErr) {
+        console.error('Error during version check:', verErr);
+    }
     try {
         await connectDatabase();
         await loadCogs();
