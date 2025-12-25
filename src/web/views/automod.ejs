@@ -1,0 +1,306 @@
+<%- include('partials/header', {user: user, isAdmin: true}) %>
+  <div class="content-container">
+    <div class="page-hero">
+      <h1>🛡️ Automod Configuration</h1>
+      <p class="intro-text">Configure automatic moderation rules for your server</p>
+    </div>
+
+    <form action="/admin/automod/save" method="POST" class="config-form">
+      <!-- Main Toggle -->
+      <div class="card config-section">
+        <div class="card-header">
+          <h3>⚙️ General Settings</h3>
+        </div>
+        <div class="card-body">
+          <div class="form-group toggle-group">
+            <label class="toggle-label">
+              <input type="checkbox" name="enabled" <%= config.enabled ? 'checked' : '' %>>
+              <span class="toggle-switch"></span>
+              <span>Enable Automod</span>
+            </label>
+          </div>
+          
+          <div class="form-group">
+            <label for="logChannelId">Log Channel ID</label>
+            <input type="text" name="logChannelId" id="logChannelId" value="<%= config.logChannelId || '' %>" placeholder="Channel ID for automod logs">
+          </div>
+
+          <div class="form-group">
+            <label for="exemptRoles">Exempt Role IDs (comma separated)</label>
+            <input type="text" name="exemptRoles" id="exemptRoles" value="<%= (config.exemptRoles || []).join(', ') %>" placeholder="Role IDs that bypass automod">
+          </div>
+
+          <div class="form-group">
+            <label for="exemptChannels">Exempt Channel IDs (comma separated)</label>
+            <input type="text" name="exemptChannels" id="exemptChannels" value="<%= (config.exemptChannels || []).join(', ') %>" placeholder="Channel IDs where automod is disabled">
+          </div>
+        </div>
+      </div>
+
+      <!-- Word Filter -->
+      <div class="card config-section">
+        <div class="card-header">
+          <h3>🚫 Word Filter</h3>
+          <label class="toggle-label inline">
+            <input type="checkbox" name="wordFilterEnabled" <%= config.wordFilterEnabled ? 'checked' : '' %>>
+            <span class="toggle-switch"></span>
+          </label>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="bannedWords">Banned Words (one per line)</label>
+            <textarea name="bannedWords" id="bannedWords" rows="6" placeholder="Enter banned words, one per line"><%= (config.bannedWords || []).join('\n') %></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="wordFilterAction">Action</label>
+              <select name="wordFilterAction" id="wordFilterAction">
+                <option value="delete" <%= config.wordFilterAction === 'delete' ? 'selected' : '' %>>Delete Message</option>
+                <option value="warn" <%= config.wordFilterAction === 'warn' ? 'selected' : '' %>>Warn User</option>
+                <option value="mute" <%= config.wordFilterAction === 'mute' ? 'selected' : '' %>>Mute User</option>
+                <option value="kick" <%= config.wordFilterAction === 'kick' ? 'selected' : '' %>>Kick User</option>
+                <option value="ban" <%= config.wordFilterAction === 'ban' ? 'selected' : '' %>>Ban User</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="wordFilterMuteDuration">Mute Duration (ms)</label>
+              <input type="number" name="wordFilterMuteDuration" id="wordFilterMuteDuration" value="<%= config.wordFilterMuteDuration || 300000 %>">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spam Detection -->
+      <div class="card config-section">
+        <div class="card-header">
+          <h3>📨 Spam Detection</h3>
+          <label class="toggle-label inline">
+            <input type="checkbox" name="spamDetectionEnabled" <%= config.spamDetectionEnabled ? 'checked' : '' %>>
+            <span class="toggle-switch"></span>
+          </label>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="spamThreshold">Message Threshold</label>
+              <input type="number" name="spamThreshold" id="spamThreshold" value="<%= config.spamThreshold || 5 %>" min="2" max="20">
+            </div>
+            <div class="form-group">
+              <label for="spamTimeWindow">Time Window (ms)</label>
+              <input type="number" name="spamTimeWindow" id="spamTimeWindow" value="<%= config.spamTimeWindow || 5000 %>" min="1000" max="60000">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="spamAction">Action</label>
+              <select name="spamAction" id="spamAction">
+                <option value="delete" <%= config.spamAction === 'delete' ? 'selected' : '' %>>Delete Message</option>
+                <option value="warn" <%= config.spamAction === 'warn' ? 'selected' : '' %>>Warn User</option>
+                <option value="mute" <%= config.spamAction === 'mute' ? 'selected' : '' %>>Mute User</option>
+                <option value="kick" <%= config.spamAction === 'kick' ? 'selected' : '' %>>Kick User</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="spamMuteDuration">Mute Duration (ms)</label>
+              <input type="number" name="spamMuteDuration" id="spamMuteDuration" value="<%= config.spamMuteDuration || 300000 %>">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Link Filter -->
+      <div class="card config-section">
+        <div class="card-header">
+          <h3>🔗 Link Filter</h3>
+          <label class="toggle-label inline">
+            <input type="checkbox" name="linkFilterEnabled" <%= config.linkFilterEnabled ? 'checked' : '' %>>
+            <span class="toggle-switch"></span>
+          </label>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="allowedDomains">Allowed Domains (one per line)</label>
+            <textarea name="allowedDomains" id="allowedDomains" rows="4" placeholder="discord.com&#10;youtube.com&#10;twitch.tv"><%= (config.allowedDomains || []).join('\n') %></textarea>
+          </div>
+          <div class="form-group">
+            <label for="linkFilterAction">Action</label>
+            <select name="linkFilterAction" id="linkFilterAction">
+              <option value="delete" <%= config.linkFilterAction === 'delete' ? 'selected' : '' %>>Delete Message</option>
+              <option value="warn" <%= config.linkFilterAction === 'warn' ? 'selected' : '' %>>Warn User</option>
+              <option value="mute" <%= config.linkFilterAction === 'mute' ? 'selected' : '' %>>Mute User</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Caps Filter -->
+      <div class="card config-section">
+        <div class="card-header">
+          <h3>🔠 Caps Filter</h3>
+          <label class="toggle-label inline">
+            <input type="checkbox" name="capsFilterEnabled" <%= config.capsFilterEnabled ? 'checked' : '' %>>
+            <span class="toggle-switch"></span>
+          </label>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="capsThreshold">Caps Percentage (%)</label>
+              <input type="number" name="capsThreshold" id="capsThreshold" value="<%= config.capsThreshold || 70 %>" min="50" max="100">
+            </div>
+            <div class="form-group">
+              <label for="capsMinLength">Min Message Length</label>
+              <input type="number" name="capsMinLength" id="capsMinLength" value="<%= config.capsMinLength || 10 %>" min="5" max="50">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="capsAction">Action</label>
+            <select name="capsAction" id="capsAction">
+              <option value="delete" <%= config.capsAction === 'delete' ? 'selected' : '' %>>Delete Message</option>
+              <option value="warn" <%= config.capsAction === 'warn' ? 'selected' : '' %>>Warn User</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mention Spam -->
+      <div class="card config-section">
+        <div class="card-header">
+          <h3>@️ Mention Spam</h3>
+          <label class="toggle-label inline">
+            <input type="checkbox" name="mentionSpamEnabled" <%= config.mentionSpamEnabled ? 'checked' : '' %>>
+            <span class="toggle-switch"></span>
+          </label>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="mentionThreshold">Max Mentions per Message</label>
+              <input type="number" name="mentionThreshold" id="mentionThreshold" value="<%= config.mentionThreshold || 5 %>" min="2" max="20">
+            </div>
+            <div class="form-group">
+              <label for="mentionAction">Action</label>
+              <select name="mentionAction" id="mentionAction">
+                <option value="delete" <%= config.mentionAction === 'delete' ? 'selected' : '' %>>Delete Message</option>
+                <option value="warn" <%= config.mentionAction === 'warn' ? 'selected' : '' %>>Warn User</option>
+                <option value="mute" <%= config.mentionAction === 'mute' ? 'selected' : '' %>>Mute User</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-lg">💾 Save Configuration</button>
+        <a href="/admin" class="btn btn-secondary btn-lg">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <style>
+    .config-form {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .config-section {
+      margin-bottom: 2rem;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .card-header h3 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+    .card-body {
+      padding: 1.5rem;
+    }
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+    .form-group textarea {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .toggle-group {
+      padding: 1rem;
+      background: rgba(59, 130, 246, 0.1);
+      border-radius: 8px;
+    }
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle-label.inline {
+      margin: 0;
+    }
+    .toggle-label input {
+      display: none;
+    }
+    .toggle-switch {
+      width: 48px;
+      height: 26px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 13px;
+      position: relative;
+      transition: all 0.2s;
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: all 0.2s;
+    }
+    .toggle-label input:checked + .toggle-switch {
+      background: #22c55e;
+    }
+    .toggle-label input:checked + .toggle-switch::after {
+      left: 25px;
+    }
+    .form-actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    @media (max-width: 600px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+<%- include('partials/footer') %>

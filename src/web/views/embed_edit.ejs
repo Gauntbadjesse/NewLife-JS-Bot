@@ -1,0 +1,303 @@
+<%- include('partials/header', {user: user, isAdmin: true}) %>
+  <div class="content-container">
+    <div class="page-hero">
+      <h1>📋 Edit Embed: <%= embed.name %></h1>
+      <p class="intro-text">Customize your embed and add buttons</p>
+    </div>
+
+    <div class="edit-grid">
+      <!-- Embed Settings -->
+      <div class="card">
+        <div class="card-header">
+          <h3>⚙️ Embed Settings</h3>
+        </div>
+        <div class="card-body">
+          <form action="/admin/embeds/<%= embed._id %>/update" method="POST">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="title">Title *</label>
+                <input type="text" name="title" id="title" required value="<%= embed.title %>">
+              </div>
+              <div class="form-group small">
+                <label for="color">Color</label>
+                <input type="color" name="color" id="color" value="<%= embed.color || '#3b82f6' %>">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="description">Description</label>
+              <textarea name="description" id="description" rows="5"><%= embed.description || '' %></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="footer">Footer</label>
+                <input type="text" name="footer" id="footer" value="<%= embed.footer || '' %>">
+              </div>
+              <div class="form-group">
+                <label for="image">Image URL</label>
+                <input type="url" name="image" id="image" value="<%= embed.image || '' %>">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="card">
+        <div class="card-header">
+          <h3>👁️ Preview</h3>
+        </div>
+        <div class="card-body">
+          <div class="discord-embed-preview" style="border-left-color: <%= embed.color || '#3b82f6' %>;">
+            <h4 class="embed-title"><%= embed.title %></h4>
+            <% if (embed.description) { %>
+              <p class="embed-desc"><%= embed.description %></p>
+            <% } %>
+            <% if (embed.image) { %>
+              <img class="embed-image" src="<%= embed.image %>" alt="">
+            <% } %>
+            <% if (embed.footer) { %>
+              <div class="embed-footer"><%= embed.footer %></div>
+            <% } %>
+            <% if ((embed.buttons || []).length > 0) { %>
+              <div class="embed-buttons">
+                <% embed.buttons.forEach(function(btn) { %>
+                  <button class="discord-btn <%= btn.style || 'primary' %>">
+                    <% if (btn.emoji) { %><span><%= btn.emoji %></span><% } %>
+                    <%= btn.label %>
+                  </button>
+                <% }) %>
+              </div>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buttons Section -->
+    <div class="card" style="margin-top: 2rem;">
+      <div class="card-header">
+        <h3>🔘 Buttons <span class="count"><%= (embed.buttons || []).length %>/25</span></h3>
+      </div>
+      <div class="card-body">
+        <!-- Existing Buttons -->
+        <% if ((embed.buttons || []).length > 0) { %>
+          <div class="button-list">
+            <% embed.buttons.forEach(function(btn, idx) { %>
+              <div class="button-item">
+                <div class="button-info">
+                  <span class="button-preview <%= btn.style || 'primary' %>">
+                    <% if (btn.emoji) { %><%= btn.emoji %><% } %>
+                    <%= btn.label %>
+                  </span>
+                  <span class="button-action muted"><%= btn.action %><%= btn.url ? ': ' + btn.url.substring(0, 30) + '...' : '' %></span>
+                </div>
+                <form action="/admin/embeds/<%= embed._id %>/removebutton" method="POST" style="display:inline">
+                  <input type="hidden" name="index" value="<%= idx %>">
+                  <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                </form>
+              </div>
+            <% }) %>
+          </div>
+        <% } else { %>
+          <p class="muted">No buttons added yet.</p>
+        <% } %>
+
+        <!-- Add Button Form -->
+        <hr style="margin: 1.5rem 0; border-color: rgba(255,255,255,0.1);">
+        <h4>➕ Add Button</h4>
+        <form action="/admin/embeds/<%= embed._id %>/addbutton" method="POST" class="add-button-form">
+          <div class="form-row four-col">
+            <div class="form-group">
+              <label for="btnLabel">Label *</label>
+              <input type="text" name="label" id="btnLabel" required placeholder="Button text">
+            </div>
+            <div class="form-group">
+              <label for="btnAction">Action *</label>
+              <select name="action" id="btnAction" required onchange="toggleUrlField(this)">
+                <option value="appeal">Open Appeal</option>
+                <option value="ticket">Open Ticket</option>
+                <option value="url">URL Link</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="btnStyle">Style</label>
+              <select name="style" id="btnStyle">
+                <option value="primary">Primary (Blue)</option>
+                <option value="secondary">Secondary (Gray)</option>
+                <option value="success">Success (Green)</option>
+                <option value="danger">Danger (Red)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="btnEmoji">Emoji</label>
+              <input type="text" name="emoji" id="btnEmoji" placeholder="📝">
+            </div>
+          </div>
+          <div class="form-group url-field" style="display: none;">
+            <label for="btnValue">URL / Custom ID</label>
+            <input type="text" name="value" id="btnValue" placeholder="https://... or custom_action_id">
+          </div>
+          <button type="submit" class="btn btn-secondary">Add Button</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="action-bar">
+      <a href="/admin/embeds" class="btn btn-secondary">← Back to Embeds</a>
+      <form action="/admin/embeds/<%= embed._id %>/send" method="POST" style="display: inline;">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <input type="text" name="channelId" placeholder="Channel ID" required style="width: 200px;">
+          <button type="submit" class="btn btn-primary">📤 Send to Channel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <style>
+    .edit-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+    @media (max-width: 900px) {
+      .edit-grid { grid-template-columns: 1fr; }
+    }
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: var(--text-primary);
+    }
+    .form-group input[type="color"] {
+      height: 42px;
+      padding: 0.25rem;
+      cursor: pointer;
+    }
+    .form-group.small {
+      max-width: 100px;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1rem;
+    }
+    .form-row.four-col {
+      grid-template-columns: repeat(4, 1fr);
+    }
+    @media (max-width: 700px) {
+      .form-row.four-col { grid-template-columns: 1fr 1fr; }
+    }
+    
+    /* Discord Embed Preview */
+    .discord-embed-preview {
+      background: #2f3136;
+      border-radius: 4px;
+      padding: 1rem;
+      border-left: 4px solid #3b82f6;
+    }
+    .embed-title {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+    }
+    .embed-desc {
+      margin: 0 0 0.75rem 0;
+      color: rgba(255,255,255,0.7);
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+    }
+    .embed-image {
+      max-width: 100%;
+      border-radius: 4px;
+      margin-bottom: 0.75rem;
+    }
+    .embed-footer {
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.5);
+      margin-top: 0.5rem;
+    }
+    .embed-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .discord-btn {
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .discord-btn.primary { background: #5865f2; color: white; }
+    .discord-btn.secondary { background: #4f545c; color: white; }
+    .discord-btn.success { background: #3ba55d; color: white; }
+    .discord-btn.danger { background: #ed4245; color: white; }
+    
+    /* Button List */
+    .button-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .button-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+    }
+    .button-info {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .button-preview {
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .button-preview.primary { background: #5865f2; }
+    .button-preview.secondary { background: #4f545c; }
+    .button-preview.success { background: #3ba55d; }
+    .button-preview.danger { background: #ed4245; }
+    .button-action {
+      font-size: 0.8rem;
+    }
+    
+    .action-bar {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+  </style>
+
+  <script>
+    function toggleUrlField(select) {
+      const urlField = document.querySelector('.url-field');
+      urlField.style.display = (select.value === 'url' || select.value === 'custom') ? 'block' : 'none';
+    }
+  </script>
+<%- include('partials/footer') %>

@@ -1,0 +1,118 @@
+<%- include('partials/header', {user: user, isAdmin: true}) %>
+  <div class="content-container">
+    <div class="page-hero">
+      <h1>📜 Audit Log</h1>
+      <p class="intro-text">View all staff actions and system events</p>
+    </div>
+
+    <!-- Filter -->
+    <div class="filter-bar">
+      <form action="/admin/auditlog" method="GET" class="filter-form">
+        <select name="category" onchange="this.form.submit()">
+          <option value="all" <%= category === 'all' ? 'selected' : '' %>>All Categories</option>
+          <option value="moderation" <%= category === 'moderation' ? 'selected' : '' %>>Moderation</option>
+          <option value="whitelist" <%= category === 'whitelist' ? 'selected' : '' %>>Whitelist</option>
+          <option value="appeals" <%= category === 'appeals' ? 'selected' : '' %>>Appeals</option>
+          <option value="applications" <%= category === 'applications' ? 'selected' : '' %>>Applications</option>
+          <option value="tickets" <%= category === 'tickets' ? 'selected' : '' %>>Tickets</option>
+          <option value="notes" <%= category === 'notes' ? 'selected' : '' %>>Notes</option>
+          <option value="config" <%= category === 'config' ? 'selected' : '' %>>Config</option>
+          <option value="bulk" <%= category === 'bulk' ? 'selected' : '' %>>Bulk Actions</option>
+          <option value="rcon" <%= category === 'rcon' ? 'selected' : '' %>>RCON</option>
+        </select>
+      </form>
+    </div>
+
+    <div class="table-section">
+      <h3>📋 Recent Actions <span class="count"><%= logs.length %></span></h3>
+      <div class="table-container">
+        <% if (logs.length === 0) { %>
+          <div class="empty-state">
+            <h4>No audit logs found</h4>
+            <p>Actions will appear here as they happen</p>
+          </div>
+        <% } else { %>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Staff</th>
+                <th>Target</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% logs.forEach(function(log) { %>
+                <tr>
+                  <td class="muted"><%= new Date(log.createdAt).toLocaleString() %></td>
+                  <td>
+                    <span class="action-badge <%= log.category %>">
+                      <%= log.action.replace(/_/g, ' ').toUpperCase() %>
+                    </span>
+                  </td>
+                  <td><%= log.staffName %></td>
+                  <td><%= log.targetName || '—' %></td>
+                  <td class="muted"><%= log.reason ? log.reason.substring(0, 50) + (log.reason.length > 50 ? '...' : '') : '—' %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        <% } %>
+      </div>
+
+      <% if (totalPages > 1) { %>
+        <div class="pagination">
+          <% if (page > 1) { %>
+            <a class="btn btn-sm btn-secondary" href="/admin/auditlog?page=<%= page - 1 %>&category=<%= category %>">← Prev</a>
+          <% } %>
+          <span class="page-info">Page <%= page %> of <%= totalPages %></span>
+          <% if (page < totalPages) { %>
+            <a class="btn btn-sm btn-secondary" href="/admin/auditlog?page=<%= page + 1 %>&category=<%= category %>">Next →</a>
+          <% } %>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <style>
+    .filter-bar {
+      margin-bottom: 1.5rem;
+    }
+    .filter-form select {
+      padding: 0.5rem 1rem;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+    .action-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .action-badge.moderation { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .action-badge.whitelist { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+    .action-badge.appeals { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .action-badge.applications { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+    .action-badge.tickets { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .action-badge.notes { background: rgba(99, 102, 241, 0.2); color: #6366f1; }
+    .action-badge.config { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
+    .action-badge.bulk { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+    .action-badge.rcon { background: rgba(20, 184, 166, 0.2); color: #14b8a6; }
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .page-info {
+      color: var(--text-secondary);
+    }
+  </style>
+<%- include('partials/footer') %>

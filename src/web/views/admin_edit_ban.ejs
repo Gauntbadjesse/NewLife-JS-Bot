@@ -1,0 +1,78 @@
+<%- include('partials/header', {user: user, isAdmin: true}) %>
+  <div class="content-container">
+    <div class="page-hero">
+      <h1>✏️ Edit Ban</h1>
+      <p class="intro-text">Adjust ban duration for case #<%= ban.caseNumber || '—' %></p>
+    </div>
+
+    <div class="card" style="max-width:600px">
+      <h3 style="margin-bottom:20px">Ban Details</h3>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+        <div>
+          <label style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted)">Player</label>
+          <p style="font-weight:600;color:var(--text-primary);margin-top:4px"><%= ban.playerName %></p>
+        </div>
+        <div>
+          <label style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted)">Case</label>
+          <p style="font-weight:600;color:var(--text-primary);margin-top:4px">#<%= ban.caseNumber || '—' %></p>
+        </div>
+        <div style="grid-column:1/-1">
+          <label style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted)">Reason</label>
+          <p style="color:var(--text-secondary);margin-top:4px"><%= ban.reason %></p>
+        </div>
+        <div style="grid-column:1/-1">
+          <label style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted)">Current Duration</label>
+          <p style="color:var(--text-primary);margin-top:4px">
+            <span class="status banned"><%= typeof formatDuration === 'function' ? formatDuration(ban.duration, ban.createdAt, ban.expiresAt) : (ban.duration ? ban.duration : (ban.expiresAt ? 'temp' : 'Permanent')) %></span>
+          </p>
+        </div>
+      </div>
+
+      <form id="banEditForm" method="post" action="/admin/ban/<%= ban._id %>/edit" onsubmit="return confirmEdit();">
+        <div class="form-group">
+          <label for="action">Action</label>
+          <select name="action" id="action" required>
+            <option value="add">Add Time</option>
+            <option value="remove">Remove Time</option>
+            <option value="set">Set Remaining Time</option>
+            <option value="make_perm">Make Permanent</option>
+          </select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px" class="form-group">
+          <div>
+            <label for="amount">Amount</label>
+            <input type="number" name="amount" id="amount" min="0" value="0" />
+          </div>
+          <div>
+            <label for="unit">Unit</label>
+            <select name="unit" id="unit">
+              <option value="m">Minutes</option>
+              <option value="h">Hours</option>
+              <option value="d">Days</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reasonInput">Reason for Edit <span style="color:var(--danger)">*</span></label>
+          <input type="text" name="reason" id="reasonInput" required placeholder="Why are you making this change?" />
+        </div>
+
+        <script>
+          function confirmEdit() {
+            const reason = document.getElementById('reasonInput').value.trim();
+            if (!reason) { alert('Please provide a reason for the edit.'); return false; }
+            return confirm('Apply this ban edit?\\n\\nThis will update the database and attempt to sync with the game server via RCON.');
+          }
+        </script>
+
+        <div style="display:flex;gap:12px;margin-top:24px">
+          <button class="btn btn-primary" type="submit">Apply Changes</button>
+          <a class="btn btn-secondary" href="/cases">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+<%- include('partials/footer') %>

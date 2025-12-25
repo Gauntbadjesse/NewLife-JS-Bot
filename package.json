@@ -1,0 +1,40 @@
+{
+  "name": "newlife-management-bot",
+  "version": "1.0.0",
+  "description": "NewLife SMP Management Discord Bot - Professional moderation case lookup system",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js",
+    "dev": "nodemon src/bot.js",
+    "web": "node src/web/server.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "moderation",
+    "minecraft",
+    "newlife",
+    "smp"
+  ],
+  "author": "NewLife SMP",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
+    "express": "^5.2.1",
+    "mongoose": "^8.0.3",
+    "rcon-client": "^4.2.5",
+    "uuid": "^13.0.0",
+    "passport": "^0.6.0",
+    "passport-discord": "^0.1.4",
+    "express-session": "^1.17.3",
+    "connect-mongo": "^4.6.0",
+    "ejs": "^3.1.9"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

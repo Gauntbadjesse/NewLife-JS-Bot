@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>NewLife Management</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>NewLife Management</h1>
+    <% if (user) { %>
+      <div class="user">Signed in as <strong><%= user.username %>#<%= user.discriminator %></strong> | <a href="/logout">Logout</a></div>
+      <% if (isAdmin) { %>
+        <div class="admin-link"><a href="/admin">Admin Panel</a></div>
+      <% } %>
+    <% } %>
+    <nav>
+      <a href="/">Dashboard</a>
+      <a href="/cases">Cases</a>
+      <a href="/commands">Commands</a>
+    </nav>
+  </header>
+  <main>
+    <%- body %>
+  </main>
+  <footer>
+    <small>NewLife Management • Lightweight UI</small>
+  </footer>
+</body>
+</html>
