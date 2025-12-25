@@ -26,9 +26,9 @@ jobs:
 
       - name: Update Pterodactyl BOT_VERSION
         env:
-          PANEL_URL: https://panel.newlifesmp.com/api
+          PANEL_URL: "https://panel.newlifesmp.com/api"
           API_KEY: ${{ secrets.PTERODACTYL_API_KEY }}
-          SERVER_ID: 0b7ac013-ba3f-40f7-bd16-d3cf448461fe
+          SERVER_ID: "0b7ac013-ba3f-40f7-bd16-d3cf448461fe"
           BOT_VERSION: ${{ steps.ver.outputs.version }}
         run: |
           if [ -z "$PANEL_URL" ] || [ -z "$API_KEY" ] || [ -z "$SERVER_ID" ]; then
