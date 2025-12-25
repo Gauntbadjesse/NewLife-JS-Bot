@@ -43,33 +43,11 @@ jobs:
           curl -s -H "Authorization: Bearer $API_KEY" -H "Accept: application/json" "$PANEL_URL/servers/$SERVER_ID/environment" -o env.json
 
           # Build new environment payload by merging BOT_VERSION into existing environment map.
-          python3 - <<'PY'
-import json,sys
-try:
-    data=json.load(open('env.json'))
-except Exception:
-    data={}
-# attempt to find environment map
-env=None
-if isinstance(data,dict):
-    # Common shapes: {"attributes": {"environment": {...}}} or direct map
-    if 'attributes' in data and isinstance(data['attributes'], dict) and 'environment' in data['attributes']:
-        env = data['attributes']['environment']
-    elif 'environment' in data and isinstance(data['environment'], dict):
-        env = data['environment']
-    else:
-        # fallback to using data as env map
-        env = data if isinstance(data, dict) else {}
-else:
-    env={}
-if env is None:
-    env={}
-# set BOT_VERSION
-env['BOT_VERSION'] = "$BOT_VERSION"
-# payload shape expected by many panels: {"environment": { ... }} or {"environment": env}
-payload = {"environment": env}
-print(json.dumps(payload))
-PY > payload.json
+            # Build payload using jq to avoid heredoc YAML parsing issues
+            jq --arg ver "$BOT_VERSION" \
+            'if (.attributes and .attributes.environment) then {environment: (.attributes.environment + {BOT_VERSION:$ver})} \
+             elif (.environment) then {environment: (.environment + {BOT_VERSION:$ver})} \
+             else {environment: (. + {BOT_VERSION:$ver})} end' env.json > payload.json
 
           # Send update request (PATCH). The exact endpoint may differ on your panel; adjust if necessary.
           curl -s -X PATCH -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" -d @payload.json "$PANEL_URL/servers/$SERVER_ID/environment" -o /dev/null -w "%{http_code}\n" | { read code; if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then echo "Updated"; else echo "Failed (HTTP $code)"; exit 1; fi }
