@@ -1,13 +1,14 @@
 /**
  * General Cog
  * Handles help, history, and utility commands for NewLife Management Bot
-        }
-    },
-
-    // !update - Pull latest code, install deps, and restart (Admin only)
- * - /lookup: Moderator+
- * - /stats: Admin+
- * - /ping: Everyone
+ * 
+ * Commands:
+ * - !help: Everyone
+ * - !history: Staff+
+ * - !lookup: Moderator+
+ * - !stats: Admin+
+ * - !ping: Everyone
+ * - !update: Owner only - Pull latest from git and restart
  */
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
