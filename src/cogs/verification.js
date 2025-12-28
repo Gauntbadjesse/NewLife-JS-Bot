@@ -117,7 +117,7 @@ async function handleButton(interaction) {
             .setDescription(
                 'Welcome to NewLife SMP!\n\n' +
                 '**Next Steps:**\n' +
-                '• To join the Minecraft server, apply for whitelist using `/apanel`\n' +
+                '• To join the Minecraft server, apply for whitelist in <#1437529799987040327>\n' +
                 '• Check out the rules at [newlifesmp.com/rules](https://newlifesmp.com/rules)\n' +
                 '• View our wiki at [wiki.newlifesmp.com](https://wiki.newlifesmp.com)\n\n' +
                 'If you need help, open a ticket or ask in the community channels!'

@@ -1,6 +1,6 @@
 const fetch = globalThis.fetch || require('node-fetch');
 
-const DEFAULT_URLS = (process.env.MONITOR_BASE_URLS || 'http://127.0.0.1:' + (process.env.API_PORT || 25577) + ',http://193.218.34.214:' + (process.env.API_PORT || 25577)).split(',');
+const DEFAULT_URLS = (process.env.MONITOR_BASE_URLS || 'http://127.0.0.1:' + (process.env.API_PORT || 25577) + ',https://dashboard.newlifesmp.com:' + (process.env.API_PORT || 25577)).split(',');
 
 const ENDPOINTS = [
     '/health',

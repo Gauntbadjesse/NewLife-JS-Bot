@@ -218,13 +218,41 @@ client.on('interactionCreate', async (interaction) => {
 client.on('guildMemberAdd', async (member) => {
     try {
         const unverifiedRole = process.env.UNVERIFIED_ROLE || '1454700802752118906';
+        const ensureMemberRole = process.env.MEMBER_ROLE_ID || '1374421919373328434';
+        const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
         const guildId = process.env.GUILD_ID;
         if (guildId && member.guild && String(member.guild.id) !== String(guildId)) return;
         if (!member.guild) return;
+
+        // Add unverified role
         const role = member.guild.roles.cache.get(unverifiedRole) || unverifiedRole;
         await member.roles.add(role).catch(err => {
             console.error('Failed to add unverified role to new member:', err);
         });
+
+        // Ensure member role is present
+        try {
+            const memberRole = member.guild.roles.cache.get(ensureMemberRole) || ensureMemberRole;
+            if (!member.roles.cache.has(String(ensureMemberRole))) {
+                await member.roles.add(memberRole).catch(err => {
+                    console.error('Failed to add member role to new member:', err);
+                });
+            }
+        } catch (err) {
+            console.error('Failed to ensure member role on join:', err);
+        }
+
+        // Update member counter channel topic to show current member count
+        try {
+            const ch = await member.guild.channels.fetch(memberCounterChannel).catch(() => null);
+            if (ch && typeof ch.setTopic === 'function') {
+                await ch.setTopic(`Members: ${member.guild.memberCount}`).catch(err => {
+                    console.error('Failed to set member counter channel topic:', err);
+                });
+            }
+        } catch (err) {
+            console.error('Failed to update member counter channel:', err);
+        }
     } catch (e) {
         console.error('Error in guildMemberAdd handler:', e);
     }

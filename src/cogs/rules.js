@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createErrorEmbed, getEmbedColor } = require('../utils/embeds');
 
 // Prefix commands
@@ -28,10 +28,18 @@ const commands = {
                 .setFooter({ text: 'Answer these questions honestly; staff will follow up if needed.' })
                 .setTimestamp();
 
+            // Create a link button to the full rules, then post the quiz embed
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setLabel('View the rules here')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL('https://newlifesmp.com/rules')
+            );
+
             // Delete the invoking command message to avoid clutter, then post the quiz embed
             try {
                 await message.delete().catch(() => {});
-                await message.channel.send({ content: `<@${target.id}>`, embeds: [embed] });
+                await message.channel.send({ content: `<@${target.id}>`, embeds: [embed], components: [row] });
                 return; // no additional reply
             } catch (e) {
                 return message.reply({ embeds: [createErrorEmbed('Failed', 'Unable to post the quiz in this channel.')], allowedMentions: { repliedUser: false } });
@@ -65,8 +73,15 @@ const slashCommands = [
                 .setFooter({ text: 'Answer these questions honestly; staff will follow up if needed.' })
                 .setTimestamp();
 
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setLabel('View the rules here')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL('https://newlifesmp.com/rules')
+            );
+
             try {
-                await interaction.channel.send({ content: `<@${user.id}>`, embeds: [embed] });
+                await interaction.channel.send({ content: `<@${user.id}>`, embeds: [embed], components: [row] });
                 return interaction.reply({ content: `Posted rules quiz for ${user.tag}.`, ephemeral: true });
             } catch (e) {
                 return interaction.reply({ embeds: [createErrorEmbed('Failed', 'Unable to post the quiz in this channel.')], ephemeral: true });
