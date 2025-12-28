@@ -67,27 +67,10 @@ async function handleButton(interaction) {
     }
 
     if (id === 'verify_accept') {
-        // Record acceptance
-        try {
-            await Verification.findOneAndUpdate(
-                { discordId: String(interaction.user.id) },
-                { accepted: true, acceptedAt: new Date() },
-                { upsert: true }
-            );
-        } catch (e) {
-            console.error('Failed to record verification:', e);
-        }
+        // Do NOT record acceptance or assign roles yet.
+        // User must complete the web linking step to finalize verification.
 
-        // Optionally add a verified role
-        try {
-            if (VERIFIED_ROLE && interaction.member && interaction.member.manageable) {
-                await interaction.member.roles.add(VERIFIED_ROLE).catch(() => {});
-            }
-        } catch (e) {
-            // ignore role assignment failures
-        }
-
-        // Respond with a grey embed and a link button to the web linking page
+        // Present a grey embed with a link button to the web linking page
         const linkBase = WEB_BASE ? WEB_BASE.replace(/\/$/, '') : null;
         const linkUrl = linkBase ? `${linkBase}/link-mc` : null;
 

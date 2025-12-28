@@ -327,7 +327,30 @@ app.post('/link-mc', ensureAuth, async (req, res) => {
             await new LinkedAccount({ discordId: String(req.user.id), minecraftUsername: username, uuid, platform: 'java', linkedAt: new Date() }).save();
         }
 
-        return res.render('link', { user: req.user, success: 'Account linked successfully. You may now close this page.', error: null });
+        // Finalize verification: record acceptance and assign optional verified role
+        try {
+            const Verification = require('../database/models/Verification');
+            await Verification.findOneAndUpdate(
+                { discordId: String(req.user.id) },
+                { accepted: true, acceptedAt: new Date() },
+                { upsert: true }
+            );
+        } catch (e) {
+            console.error('Failed to record verification after linking:', e);
+        }
+
+        try {
+            const roleId = process.env.VERIFIED_ROLE_ID;
+            if (roleId) {
+                await addMemberRole(String(req.user.id), roleId).catch(() => {});
+            }
+        } catch (e) {
+            console.error('Failed to add verified role:', e);
+        }
+
+        // Redirect user back to Discord guild after a short success screen
+        const guildRedirect = process.env.GUILD_ID ? `https://discord.com/channels/${process.env.GUILD_ID}` : 'https://discord.com/app';
+        return res.render('link', { user: req.user, success: 'Account linked successfully. You will be redirected back to Discord shortly.', error: null, redirectTo: guildRedirect });
     } catch (e) {
         console.error('Link MC error:', e);
         return res.render('link', { user: req.user, success: null, error: 'An internal error occurred while linking your account.' });
