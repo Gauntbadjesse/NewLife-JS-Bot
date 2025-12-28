@@ -231,7 +231,7 @@ async function getGuildMemberRoles(userId) {
         }
     }
 
-    // Lookup Minecraft profile via mcprofile.io (returns uuid/fuuid)
+    // Lookup Minecraft profile via mcprofile.io (returns uuid for java, fuuid for bedrock)
     async function lookupMcProfile(platform, username) {
         try {
             let fetcher = globalThis.fetch;
@@ -241,9 +241,21 @@ async function getGuildMemberRoles(userId) {
             const res = await fetcher(url);
             if (!res.ok) throw new Error(`Lookup failed ${res.status}`);
             const data = await res.json();
-            let id = data.id || data.uuid || data.fuuid;
-            if (!id && Array.isArray(data) && data[0]) id = data[0].id || data[0].uuid || data[0].fuuid;
-            if (!id && data.data) id = data.data.id || data.data.uuid || data.data.fuuid;
+            
+            // For bedrock, prefer fuuid; for java, prefer uuid
+            let id = null;
+            if (platform === 'bedrock') {
+                id = data.fuuid || data.floodgateuid || data.id || data.uuid;
+                if (!id && data.data) id = data.data.fuuid || data.data.floodgateuid || data.data.id;
+            } else {
+                id = data.uuid || data.id;
+                if (!id && data.data) id = data.data.uuid || data.data.id;
+            }
+            if (!id && Array.isArray(data) && data[0]) {
+                id = platform === 'bedrock' 
+                    ? (data[0].fuuid || data[0].id || data[0].uuid)
+                    : (data[0].uuid || data[0].id);
+            }
             if (!id) throw new Error('No id in response');
             return id;
         } catch (e) {
@@ -352,100 +364,77 @@ app.get('/logout', (req, res) => {
 });
 
 // Link Minecraft account (user must be logged in via Discord)
+// This is now optional - primary linking is done via /linkaccount slash command
 app.get('/link-mc', async (req, res) => {
-    // If user is not authenticated, save intended destination and start OAuth flow
     if (!req.isAuthenticated || !req.isAuthenticated()) {
         try {
             if (req.session) req.session.returnTo = '/link-mc';
-        } catch (e) {
-            // ignore
-        }
+        } catch (e) { /* ignore */ }
         return res.redirect('/auth/discord');
     }
 
-    res.render('link', { user: req.user, success: null, error: null });
+    // Get user's linked accounts
+    const linkedAccounts = await LinkedAccount.find({ discordId: String(req.user.id) }).sort({ linkedAt: -1 });
+    res.render('link', { user: req.user, success: null, error: null, linkedAccounts });
 });
 
 app.post('/link-mc', ensureAuth, async (req, res) => {
     try {
         const username = (req.body.username || '').trim();
-        if (!username) return res.render('link', { user: req.user, success: null, error: 'Please provide a Minecraft username.' });
+        const platform = (req.body.platform || 'java').toLowerCase();
+        
+        if (!username) {
+            const linkedAccounts = await LinkedAccount.find({ discordId: String(req.user.id) });
+            return res.render('link', { user: req.user, success: null, error: 'Please provide a Minecraft username.', linkedAccounts });
+        }
+
+        if (platform !== 'java' && platform !== 'bedrock') {
+            const linkedAccounts = await LinkedAccount.find({ discordId: String(req.user.id) });
+            return res.render('link', { user: req.user, success: null, error: 'Invalid platform. Choose java or bedrock.', linkedAccounts });
+        }
 
         // Resolve MC profile
         let uuid = null;
         try {
-            uuid = await lookupMcProfile('java', username);
+            uuid = await lookupMcProfile(platform, username);
         } catch (e) {
-            return res.render('link', { user: req.user, success: null, error: 'Failed to resolve Minecraft username. Please verify spelling and try again.' });
+            const linkedAccounts = await LinkedAccount.find({ discordId: String(req.user.id) });
+            return res.render('link', { user: req.user, success: null, error: 'Failed to resolve Minecraft username. Please verify spelling and try again.', linkedAccounts });
         }
 
-        // Save or create linked account. Allow multiple accounts per Discord user.
+        // Check if already linked to this user
         const existing = await LinkedAccount.findOne({ discordId: String(req.user.id), uuid });
         if (existing) {
-            // Update timestamp/username in case of rename
             existing.minecraftUsername = username;
-            existing.platform = 'java';
+            existing.platform = platform;
             existing.linkedAt = new Date();
             await existing.save();
         } else {
-            await new LinkedAccount({ discordId: String(req.user.id), minecraftUsername: username, uuid, platform: 'java', linkedAt: new Date() }).save();
-        }
-
-        // Finalize verification: record acceptance and assign optional verified role
-        try {
-            const Verification = require('../database/models/Verification');
-            await Verification.findOneAndUpdate(
-                { discordId: String(req.user.id) },
-                { accepted: true, acceptedAt: new Date() },
-                { upsert: true }
-            );
-        } catch (e) {
-            console.error('Failed to record verification after linking:', e);
-        }
-
-        try {
-            // Remove unverified role, assign verified roles, and update nickname
-            const hardcodedRole = '1454699545329008802';
-            const unverifiedRole = process.env.UNVERIFIED_ROLE || '1454700802752118906';
-            const extraRole = '1374421919373328434';
-
-            // Remove the unverified role first
-            await removeMemberRole(String(req.user.id), unverifiedRole).catch(() => {});
-
-            // Add the verified roles
-            await addMemberRole(String(req.user.id), hardcodedRole).catch(() => {});
-            await addMemberRole(String(req.user.id), extraRole).catch(() => {});
-
-            // Attempt to set the member's nickname to their Minecraft username
-            try {
-                await modifyMemberNickname(String(req.user.id), username).catch(() => {});
-            } catch (e) {
-                // ignore nickname failures
+            // Check if linked to someone else
+            const otherLink = await LinkedAccount.findOne({ uuid });
+            if (otherLink) {
+                const linkedAccounts = await LinkedAccount.find({ discordId: String(req.user.id) });
+                return res.render('link', { user: req.user, success: null, error: 'This Minecraft account is already linked to another Discord user.', linkedAccounts });
             }
-        } catch (e) {
-            console.error('Failed to adjust roles or set nickname:', e);
+
+            const count = await LinkedAccount.countDocuments({ discordId: String(req.user.id) });
+            await new LinkedAccount({ 
+                discordId: String(req.user.id), 
+                minecraftUsername: username, 
+                uuid, 
+                platform, 
+                linkedAt: new Date(),
+                primary: count === 0,
+                verified: false
+            }).save();
         }
 
-        // Send a professional DM from the bot confirming linking
-        try {
-            const dmEmbed = {
-                title: 'Account Linked — Welcome to NewLife SMP',
-                description: `Thanks <@${req.user.id}> — your Minecraft account **${username}** has been linked to your Discord account and your verification is complete.\n\nYou may now join the server. If you need assistance, please contact the staff team in Discord.`,
-                color: 5742019,
-                footer: { text: 'NewLife SMP | Welcome' },
-                timestamp: new Date().toISOString()
-            };
-            await sendBotDM(String(req.user.id), dmEmbed).catch(() => {});
-        } catch (e) {
-            console.error('Failed to send verification DM:', e);
-        }
-
-        // Redirect user back to Discord guild after a short success screen
-        const guildRedirect = process.env.GUILD_ID ? `https://discord.com/channels/${process.env.GUILD_ID}` : 'https://discord.com/app';
-        return res.render('link', { user: req.user, success: 'Account linked successfully. You will be redirected back to Discord shortly.', error: null, redirectTo: guildRedirect });
+        const linkedAccounts = await LinkedAccount.find({ discordId: String(req.user.id) }).sort({ linkedAt: -1 });
+        return res.render('link', { user: req.user, success: `Successfully linked ${username} (${platform})!`, error: null, linkedAccounts });
     } catch (e) {
         console.error('Link MC error:', e);
-        return res.render('link', { user: req.user, success: null, error: 'An internal error occurred while linking your account.' });
+        const linkedAccounts = await LinkedAccount.find({ discordId: String(req.user.id) });
+        return res.render('link', { user: req.user, success: null, error: 'An internal error occurred while linking your account.', linkedAccounts });
     }
 });
 

@@ -14,13 +14,27 @@ const { resolvePlayer } = require('../utils/playerResolver');
 const fetch = require('node-fetch');
 
 /**
- * Lookup Minecraft profile from API
+ * Lookup Minecraft profile from API (supports java and bedrock)
  */
 async function lookupMcProfile(username, platform = 'java') {
     try {
-        const res = await fetch(`https://mcprofile.io/api/v1/${platform}/profile/name/${encodeURIComponent(username)}`);
+        const res = await fetch(`https://mcprofile.io/api/v1/${platform}/username/${encodeURIComponent(username)}`);
         if (!res.ok) return null;
-        return await res.json();
+        const data = await res.json();
+        
+        // For bedrock, prefer fuuid; for java, prefer uuid
+        let uuid = null;
+        if (platform === 'bedrock') {
+            uuid = data.fuuid || data.floodgateuid || data.id || data.uuid;
+        } else {
+            uuid = data.uuid || data.id;
+        }
+        
+        return {
+            uuid,
+            name: data.name || data.username || username,
+            platform
+        };
     } catch (e) {
         return null;
     }
@@ -301,35 +315,44 @@ const commands = {
 
             if (!results || results.length === 0) return message.reply({ content: 'No linked accounts found.', allowedMentions: { repliedUser: false } });
 
-            const lines = results.map(r => `• ${r.minecraftUsername} (uuid: ${r.uuid}) — <@${r.discordId}> — linked <t:${Math.floor(new Date(r.linkedAt).getTime()/1000)}:R>`);
+            const lines = results.map(r => {
+                const icon = r.platform === 'bedrock' ? '🟦' : '🟩';
+                const primary = r.primary ? ' ⭐' : '';
+                return `${icon} **${r.minecraftUsername}**${primary} (\`${r.uuid}\`) — <@${r.discordId}> — linked <t:${Math.floor(new Date(r.linkedAt).getTime()/1000)}:R>`;
+            });
             const chunk = [];
-            for (let i = 0; i < lines.length; i += 40) chunk.push(lines.slice(i, i+40).join('\n'));
+            for (let i = 0; i < lines.length; i += 20) chunk.push(lines.slice(i, i+20).join('\n'));
 
             for (const part of chunk) {
-                await message.channel.send({ content: part, allowedMentions: { repliedUser: false } });
+                await message.channel.send({ content: part, allowedMentions: { users: [] } });
             }
             try { await message.delete(); } catch (e) { /* ignore */ }
         }
     },
 
-    // !link <discord> <minecraft> - staff manually link an account
+    // !link <discord> <platform> <minecraft> - staff manually link an account
     link: {
         name: 'link',
         description: 'Manually link a Minecraft account to a Discord user (staff-only)',
-        usage: '!link <@user|discordId> <minecraftUsername>',
+        usage: '!link <@user|discordId> <java|bedrock> <minecraftUsername>',
         async execute(message, args, client) {
             if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: '❌ Permission denied.', allowedMentions: { repliedUser: false } });
-            if (!args[0] || !args[1]) return message.reply({ content: 'Usage: !link <@user|discordId> <minecraftUsername>', allowedMentions: { repliedUser: false } });
+            if (!args[0] || !args[1] || !args[2]) return message.reply({ content: 'Usage: !link <@user|discordId> <java|bedrock> <minecraftUsername>', allowedMentions: { repliedUser: false } });
 
             // Resolve discord id
             const mentionMatch = args[0].match(/<@!?(\d+)>/);
             const discordId = mentionMatch ? mentionMatch[1] : args[0];
-            const mcName = args[1];
+            const platform = args[1].toLowerCase();
+            const mcName = args.slice(2).join(' '); // Allow spaces for bedrock names
 
-            // Resolve mc uuid
+            if (platform !== 'java' && platform !== 'bedrock') {
+                return message.reply({ content: '❌ Platform must be `java` or `bedrock`.', allowedMentions: { repliedUser: false } });
+            }
+
+            // Resolve mc uuid/fuuid
             let uuid = null;
             try {
-                const profile = await lookupMcProfile(mcName, 'java');
+                const profile = await lookupMcProfile(mcName, platform);
                 if (!profile || !profile.uuid) return message.reply({ content: 'Failed to resolve Minecraft username.', allowedMentions: { repliedUser: false } });
                 uuid = profile.uuid;
             } catch (e) {
@@ -340,8 +363,19 @@ const commands = {
             const existing = await LinkedAccount.findOne({ discordId: String(discordId), uuid });
             if (existing) return message.reply({ content: 'This Minecraft account is already linked to that Discord user.', allowedMentions: { repliedUser: false } });
 
-            await new LinkedAccount({ discordId: String(discordId), minecraftUsername: mcName, uuid, platform: 'java', linkedAt: new Date() }).save();
-            await message.channel.send({ content: `✅ Linked **${mcName}** to <@${discordId}>.`, allowedMentions: { repliedUser: false } });
+            const count = await LinkedAccount.countDocuments({ discordId: String(discordId) });
+            await new LinkedAccount({ 
+                discordId: String(discordId), 
+                minecraftUsername: mcName, 
+                uuid, 
+                platform, 
+                linkedAt: new Date(),
+                linkedBy: message.author.id,
+                primary: count === 0
+            }).save();
+            
+            const icon = platform === 'bedrock' ? '🟦' : '🟩';
+            await message.channel.send({ content: `✅ Linked ${icon} **${mcName}** (${platform}) to <@${discordId}>.`, allowedMentions: { repliedUser: false } });
             try { await message.delete(); } catch (e) { /* ignore */ }
         }
     },

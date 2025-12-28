@@ -140,29 +140,50 @@ client.on('messageCreate', async (message) => {
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton()) {
         try {
-            const ticketsCog = require('./cogs/tickets');
-            if (ticketsCog.handleButton) await ticketsCog.handleButton(interaction);
-            // verification buttons
+            // Try tickets cog
+            try {
+                const ticketsCog = require('./cogs/tickets');
+                if (ticketsCog.handleButton) await ticketsCog.handleButton(interaction);
+            } catch (e) { /* ignore */ }
+
+            // Try verification cog
             try {
                 const verificationCog = require('./cogs/verification');
                 if (verificationCog.handleButton) await verificationCog.handleButton(interaction);
-            } catch (e) {
-                // ignore if cog not present
-            }
+            } catch (e) { /* ignore */ }
+
+            // Try applications cog
+            try {
+                const applicationsCog = require('./cogs/applications');
+                if (applicationsCog.handleButton) await applicationsCog.handleButton(interaction);
+            } catch (e) { /* ignore */ }
         } catch (error) {
             console.error('Error handling button:', error);
-            if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
+            }
         }
         return;
     }
 
     if (interaction.isModalSubmit()) {
         try {
-            const ticketsCog = require('./cogs/tickets');
-            if (ticketsCog.handleModalSubmit) await ticketsCog.handleModalSubmit(interaction);
+            // Try tickets cog
+            try {
+                const ticketsCog = require('./cogs/tickets');
+                if (ticketsCog.handleModalSubmit) await ticketsCog.handleModalSubmit(interaction);
+            } catch (e) { /* ignore */ }
+
+            // Try applications cog
+            try {
+                const applicationsCog = require('./cogs/applications');
+                if (applicationsCog.handleModal) await applicationsCog.handleModal(interaction);
+            } catch (e) { /* ignore */ }
         } catch (error) {
             console.error('Error handling modal:', error);
-            if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
+            }
         }
         return;
     }

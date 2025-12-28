@@ -2,7 +2,7 @@
   <div class="content-container">
     <div class="page-hero">
       <h1>🔗 Link Minecraft Account</h1>
-      <p class="intro-text">Enter your Minecraft username to link it to your Discord account for the admin panel.</p>
+      <p class="intro-text">Link your Minecraft accounts to your Discord. You can link multiple accounts (Java & Bedrock).</p>
     </div>
 
     <div class="card">
@@ -13,26 +13,53 @@
         <div class="alert alert-success"><%= success %></div>
       <% } %>
 
-      <% if (!success) { %>
+      <h3>Add New Account</h3>
       <form method="POST" action="/link-mc">
-        <label for="username">Minecraft username</label>
-        <input type="text" id="username" name="username" placeholder="Notch" required />
+        <div style="margin-bottom: 12px;">
+          <label for="platform">Platform</label>
+          <select id="platform" name="platform" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #2b2d31; color: #fff;">
+            <option value="java">☕ Java Edition</option>
+            <option value="bedrock">🟦 Bedrock Edition</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label for="username">Minecraft Username</label>
+          <input type="text" id="username" name="username" placeholder="Notch" required />
+          <small style="color: #888; display: block; margin-top: 4px;">Bedrock: Include the <code>.</code> prefix if your gamertag has one</small>
+        </div>
         <div style="margin-top:12px; display:flex; gap:8px;">
           <button class="btn btn-primary" type="submit">Link Account</button>
-          <a href="/" class="btn btn-secondary">Cancel</a>
+          <a href="/" class="btn btn-secondary">Back to Dashboard</a>
         </div>
       </form>
-      <% } else { %>
-        <% if (typeof redirectTo !== 'undefined' && redirectTo) { %>
-          <p>You will be redirected back to Discord in 4 seconds. If not, <a href="<%= redirectTo %>">click here</a>.</p>
-          <script>
-            setTimeout(function(){ window.location.href = '<%= redirectTo %>'; }, 4000);
-          </script>
-        <% } else { %>
-          <p>Linking complete. You may now return to Discord.</p>
-        <% } %>
-      <% } %>
     </div>
+
+    <% if (typeof linkedAccounts !== 'undefined' && linkedAccounts && linkedAccounts.length > 0) { %>
+    <div class="card" style="margin-top: 20px;">
+      <h3>Your Linked Accounts</h3>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Platform</th>
+            <th>Username</th>
+            <th>UUID</th>
+            <th>Linked</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% linkedAccounts.forEach(function(acc) { %>
+          <tr>
+            <td><%= acc.platform === 'bedrock' ? '🟦 Bedrock' : '🟩 Java' %><%= acc.primary ? ' ⭐' : '' %></td>
+            <td><strong><%= acc.minecraftUsername %></strong></td>
+            <td><code style="font-size: 11px;"><%= acc.uuid %></code></td>
+            <td><%= new Date(acc.linkedAt).toLocaleDateString() %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <p style="margin-top: 10px; color: #888; font-size: 12px;">⭐ = Primary account (used for nickname)</p>
+    </div>
+    <% } %>
 
   </div>
 <%- include('partials/footer') %>

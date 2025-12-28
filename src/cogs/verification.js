@@ -1,97 +1,144 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder } = require('discord.js');
-const Verification = require('../database/models/Verification');
+/**
+ * Verification Cog
+ * Simple rules acceptance verification system
+ * No web redirect - just accept rules and get verified role
+ */
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { isAdmin } = require('../utils/permissions');
+const { getEmbedColor } = require('../utils/embeds');
 
-const VERIFY_CHANNEL_ID = process.env.VERIFY_CHANNEL_ID || '1454688062033629184';
-const WEB_BASE = process.env.WEB_BASE_URL || process.env.WEB_BASE || null;
-const VERIFIED_ROLE = process.env.VERIFIED_ROLE_ID || null;
+// Environment configuration
+const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID || '1454699545329008802';
+const UNVERIFIED_ROLE_ID = process.env.UNVERIFIED_ROLE || '1454700802752118906';
+const MEMBER_ROLE_ID = process.env.MEMBER_ROLE_ID || '1374421919373328434';
 
-// Post the persistent verification embed to a channel (admin-only prefix command)
+/**
+ * Prefix Commands
+ */
 const commands = {
     postverify: {
         name: 'postverify',
-        description: 'Post the persistent verification embed (Admin only)',
-        usage: '!postverify',
+        description: 'Post the verification embed (Admin only)',
+        usage: '!postverify [channel]',
         async execute(message, args, client) {
-            if (!isAdmin(message.member)) return message.reply({ content: 'Permission denied.' });
+            if (!isAdmin(message.member)) {
+                return message.reply({ content: '❌ Permission denied.', allowedMentions: { repliedUser: false } });
+            }
 
-            const channel = await message.client.channels.fetch(VERIFY_CHANNEL_ID).catch(() => null);
-            if (!channel) return message.reply({ content: `Failed to find channel ${VERIFY_CHANNEL_ID}` });
+            // Use provided channel or current channel
+            let targetChannel = message.channel;
+            if (args[0]) {
+                const channelId = args[0].replace(/[<#>]/g, '');
+                targetChannel = await client.channels.fetch(channelId).catch(() => null);
+                if (!targetChannel) {
+                    return message.reply({ content: '❌ Channel not found.', allowedMentions: { repliedUser: false } });
+                }
+            }
 
             const embed = new EmbedBuilder()
                 .setTitle('Welcome to NewLife SMP')
-                .setDescription('Please verify that you accept the Code of Conduct and connect your account to gain access to the server.')
-                .setColor(0x5865F2)
-                .setFooter({ text: 'Click Verify to begin the verification process.' });
+                .setDescription(
+                    '**Before you can access the server, please verify that you accept our rules.**\n\n' +
+                    '📜 By clicking **Verify** below, you acknowledge that you have read and agree to follow the NewLife SMP rules and guidelines.\n\n' +
+                    '• Be respectful to all players and staff\n' +
+                    '• No griefing, stealing, or cheating\n' +
+                    '• No hate speech or harassment\n' +
+                    '• Follow staff instructions\n\n' +
+                    '*Full rules can be found at [newlifesmp.com/rules](https://newlifesmp.com/rules)*'
+                )
+                .setColor(getEmbedColor())
+                .setFooter({ text: 'NewLife SMP • Verification' })
+                .setTimestamp();
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('verify_open').setLabel('Verify').setStyle(ButtonStyle.Primary)
+                new ButtonBuilder()
+                    .setCustomId('verify_accept')
+                    .setLabel('Verify')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('✅')
             );
 
             try {
-                await channel.send({ embeds: [embed], components: [row] });
-                return message.reply({ content: 'Verification embed posted.', allowedMentions: { repliedUser: false } });
+                await targetChannel.send({ embeds: [embed], components: [row] });
+                if (message.channel.id !== targetChannel.id) {
+                    await message.reply({ content: `✅ Verification embed posted in ${targetChannel}.`, allowedMentions: { repliedUser: false } });
+                }
+                try { await message.delete(); } catch (e) { /* ignore */ }
             } catch (e) {
                 console.error('Failed to post verification embed:', e);
-                return message.reply({ content: 'Failed to post verification embed.' });
+                return message.reply({ content: '❌ Failed to post verification embed.', allowedMentions: { repliedUser: false } });
             }
         }
     }
 };
 
-// Handle button interactions
+/**
+ * Handle button interactions
+ */
 async function handleButton(interaction) {
     if (!interaction.isButton()) return;
+    if (interaction.customId !== 'verify_accept') return;
 
-    const id = interaction.customId;
+    try {
+        await interaction.deferReply({ ephemeral: true });
 
-    if (id === 'verify_open') {
-        // Present acceptance buttons and the code of conduct text
-        const coc = `By clicking **Accept** you acknowledge that you have read and agree to follow the NewLife SMP Code of Conduct. You also consent to linking your Discord account to your Minecraft account via the web panel.`;
-
-        const embed = new EmbedBuilder()
-            .setTitle('NewLife SMP — Code of Conduct')
-            .setDescription(coc)
-            .setColor(0x5865F2);
-
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('verify_accept').setLabel('Accept').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('verify_decline').setLabel('Decline').setStyle(ButtonStyle.Danger)
-        );
-
-        return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
-    }
-
-    if (id === 'verify_decline') {
-        return interaction.update({ content: 'You must accept the Code of Conduct to access the server.', embeds: [], components: [], ephemeral: true });
-    }
-
-    if (id === 'verify_accept') {
-        // Do NOT record acceptance or assign roles yet.
-        // User must complete the web linking step to finalize verification.
-
-        // Present a grey embed with a link button to the web linking page
-        const linkBase = WEB_BASE ? WEB_BASE.replace(/\/$/, '') : null;
-        const linkUrl = linkBase ? `${linkBase}/link-mc` : null;
-
-        const embed = new EmbedBuilder()
-            .setTitle('Link Your Minecraft Account')
-            .setDescription('To complete verification, please link your Minecraft account so staff can match you in the admin panel. Click the button below to open the linking page.')
-            .setColor(0x808080)
-            .setTimestamp();
-
-        const row = [];
-        if (linkUrl) {
-            const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-            const action = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setLabel('Link Minecraft Account').setURL(linkUrl).setStyle(ButtonStyle.Link)
-            );
-            row.push(action);
+        const member = interaction.member;
+        if (!member) {
+            return interaction.editReply({ content: '❌ Could not find your member data.' });
         }
 
-        const replyOptions = { embeds: [embed], components: row.length ? row : [], ephemeral: true };
-        return interaction.update(replyOptions);
+        // Check if already verified
+        if (VERIFIED_ROLE_ID && member.roles.cache.has(VERIFIED_ROLE_ID)) {
+            return interaction.editReply({ content: '✅ You are already verified!' });
+        }
+
+        // Remove unverified role and add verified roles
+        const rolesToAdd = [VERIFIED_ROLE_ID, MEMBER_ROLE_ID].filter(Boolean);
+        const rolesToRemove = [UNVERIFIED_ROLE_ID].filter(Boolean);
+
+        try {
+            for (const roleId of rolesToRemove) {
+                if (member.roles.cache.has(roleId)) {
+                    await member.roles.remove(roleId).catch(() => {});
+                }
+            }
+            for (const roleId of rolesToAdd) {
+                if (!member.roles.cache.has(roleId)) {
+                    await member.roles.add(roleId).catch(() => {});
+                }
+            }
+        } catch (e) {
+            console.error('Failed to update roles during verification:', e);
+        }
+
+        // Success response
+        const successEmbed = new EmbedBuilder()
+            .setTitle('✅ Verification Complete')
+            .setDescription(
+                'Welcome to NewLife SMP!\n\n' +
+                '**Next Steps:**\n' +
+                '• To join the Minecraft server, apply for whitelist using `/apanel`\n' +
+                '• Check out the rules at [newlifesmp.com/rules](https://newlifesmp.com/rules)\n' +
+                '• View our wiki at [wiki.newlifesmp.com](https://wiki.newlifesmp.com)\n\n' +
+                'If you need help, open a ticket or ask in the community channels!'
+            )
+            .setColor(0x57F287)
+            .setFooter({ text: 'NewLife SMP' })
+            .setTimestamp();
+
+        return interaction.editReply({ embeds: [successEmbed] });
+    } catch (e) {
+        console.error('Verification button error:', e);
+        if (!interaction.replied && !interaction.deferred) {
+            return interaction.reply({ content: '❌ An error occurred during verification.', ephemeral: true });
+        }
+        return interaction.editReply({ content: '❌ An error occurred during verification.' });
     }
 }
 
-module.exports = { name: 'Verification', description: 'Verification embed and button handler', commands, handleButton };
+module.exports = {
+    name: 'Verification',
+    description: 'Simple rules acceptance verification',
+    commands,
+    handleButton
+};
