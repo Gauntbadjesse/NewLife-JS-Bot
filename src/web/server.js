@@ -187,6 +187,35 @@ async function getGuildMemberRoles(userId) {
         } catch (e) { console.error('addMemberRole error', e); return false; }
     }
 
+    // Send a DM to a user via the bot
+    async function sendBotDM(userId, embed) {
+        try {
+            let fetcher = globalThis.fetch;
+            if (!fetcher) fetcher = require('node-fetch');
+
+            // Create DM channel
+            const createRes = await fetcher('https://discord.com/api/v10/users/@me/channels', {
+                method: 'POST',
+                headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipient_id: String(userId) })
+            });
+            if (!createRes.ok) return false;
+            const channel = await createRes.json();
+
+            // Send message with embed
+            const msgRes = await fetcher(`https://discord.com/api/v10/channels/${channel.id}/messages`, {
+                method: 'POST',
+                headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ embeds: [embed] })
+            });
+
+            return msgRes.ok;
+        } catch (e) {
+            console.error('sendBotDM error', e);
+            return false;
+        }
+    }
+
     // Lookup Minecraft profile via mcprofile.io (returns uuid/fuuid)
     async function lookupMcProfile(platform, username) {
         try {
@@ -289,6 +318,16 @@ app.get('/login', (req, res) => {
 app.get('/auth/discord', passport.authenticate('discord'));
 
 app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/login' }), (req, res) => {
+    // After successful OAuth, redirect to original destination if present
+    try {
+        const returnTo = req.session && req.session.returnTo;
+        if (returnTo) {
+            delete req.session.returnTo;
+            return res.redirect(returnTo);
+        }
+    } catch (e) {
+        // ignore
+    }
     res.redirect('/');
 });
 
@@ -298,7 +337,17 @@ app.get('/logout', (req, res) => {
 });
 
 // Link Minecraft account (user must be logged in via Discord)
-app.get('/link-mc', ensureAuth, async (req, res) => {
+app.get('/link-mc', async (req, res) => {
+    // If user is not authenticated, save intended destination and start OAuth flow
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+        try {
+            if (req.session) req.session.returnTo = '/link-mc';
+        } catch (e) {
+            // ignore
+        }
+        return res.redirect('/auth/discord');
+    }
+
     res.render('link', { user: req.user, success: null, error: null });
 });
 
@@ -346,6 +395,20 @@ app.post('/link-mc', ensureAuth, async (req, res) => {
             }
         } catch (e) {
             console.error('Failed to add verified role:', e);
+        }
+
+        // Send a professional DM from the bot confirming linking
+        try {
+            const dmEmbed = {
+                title: 'Account Linked — Welcome to NewLife SMP',
+                description: `Thanks <@${req.user.id}> — your Minecraft account **${username}** has been linked to your Discord account and your verification is complete.\n\nYou may now join the server. If you need assistance, please contact the staff team in Discord.`,
+                color: 5742019,
+                footer: { text: 'NewLife SMP | Welcome' },
+                timestamp: new Date().toISOString()
+            };
+            await sendBotDM(String(req.user.id), dmEmbed).catch(() => {});
+        } catch (e) {
+            console.error('Failed to send verification DM:', e);
         }
 
         // Redirect user back to Discord guild after a short success screen
