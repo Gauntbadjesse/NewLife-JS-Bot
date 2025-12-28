@@ -87,13 +87,27 @@ async function handleButton(interaction) {
             // ignore role assignment failures
         }
 
-        // Provide link to web OAuth to connect account (if available)
-        const link = WEB_BASE ? `${WEB_BASE.replace(/\/$/, '')}/auth/discord` : null;
-        const content = link
-            ? `Thank you — you are verified. To link your Minecraft account for the admin panel, please log in here: ${link}`
-            : 'Thank you — you are verified.';
+        // Respond with a grey embed and a link button to the web linking page
+        const linkBase = WEB_BASE ? WEB_BASE.replace(/\/$/, '') : null;
+        const linkUrl = linkBase ? `${linkBase}/link-mc` : null;
 
-        return interaction.update({ content, embeds: [], components: [], ephemeral: true });
+        const embed = new EmbedBuilder()
+            .setTitle('Link Your Minecraft Account')
+            .setDescription('To complete verification, please link your Minecraft account so staff can match you in the admin panel. Click the button below to open the linking page.')
+            .setColor(0x808080)
+            .setTimestamp();
+
+        const row = [];
+        if (linkUrl) {
+            const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+            const action = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setLabel('Link Minecraft Account').setURL(linkUrl).setStyle(ButtonStyle.Link)
+            );
+            row.push(action);
+        }
+
+        const replyOptions = { embeds: [embed], components: row.length ? row : [], ephemeral: true };
+        return interaction.update(replyOptions);
     }
 }
 

@@ -1,0 +1,27 @@
+<%- include('partials/header', {user: user, isAdmin: typeof isAdmin !== 'undefined' ? isAdmin : false}) %>
+  <div class="content-container">
+    <div class="page-hero">
+      <h1>🔗 Link Minecraft Account</h1>
+      <p class="intro-text">Enter your Minecraft username to link it to your Discord account for the admin panel.</p>
+    </div>
+
+    <div class="card">
+      <% if (error) { %>
+        <div class="alert alert-danger"><%= error %></div>
+      <% } %>
+      <% if (success) { %>
+        <div class="alert alert-success"><%= success %></div>
+      <% } %>
+
+      <form method="POST" action="/link-mc">
+        <label for="username">Minecraft username</label>
+        <input type="text" id="username" name="username" placeholder="Notch" required />
+        <div style="margin-top:12px; display:flex; gap:8px;">
+          <button class="btn btn-primary" type="submit">Link Account</button>
+          <a href="/" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+
+  </div>
+<%- include('partials/footer') %>

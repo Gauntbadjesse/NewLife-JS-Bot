@@ -297,6 +297,43 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
+// Link Minecraft account (user must be logged in via Discord)
+app.get('/link-mc', ensureAuth, async (req, res) => {
+    res.render('link', { user: req.user, success: null, error: null });
+});
+
+app.post('/link-mc', ensureAuth, async (req, res) => {
+    try {
+        const username = (req.body.username || '').trim();
+        if (!username) return res.render('link', { user: req.user, success: null, error: 'Please provide a Minecraft username.' });
+
+        // Resolve MC profile
+        let uuid = null;
+        try {
+            uuid = await lookupMcProfile('java', username);
+        } catch (e) {
+            return res.render('link', { user: req.user, success: null, error: 'Failed to resolve Minecraft username. Please verify spelling and try again.' });
+        }
+
+        // Save or update linked account
+        const existing = await LinkedAccount.findOne({ discordId: String(req.user.id) });
+        if (existing) {
+            existing.minecraftUsername = username;
+            existing.uuid = uuid;
+            existing.platform = 'java';
+            existing.linkedAt = new Date();
+            await existing.save();
+        } else {
+            await new LinkedAccount({ discordId: String(req.user.id), minecraftUsername: username, uuid, platform: 'java', linkedAt: new Date() }).save();
+        }
+
+        return res.render('link', { user: req.user, success: 'Account linked successfully. You may now close this page.', error: null });
+    } catch (e) {
+        console.error('Link MC error:', e);
+        return res.render('link', { user: req.user, success: null, error: 'An internal error occurred while linking your account.' });
+    }
+});
+
 // Staff dashboard (read-only for staff, full for admins)
 app.get('/dashboard', ensureAuth, ensureStaffOrAdmin, async (req, res) => {
     try {
