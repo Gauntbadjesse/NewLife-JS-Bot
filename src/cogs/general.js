@@ -428,6 +428,39 @@ const commands = {
             }
         }
     },
+
+    // !test1 - Apply permission overwrites so the unverified role cannot view any channels (Admin only)
+    test1: {
+        name: 'test1',
+        description: 'Deny view access to all channels for the unverified role (Admin only)',
+        usage: '!test1',
+        async execute(message, args, client) {
+            if (!isAdmin(message.member)) {
+                return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'You do not have permission to use this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            const roleId = process.env.UNVERIFIED_ROLE || '1454700802752118906';
+            const statusMsg = await message.reply({ content: 'Updating channel permission overwrites for unverified role...', allowedMentions: { repliedUser: false } });
+
+            try {
+                for (const ch of message.guild.channels.cache.values()) {
+                    try {
+                        if (!ch || !ch.permissionOverwrites) continue;
+                        await ch.permissionOverwrites.edit(roleId, { ViewChannel: false, SendMessages: false, ReadMessageHistory: false }).catch(() => {});
+                    } catch (e) {
+                        // ignore per-channel errors
+                    }
+                }
+
+                await statusMsg.edit({ content: '✅ Permission overwrites applied to all channels.' });
+            } catch (error) {
+                console.error('Error applying test1 perms:', error);
+                await statusMsg.edit({ content: '❌ Failed to apply permission overwrites to all channels.' }).catch(() => {});
+            } finally {
+                try { await message.delete(); } catch (e) { /* ignore */ }
+            }
+        }
+    },
 };
 
 /**

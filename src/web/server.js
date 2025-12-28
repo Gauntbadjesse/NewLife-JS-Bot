@@ -187,6 +187,21 @@ async function getGuildMemberRoles(userId) {
         } catch (e) { console.error('addMemberRole error', e); return false; }
     }
 
+    async function removeMemberRole(userId, roleId) {
+        try {
+            const guildId = process.env.GUILD_ID;
+            if (!guildId) return false;
+            let fetcher = globalThis.fetch;
+            if (!fetcher) fetcher = require('node-fetch');
+            const url = `https://discord.com/api/v10/guilds/${guildId}/members/${userId}/roles/${roleId}`;
+            const res = await fetcher(url, {
+                method: 'DELETE',
+                headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` }
+            });
+            return res.ok;
+        } catch (e) { console.error('removeMemberRole error', e); return false; }
+    }
+
     // Send a DM to a user via the bot
     async function sendBotDM(userId, embed) {
         try {
@@ -364,11 +379,11 @@ app.post('/link-mc', ensureAuth, async (req, res) => {
             return res.render('link', { user: req.user, success: null, error: 'Failed to resolve Minecraft username. Please verify spelling and try again.' });
         }
 
-        // Save or update linked account
-        const existing = await LinkedAccount.findOne({ discordId: String(req.user.id) });
+        // Save or create linked account. Allow multiple accounts per Discord user.
+        const existing = await LinkedAccount.findOne({ discordId: String(req.user.id), uuid });
         if (existing) {
+            // Update timestamp/username in case of rename
             existing.minecraftUsername = username;
-            existing.uuid = uuid;
             existing.platform = 'java';
             existing.linkedAt = new Date();
             await existing.save();
@@ -389,12 +404,26 @@ app.post('/link-mc', ensureAuth, async (req, res) => {
         }
 
         try {
-            const roleId = process.env.VERIFIED_ROLE_ID;
-            if (roleId) {
-                await addMemberRole(String(req.user.id), roleId).catch(() => {});
+            // Remove unverified role, assign verified roles, and update nickname
+            const hardcodedRole = '1454699545329008802';
+            const unverifiedRole = process.env.UNVERIFIED_ROLE || '1454700802752118906';
+            const extraRole = '1374421919373328434';
+
+            // Remove the unverified role first
+            await removeMemberRole(String(req.user.id), unverifiedRole).catch(() => {});
+
+            // Add the verified roles
+            await addMemberRole(String(req.user.id), hardcodedRole).catch(() => {});
+            await addMemberRole(String(req.user.id), extraRole).catch(() => {});
+
+            // Attempt to set the member's nickname to their Minecraft username
+            try {
+                await modifyMemberNickname(String(req.user.id), username).catch(() => {});
+            } catch (e) {
+                // ignore nickname failures
             }
         } catch (e) {
-            console.error('Failed to add verified role:', e);
+            console.error('Failed to adjust roles or set nickname:', e);
         }
 
         // Send a professional DM from the bot confirming linking

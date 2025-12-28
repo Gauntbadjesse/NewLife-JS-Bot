@@ -193,6 +193,22 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
+// Assign unverified role to new guild members
+client.on('guildMemberAdd', async (member) => {
+    try {
+        const unverifiedRole = process.env.UNVERIFIED_ROLE || '1454700802752118906';
+        const guildId = process.env.GUILD_ID;
+        if (guildId && member.guild && String(member.guild.id) !== String(guildId)) return;
+        if (!member.guild) return;
+        const role = member.guild.roles.cache.get(unverifiedRole) || unverifiedRole;
+        await member.roles.add(role).catch(err => {
+            console.error('Failed to add unverified role to new member:', err);
+        });
+    } catch (e) {
+        console.error('Error in guildMemberAdd handler:', e);
+    }
+});
+
 // Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('\n Shutting down gracefully...');

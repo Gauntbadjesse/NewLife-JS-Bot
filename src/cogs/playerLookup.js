@@ -9,7 +9,7 @@ const Warning = require('../database/models/Warning');
 const Note = require('../database/models/Note');
 const Application = require('../database/models/Application');
 const LinkedAccount = require('../database/models/LinkedAccount');
-const { isModerator, isAdmin } = require('../utils/permissions');
+const { isModerator, isAdmin, isStaff, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
 const { resolvePlayer } = require('../utils/playerResolver');
 const fetch = require('node-fetch');
 
@@ -271,6 +271,105 @@ const slashCommands = [
 ];
 
 /**
+ * Prefix commands for staff to manage linked accounts
+ */
+const commands = {
+    // !linked [@user|id|minecraft] - show linked accounts
+    linked: {
+        name: 'linked',
+        description: 'Show linked Minecraft accounts for a Discord user or Minecraft name',
+        usage: '!linked <@user|discordId|minecraft>',
+        async execute(message, args, client) {
+            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: '❌ Permission denied.', allowedMentions: { repliedUser: false } });
+            if (!args[0]) return message.reply({ content: 'Usage: !linked <@user|discordId|minecraft>', allowedMentions: { repliedUser: false } });
+
+            const target = args[0];
+            let results = [];
+
+            // Discord mention
+            const mentionMatch = target.match(/<@!?(\d+)>/);
+            if (mentionMatch) {
+                const discordId = mentionMatch[1];
+                results = await LinkedAccount.find({ discordId: String(discordId) }).sort({ linkedAt: -1 });
+            } else if (/^[0-9]{17,19}$/.test(target)) {
+                // Discord ID
+                results = await LinkedAccount.find({ discordId: String(target) }).sort({ linkedAt: -1 });
+            } else {
+                // Assume Minecraft username or uuid
+                results = await LinkedAccount.find({ $or: [ { minecraftUsername: { $regex: new RegExp(`^${target}$`, 'i') } }, { uuid: target } ] }).sort({ linkedAt: -1 });
+            }
+
+            if (!results || results.length === 0) return message.reply({ content: 'No linked accounts found.', allowedMentions: { repliedUser: false } });
+
+            const lines = results.map(r => `• ${r.minecraftUsername} (uuid: ${r.uuid}) — <@${r.discordId}> — linked <t:${Math.floor(new Date(r.linkedAt).getTime()/1000)}:R>`);
+            const chunk = [];
+            for (let i = 0; i < lines.length; i += 40) chunk.push(lines.slice(i, i+40).join('\n'));
+
+            for (const part of chunk) {
+                await message.channel.send({ content: part, allowedMentions: { repliedUser: false } });
+            }
+            try { await message.delete(); } catch (e) { /* ignore */ }
+        }
+    },
+
+    // !link <discord> <minecraft> - staff manually link an account
+    link: {
+        name: 'link',
+        description: 'Manually link a Minecraft account to a Discord user (staff-only)',
+        usage: '!link <@user|discordId> <minecraftUsername>',
+        async execute(message, args, client) {
+            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: '❌ Permission denied.', allowedMentions: { repliedUser: false } });
+            if (!args[0] || !args[1]) return message.reply({ content: 'Usage: !link <@user|discordId> <minecraftUsername>', allowedMentions: { repliedUser: false } });
+
+            // Resolve discord id
+            const mentionMatch = args[0].match(/<@!?(\d+)>/);
+            const discordId = mentionMatch ? mentionMatch[1] : args[0];
+            const mcName = args[1];
+
+            // Resolve mc uuid
+            let uuid = null;
+            try {
+                const profile = await lookupMcProfile(mcName, 'java');
+                if (!profile || !profile.uuid) return message.reply({ content: 'Failed to resolve Minecraft username.', allowedMentions: { repliedUser: false } });
+                uuid = profile.uuid;
+            } catch (e) {
+                return message.reply({ content: 'Failed to resolve Minecraft username.', allowedMentions: { repliedUser: false } });
+            }
+
+            // Check existing
+            const existing = await LinkedAccount.findOne({ discordId: String(discordId), uuid });
+            if (existing) return message.reply({ content: 'This Minecraft account is already linked to that Discord user.', allowedMentions: { repliedUser: false } });
+
+            await new LinkedAccount({ discordId: String(discordId), minecraftUsername: mcName, uuid, platform: 'java', linkedAt: new Date() }).save();
+            await message.channel.send({ content: `✅ Linked **${mcName}** to <@${discordId}>.`, allowedMentions: { repliedUser: false } });
+            try { await message.delete(); } catch (e) { /* ignore */ }
+        }
+    },
+
+    // !unlink <discord> <minecraft> - staff remove a link
+    unlink: {
+        name: 'unlink',
+        description: 'Remove a linked Minecraft account from a Discord user (staff-only)',
+        usage: '!unlink <@user|discordId> <minecraftUsername|uuid>',
+        async execute(message, args, client) {
+            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: '❌ Permission denied.', allowedMentions: { repliedUser: false } });
+            if (!args[0] || !args[1]) return message.reply({ content: 'Usage: !unlink <@user|discordId> <minecraftUsername|uuid>', allowedMentions: { repliedUser: false } });
+
+            const mentionMatch = args[0].match(/<@!?(\d+)>/);
+            const discordId = mentionMatch ? mentionMatch[1] : args[0];
+            const target = args[1];
+
+            // Try to resolve by username case-insensitive or uuid
+            const res = await LinkedAccount.findOneAndDelete({ discordId: String(discordId), $or: [ { minecraftUsername: { $regex: new RegExp(`^${target}$`, 'i') } }, { uuid: target } ] });
+            if (!res) return message.reply({ content: 'No matching linked account found.', allowedMentions: { repliedUser: false } });
+
+            await message.channel.send({ content: `✅ Removed link for **${res.minecraftUsername}** (uuid: ${res.uuid}) from <@${discordId}>.`, allowedMentions: { repliedUser: false } });
+            try { await message.delete(); } catch (e) { /* ignore */ }
+        }
+    }
+};
+
+/**
  * Handle lookup action buttons
  */
 async function handleLookupButton(interaction, client) {
@@ -355,6 +454,7 @@ async function handleLookupNoteModal(interaction) {
 
 module.exports = {
     name: 'PlayerLookup',
+    commands,
     slashCommands,
     handleLookupButton,
     handleLookupNoteModal,
