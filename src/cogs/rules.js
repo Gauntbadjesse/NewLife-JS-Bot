@@ -18,14 +18,21 @@ const commands = {
             const embed = new EmbedBuilder()
                 .setColor(getEmbedColor())
                 .setTitle('NewLife SMP — Rules Quiz')
-                .setDescription('Please review the server rules and reply with `I agree` once you understand them.\n\nQuestions will be sent by staff if required.')
-                .setFooter({ text: 'Complete this quiz to confirm acceptance of the rules.' })
+                .setDescription([
+                    '1. PvP Consent\nWhat are the required elements for valid PvP consent on NewLife SMP, and how long does that consent remain valid?',
+                    '2. Property Claims\nWhat four pieces of information must be written on the sign and mailbox for a property claim to be considered valid?',
+                    '3. Griefing Enforcement\nWhat are the automatic consequences for griefing another player’s build or property on NewLife SMP?',
+                    '4. Theft Rules\nUnder what conditions is harvesting or taking items considered theft on NewLife SMP, and how do private vs. unmarked farms or builds affect this?',
+                    '5. Evidence Standards\nWhich types of evidence are not admissible when staff investigate rule violations, and why are they disallowed?'
+                ].join('\n\n'))
+                .setFooter({ text: 'Answer these questions honestly; staff will follow up if needed.' })
                 .setTimestamp();
 
-            // Send in-channel and ping the target user
+            // Delete the invoking command message to avoid clutter, then post the quiz embed
             try {
+                await message.delete().catch(() => {});
                 await message.channel.send({ content: `<@${target.id}>`, embeds: [embed] });
-                return message.reply({ content: `Posted rules quiz for ${target.tag}.`, allowedMentions: { repliedUser: false } });
+                return; // no additional reply
             } catch (e) {
                 return message.reply({ embeds: [createErrorEmbed('Failed', 'Unable to post the quiz in this channel.')], allowedMentions: { repliedUser: false } });
             }
@@ -48,8 +55,14 @@ const slashCommands = [
             const embed = new EmbedBuilder()
                 .setColor(getEmbedColor())
                 .setTitle('NewLife SMP — Rules Quiz')
-                .setDescription('Please review the server rules and reply with `I agree` once you understand them.\n\nQuestions will be sent by staff if required.')
-                .setFooter({ text: 'Complete this quiz to confirm acceptance of the rules.' })
+                .setDescription([
+                    '1. PvP Consent\nWhat are the required elements for valid PvP consent on NewLife SMP, and how long does that consent remain valid?',
+                    '2. Property Claims\nWhat four pieces of information must be written on the sign and mailbox for a property claim to be considered valid?',
+                    '3. Griefing Enforcement\nWhat are the automatic consequences for griefing another player’s build or property on NewLife SMP?',
+                    '4. Theft Rules\nUnder what conditions is harvesting or taking items considered theft on NewLife SMP, and how do private vs. unmarked farms or builds affect this?',
+                    '5. Evidence Standards\nWhich types of evidence are not admissible when staff investigate rule violations, and why are they disallowed?'
+                ].join('\n\n'))
+                .setFooter({ text: 'Answer these questions honestly; staff will follow up if needed.' })
                 .setTimestamp();
 
             try {
