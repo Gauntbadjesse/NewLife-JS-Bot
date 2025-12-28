@@ -393,7 +393,7 @@ async function createApplicationTicket(guild, user, application, client) {
         .setDescription(`${user} - A new whitelist application has been submitted. Staff will review shortly.`)
         .setTimestamp();
 
-    await ticketChannel.send({ content: `${user}`, embeds: [initial] });
+    await ticketChannel.send({ content: `${user} @here - A new whitelist application has been submitted.`, embeds: [initial] });
 
     // Post application responses
     const respEmbed = new EmbedBuilder()
