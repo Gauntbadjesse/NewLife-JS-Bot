@@ -400,8 +400,17 @@ const commands = {
 
                 await status.edit({ embeds: [embed], allowedMentions: { repliedUser: false } });
 
-                // Give Discord a moment to deliver the message then exit so process manager (Pterodactyl) can restart
-                setTimeout(() => process.exit(0), 2000);
+                // Delete the invoking command and the update embed after 5s, then exit so process manager can restart
+                setTimeout(async () => {
+                    try {
+                        await message.delete().catch(() => {});
+                        await status.delete().catch(() => {});
+                    } catch (delErr) {
+                        // ignore deletion errors
+                    } finally {
+                        process.exit(0);
+                    }
+                }, 5000);
             } catch (err) {
                 console.error('Update failed:', err);
                 const output = String(err.stderr || err.stdout || err.message || err).slice(0, 1800);

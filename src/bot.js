@@ -142,6 +142,13 @@ client.on('interactionCreate', async (interaction) => {
         try {
             const ticketsCog = require('./cogs/tickets');
             if (ticketsCog.handleButton) await ticketsCog.handleButton(interaction);
+            // verification buttons
+            try {
+                const verificationCog = require('./cogs/verification');
+                if (verificationCog.handleButton) await verificationCog.handleButton(interaction);
+            } catch (e) {
+                // ignore if cog not present
+            }
         } catch (error) {
             console.error('Error handling button:', error);
             if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });

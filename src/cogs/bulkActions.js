@@ -368,6 +368,20 @@ async function handleBulkButton(interaction, client) {
         if (pending.type === 'ban') {
             for (const player of pending.players) {
                 try {
+                    // First, attempt RCON ban. If this fails, do not create DB records or log.
+                    try {
+                        const rconResponse = await executeRcon(`ban ${player} ${pending.reason}`);
+                        const resp = String(rconResponse || '').toLowerCase();
+                        const failureKeywords = ['error', 'failed', 'not found', 'no such', 'could not', 'no player', 'exception', 'permission', 'unable'];
+                        if (failureKeywords.some(k => resp.includes(k))) {
+                            // treat as failure
+                            throw new Error(`RCON failure: ${rconResponse}`);
+                        }
+                    } catch (rerr) {
+                        results.failed.push(player);
+                        continue; // skip DB save
+                    }
+
                     // Calculate expiry
                     let expiresAt = null;
                     if (pending.duration && pending.duration !== 'perm') {
@@ -395,8 +409,6 @@ async function handleBulkButton(interaction, client) {
                     });
                     await ban.save();
 
-                    // RCON ban
-                    await executeRcon(`ban ${player} ${pending.reason}`);
                     results.success.push(player);
                 } catch (e) {
                     results.failed.push(player);
@@ -407,14 +419,20 @@ async function handleBulkButton(interaction, client) {
         if (pending.type === 'unban') {
             for (const player of pending.players) {
                 try {
+                    // Attempt RCON pardon first. If RCON fails, do not modify DB.
+                    try {
+                        await executeRcon(`pardon ${player}`);
+                    } catch (rerr) {
+                        results.failed.push(player);
+                        continue;
+                    }
+
                     // Update database
                     await Ban.updateMany(
                         { playerName: { $regex: new RegExp(`^${player}$`, 'i') }, active: true },
                         { active: false, unbannedBy: pending.staffName, unbannedAt: new Date(), unbanReason: `[Bulk] ${pending.reason}` }
                     );
 
-                    // RCON pardon
-                    await executeRcon(`pardon ${player}`);
                     results.success.push(player);
                 } catch (e) {
                     results.failed.push(player);

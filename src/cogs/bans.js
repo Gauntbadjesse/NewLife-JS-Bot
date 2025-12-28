@@ -467,10 +467,15 @@ const slashCommands = [
                     const rconDuration = isPermanent ? 'perm' : durationStr;
                     const rconCommand = `banspaper:ban ${playerName} ${rconDuration}`;
                     
-                    console.log(`[Ban] Executing RCON: ${rconCommand}`);
                     const rconResult = await executeRcon(rconCommand);
 
-                    if (!rconResult.success) {
+                    // Determine if RCON reported a failure — treat common failure phrases as errors
+                    const responseText = String(rconResult.response || '').toLowerCase();
+                    const failureKeywords = ['error', 'failed', 'not found', 'no such', 'could not', 'no player', 'exception', 'permission', 'unable'];
+                    const rconReportedFailure = !rconResult.success || failureKeywords.some(k => responseText.includes(k));
+
+                    if (rconReportedFailure) {
+                        // Don't create DB records or log this action — just inform the issuer of the error
                         return interaction.editReply({
                             embeds: [createErrorEmbed('RCON Error', rconResult.response || 'Failed to execute ban command')]
                         });
