@@ -345,25 +345,77 @@ const commands = {
 
             const repoDir = path.resolve(__dirname, '..', '..');
             const branch = process.env.GIT_BRANCH || 'main';
+            // Build initial embed with step placeholders
+            const embed = new EmbedBuilder()
+                .setColor(getEmbedColor())
+                .setTitle('System Update')
+                .setDescription(`Preparing update from **${branch}**...`)
+                .setTimestamp()
+                .addFields(
+                    { name: 'Step 1', value: '⏳ Fetching updates', inline: true },
+                    { name: 'Step 2', value: '⏳ Applying changes', inline: true },
+                    { name: 'Step 3', value: '⏳ Installing dependencies', inline: true }
+                );
 
-            const status = await message.reply({ content: `🔄 Updating from \`${branch}\`...`, allowedMentions: { repliedUser: false } });
+            const status = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+
+            // Helper to update step text
+            function updateSteps(stepResults) {
+                const fields = [
+                    { name: 'Step 1', value: stepResults[0], inline: true },
+                    { name: 'Step 2', value: stepResults[1], inline: true },
+                    { name: 'Step 3', value: stepResults[2], inline: true }
+                ];
+                embed.setFields(fields);
+                return status.edit({ embeds: [embed] });
+            }
 
             try {
-                // Fetch and reset to remote branch to avoid merge conflicts
+                // Step 1: Fetch and reset
+                await updateSteps(['⏳ Fetching updates', '⏳ Applying changes', '⏳ Installing dependencies']);
                 await execAsync(`git fetch --all`, { cwd: repoDir, timeout: 5 * 60 * 1000 });
                 await execAsync(`git reset --hard origin/${branch}`, { cwd: repoDir, timeout: 5 * 60 * 1000 });
 
-                // Install production dependencies
+                // Get latest commit info
+                let commitInfo = '';
+                try {
+                    const { stdout } = await execAsync(`git log -1 --pretty=format:%h\n%an\n%s`, { cwd: repoDir, timeout: 10 * 1000 });
+                    const parts = stdout.split('\n');
+                    commitInfo = `**${parts[0]}** — ${parts[2]}\nby ${parts[1]}`;
+                } catch (e) {
+                    commitInfo = 'Unable to read commit info';
+                }
+
+                await updateSteps([`✅ Fetched updates\n${commitInfo}`, '⏳ Applying changes', '⏳ Installing dependencies']);
+
+                // Step 3: Install dependencies
                 await execAsync(`npm install --production`, { cwd: repoDir, timeout: 10 * 60 * 1000 });
+                await updateSteps([`✅ Fetched updates\n${commitInfo}`, '✅ Changes applied', '✅ Dependencies installed']);
 
-                await status.edit({ content: '✅ Update applied. Restarting now...', allowedMentions: { repliedUser: false } });
+                // Finalize
+                embed.setColor(0x57F287); // green
+                embed.setTitle('Update Complete');
+                embed.setDescription(`Update from **${branch}** applied successfully. Restarting to activate changes...`);
+                embed.setFooter({ text: 'Update complete — exiting to allow process manager restart' });
 
-                // Give Discord a moment to deliver the message then exit so Pterodactyl restarts the server
+                await status.edit({ embeds: [embed], allowedMentions: { repliedUser: false } });
+
+                // Give Discord a moment to deliver the message then exit so process manager (Pterodactyl) can restart
                 setTimeout(() => process.exit(0), 2000);
             } catch (err) {
                 console.error('Update failed:', err);
-                const short = String(err.stderr || err.message || err).slice(0, 1900);
-                return status.edit({ content: `❌ Update failed:\n\n${short}` });
+                const output = String(err.stderr || err.stdout || err.message || err).slice(0, 1800);
+                embed.setColor(0xED4245); // red
+                embed.setTitle('Update Failed');
+                embed.setDescription('An error occurred while applying the update.');
+                updateSteps(['❌ Failed', '❌ Failed', '❌ Failed']).catch(() => {});
+                await status.edit({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                // Send truncated error details as a followup to keep embed clean
+                try {
+                    await message.channel.send({ content: `Error details (truncated):\n\n${output}`, allowedMentions: { repliedUser: false } });
+                } catch (sendErr) {
+                    // ignore
+                }
             }
         }
     },
