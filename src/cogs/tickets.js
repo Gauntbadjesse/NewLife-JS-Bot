@@ -408,25 +408,7 @@ async function createApplicationTicket(guild, user, application, client) {
         .setTimestamp();
 
     await ticketChannel.send({ embeds: [respEmbed] });
-    // Also post the welcome embed in the ticket for staff and applicant
-    try {
-        const welcome = new EmbedBuilder()
-            .setTitle("We're glad to have you here!")
-            .setDescription("Before you jump in, please make sure you’ve read our rules and understand how the server works.\nNewLife SMP is built on respect, fairness, and community — and we’re excited to see what you’ll bring to the world.")
-            .setColor(0x2ECC71)
-            .addFields(
-                { name: 'Wiki', value: '[Wiki](https://wiki.newlifesmp.com)', inline: true },
-                { name: 'Rules', value: '[Rules](https://newlifesmp.com/rules)', inline: true },
-                { name: 'Modpack', value: '[Modpack](https://modrinth.com/modpack/thenewlife-modpack)', inline: true },
-                { name: 'Support', value: '[Support](https://discord.com/channels/1372672239245459498/1437529798707777537)', inline: false }
-            )
-            .setFooter({ text: 'Welcome to NewLife SMP' })
-            .setTimestamp();
-
-        await ticketChannel.send({ embeds: [welcome] });
-    } catch (e) {
-        console.warn('[Tickets] Failed to post welcome embed in ticket:', e);
-    }
+    // Welcome embed will be sent only after the applicant is approved/whitelisted by staff.
     return ticketChannel;
 }
 
