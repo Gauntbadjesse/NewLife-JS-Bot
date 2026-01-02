@@ -88,18 +88,18 @@ const slashCommands = [
             
             // Permission check - bulk actions require admin or management
             if (!isManagement(interaction.member)) {
-                return interaction.reply({ content: '❌ Bulk actions require Management or higher.', ephemeral: true });
+                return interaction.reply({ content: 'Bulk actions require Management or higher.', ephemeral: true });
             }
 
             const playersInput = interaction.options.getString('players');
             const players = playersInput.split(',').map(p => p.trim()).filter(p => p.length > 0);
 
             if (players.length === 0) {
-                return interaction.reply({ content: '❌ No valid players provided.', ephemeral: true });
+                return interaction.reply({ content: 'No valid players provided.', ephemeral: true });
             }
 
             if (players.length > 25) {
-                return interaction.reply({ content: '❌ Maximum 25 players per bulk action.', ephemeral: true });
+                return interaction.reply({ content: 'Maximum 25 players per bulk action.', ephemeral: true });
             }
 
             // Generate action ID
@@ -119,7 +119,7 @@ const slashCommands = [
                 });
 
                 const embed = new EmbedBuilder()
-                    .setTitle('⚠️ Bulk Warn Confirmation')
+                    .setTitle('Bulk Warn Confirmation')
                     .setColor('#f59e0b')
                     .setDescription(`You are about to warn **${players.length}** players.`)
                     .addFields(
@@ -149,7 +149,7 @@ const slashCommands = [
                 });
 
                 const embed = new EmbedBuilder()
-                    .setTitle('👢 Bulk Kick Confirmation')
+                    .setTitle('Bulk Kick Confirmation')
                     .setColor('#f97316')
                     .setDescription(`You are about to kick **${players.length}** players from the server.`)
                     .addFields(
@@ -181,7 +181,7 @@ const slashCommands = [
                 });
 
                 const embed = new EmbedBuilder()
-                    .setTitle('🔨 Bulk Ban Confirmation')
+                    .setTitle('Bulk Ban Confirmation')
                     .setColor('#ef4444')
                     .setDescription(`You are about to ban **${players.length}** players.`)
                     .addFields(
@@ -212,7 +212,7 @@ const slashCommands = [
                 });
 
                 const embed = new EmbedBuilder()
-                    .setTitle('✅ Bulk Unban Confirmation')
+                    .setTitle('Bulk Unban Confirmation')
                     .setColor('#22c55e')
                     .setDescription(`You are about to unban **${players.length}** players.`)
                     .addFields(
@@ -239,7 +239,7 @@ const slashCommands = [
                 });
 
                 const embed = new EmbedBuilder()
-                    .setTitle('📝 Bulk Pardon Warnings Confirmation')
+                    .setTitle('Bulk Pardon Warnings Confirmation')
                     .setColor('#8b5cf6')
                     .setDescription(`You are about to pardon all warnings for **${players.length}** players.`)
                     .addFields(
@@ -279,11 +279,11 @@ const slashCommands = [
 
                     return interaction.editReply({
                         content: isAll
-                            ? `✅ Broadcast message sent to all players.`
-                            : `✅ Message sent to ${count} of ${players.length} players (others may be offline).`
+                            ? `Broadcast message sent to all players.`
+                            : `Message sent to ${count} of ${players.length} players (others may be offline).`
                     });
                 } catch (error) {
-                    return interaction.editReply({ content: '❌ Failed to send messages via RCON.' });
+                    return interaction.editReply({ content: 'Failed to send messages via RCON.' });
                 }
             }
         }
@@ -299,7 +299,7 @@ async function handleBulkButton(interaction, client) {
     if (action === 'cancel') {
         pendingActions.delete(actionId);
         return interaction.update({
-            content: '❌ Bulk action cancelled.',
+            content: 'Bulk action cancelled.',
             embeds: [],
             components: []
         });
@@ -310,20 +310,20 @@ async function handleBulkButton(interaction, client) {
     const pending = pendingActions.get(actionId);
     if (!pending) {
         return interaction.update({
-            content: '❌ This action has expired.',
+            content: 'This action has expired.',
             embeds: [],
             components: []
         });
     }
 
     if (pending.staffId !== interaction.user.id) {
-        return interaction.reply({ content: '❌ Only the initiator can confirm this action.', ephemeral: true });
+        return interaction.reply({ content: 'Only the initiator can confirm this action.', ephemeral: true });
     }
 
     pendingActions.delete(actionId);
 
     await interaction.update({
-        content: '⏳ Processing bulk action...',
+        content: 'Processing bulk action...',
         embeds: [],
         components: []
     });
@@ -456,14 +456,14 @@ async function handleBulkButton(interaction, client) {
 
         // Build results embed
         const embed = new EmbedBuilder()
-            .setTitle(`✅ Bulk ${pending.type.charAt(0).toUpperCase() + pending.type.slice(1)} Complete`)
+            .setTitle(`Bulk ${pending.type.charAt(0).toUpperCase() + pending.type.slice(1)} Complete`)
             .setColor(results.failed.length === 0 ? '#22c55e' : '#f59e0b')
             .addFields(
-                { name: '✓ Successful', value: results.success.join(', ') || 'None', inline: false }
+                { name: 'Successful', value: results.success.join(', ') || 'None', inline: false }
             );
 
         if (results.failed.length > 0) {
-            embed.addFields({ name: '✗ Failed', value: results.failed.join(', '), inline: false });
+            embed.addFields({ name: 'Failed', value: results.failed.join(', '), inline: false });
         }
 
         embed.setFooter({ text: `Executed by ${pending.staffName}` }).setTimestamp();
@@ -472,7 +472,7 @@ async function handleBulkButton(interaction, client) {
 
     } catch (error) {
         console.error('Bulk action error:', error);
-        await interaction.editReply({ content: '❌ Bulk action failed with an error.' });
+        await interaction.editReply({ content: 'Bulk action failed with an error.' });
     }
 }
 

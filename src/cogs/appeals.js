@@ -50,7 +50,6 @@ async function sendAppealEmbed(client) {
                     .setCustomId('appeal_start')
                     .setLabel('Submit Appeal')
                     .setStyle(ButtonStyle.Primary)
-                    .setEmoji('📝')
             );
 
         await channel.send({ embeds: [embed], components: [row] });
@@ -74,7 +73,7 @@ async function handleAppealButton(interaction) {
 
     if (existingAppeal) {
         return interaction.reply({
-            content: '❌ You already have a pending appeal. Please wait for it to be reviewed.',
+            content: 'You already have a pending appeal. Please wait for it to be reviewed.',
             ephemeral: true
         });
     }
@@ -164,7 +163,7 @@ async function handleAppealModal(interaction) {
         const reviewChannel = await interaction.client.channels.fetch(APPEALS_REVIEW_CHANNEL);
         if (reviewChannel) {
             const reviewEmbed = new EmbedBuilder()
-                .setTitle('📋 New Ban Appeal')
+                .setTitle('New Ban Appeal')
                 .setColor('#f59e0b')
                 .addFields(
                     { name: 'Appellant', value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: true },
@@ -185,18 +184,15 @@ async function handleAppealModal(interaction) {
                     new ButtonBuilder()
                         .setCustomId(`appeal_approve_${appeal._id}`)
                         .setLabel('Approve')
-                        .setStyle(ButtonStyle.Success)
-                        .setEmoji('✅'),
+                        .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
                         .setCustomId(`appeal_deny_${appeal._id}`)
                         .setLabel('Deny')
-                        .setStyle(ButtonStyle.Danger)
-                        .setEmoji('❌'),
+                        .setStyle(ButtonStyle.Danger),
                     new ButtonBuilder()
                         .setCustomId(`appeal_review_${appeal._id}`)
                         .setLabel('Under Review')
                         .setStyle(ButtonStyle.Secondary)
-                        .setEmoji('🔍')
                 );
 
             const msg = await reviewChannel.send({ embeds: [reviewEmbed], components: [reviewRow] });
@@ -205,13 +201,13 @@ async function handleAppealModal(interaction) {
         }
 
         await interaction.editReply({
-            content: '✅ Your appeal has been submitted successfully!\n\nOur staff will review it within 24-72 hours. You will be notified of the decision via DM.',
+            content: 'Your appeal has been submitted successfully!\n\nOur staff will review it within 24-72 hours. You will be notified of the decision via DM.',
         });
 
     } catch (error) {
         console.error('Error handling appeal modal:', error);
         await interaction.editReply({
-            content: '❌ An error occurred while submitting your appeal. Please try again later.',
+            content: 'An error occurred while submitting your appeal. Please try again later.',
         });
     }
 
@@ -232,7 +228,7 @@ async function handleAppealReview(interaction) {
     // Check permissions - Supervisor+ only
     if (!isSupervisor(interaction.member)) {
         return interaction.reply({
-            content: '❌ Only Supervisors, Management, and Owners can review appeals.',
+            content: 'Only Supervisors, Management, and Owners can review appeals.',
             ephemeral: true
         });
     }
@@ -241,14 +237,14 @@ async function handleAppealReview(interaction) {
         const appeal = await Appeal.findById(appealId);
         if (!appeal) {
             return interaction.reply({
-                content: '❌ Appeal not found.',
+                content: 'Appeal not found.',
                 ephemeral: true
             });
         }
 
         if (appeal.status !== 'pending' && appeal.status !== 'under_review') {
             return interaction.reply({
-                content: `❌ This appeal has already been ${appeal.status}.`,
+                content: `This appeal has already been ${appeal.status}.`,
                 ephemeral: true
             });
         }
@@ -261,7 +257,7 @@ async function handleAppealReview(interaction) {
             case 'approve':
                 newStatus = 'approved';
                 embedColor = '#22c55e';
-                dmMessage = `✅ **Good news!** Your ban appeal for **${appeal.playerName}** has been approved!\n\nYou should now be able to rejoin the server. Please make sure to follow the rules.`;
+                dmMessage = `**Good news!** Your ban appeal for **${appeal.playerName}** has been approved!\n\nYou should now be able to rejoin the server. Please make sure to follow the rules.`;
                 
                 // Try to unban via RCON
                 try {
@@ -284,17 +280,17 @@ async function handleAppealReview(interaction) {
             case 'deny':
                 newStatus = 'denied';
                 embedColor = '#ef4444';
-                dmMessage = `❌ Your ban appeal for **${appeal.playerName}** has been denied.\n\nIf you believe this decision was made in error, you may submit a new appeal in 30 days.`;
+                dmMessage = `Your ban appeal for **${appeal.playerName}** has been denied.\n\nIf you believe this decision was made in error, you may submit a new appeal in 30 days.`;
                 break;
 
             case 'review':
                 newStatus = 'under_review';
                 embedColor = '#3b82f6';
-                dmMessage = `🔍 Your ban appeal for **${appeal.playerName}** is now under review.\n\nA staff member is looking into your case. You will be notified once a decision is made.`;
+                dmMessage = `Your ban appeal for **${appeal.playerName}** is now under review.\n\nA staff member is looking into your case. You will be notified once a decision is made.`;
                 break;
 
             default:
-                return interaction.reply({ content: '❌ Invalid action.', ephemeral: true });
+                return interaction.reply({ content: 'Invalid action.', ephemeral: true });
         }
 
         // Update appeal
@@ -331,7 +327,7 @@ async function handleAppealReview(interaction) {
 
         if (newStatus !== 'under_review') {
             await interaction.followUp({
-                content: `✅ Appeal ${newStatus}. User has been notified.`,
+                content: `Appeal ${newStatus}. User has been notified.`,
                 ephemeral: true
             });
         }
@@ -339,7 +335,7 @@ async function handleAppealReview(interaction) {
     } catch (error) {
         console.error('Error handling appeal review:', error);
         await interaction.reply({
-            content: '❌ An error occurred while processing the appeal.',
+            content: 'An error occurred while processing the appeal.',
             ephemeral: true
         });
     }
@@ -371,16 +367,16 @@ const slashCommands = [
 
             if (sub === 'setup') {
                 if (!isSupervisor(interaction.member)) {
-                    return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                    return interaction.reply({ content: 'Permission denied.', ephemeral: true });
                 }
                 await interaction.deferReply({ ephemeral: true });
                 await sendAppealEmbed(client);
-                return interaction.editReply({ content: '✅ Appeal embed sent!' });
+                return interaction.editReply({ content: 'Appeal embed sent!' });
             }
 
             if (sub === 'list') {
                 if (!isSupervisor(interaction.member)) {
-                    return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                    return interaction.reply({ content: 'Permission denied.', ephemeral: true });
                 }
                 await interaction.deferReply({ ephemeral: true });
 
@@ -389,15 +385,15 @@ const slashCommands = [
                     .limit(20);
 
                 if (appeals.length === 0) {
-                    return interaction.editReply({ content: '📋 No pending appeals.' });
+                    return interaction.editReply({ content: 'No pending appeals.' });
                 }
 
                 const lines = appeals.map(a => 
-                    `• **${a.playerName}** - ${a.status} - <t:${Math.floor(a.createdAt.getTime()/1000)}:R> - ID: \`${a._id}\``
+                    `- **${a.playerName}** - ${a.status} - <t:${Math.floor(a.createdAt.getTime()/1000)}:R> - ID: \`${a._id}\``
                 );
 
                 const embed = new EmbedBuilder()
-                    .setTitle('📋 Pending Appeals')
+                    .setTitle('Pending Appeals')
                     .setDescription(lines.join('\n'))
                     .setColor('#f59e0b')
                     .setFooter({ text: `${appeals.length} appeal(s)` });
@@ -407,18 +403,18 @@ const slashCommands = [
 
             if (sub === 'view') {
                 if (!isSupervisor(interaction.member)) {
-                    return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                    return interaction.reply({ content: 'Permission denied.', ephemeral: true });
                 }
 
                 const appealId = interaction.options.getString('id');
                 const appeal = await Appeal.findById(appealId);
 
                 if (!appeal) {
-                    return interaction.reply({ content: '❌ Appeal not found.', ephemeral: true });
+                    return interaction.reply({ content: 'Appeal not found.', ephemeral: true });
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`📋 Appeal: ${appeal.playerName}`)
+                    .setTitle(`Appeal: ${appeal.playerName}`)
                     .setColor(appeal.status === 'approved' ? '#22c55e' : appeal.status === 'denied' ? '#ef4444' : '#f59e0b')
                     .addFields(
                         { name: 'Discord', value: `<@${appeal.discordId}>`, inline: true },

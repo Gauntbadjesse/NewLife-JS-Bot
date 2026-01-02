@@ -116,7 +116,7 @@ async function sendWeeklyReport(client) {
 
         // Build the report
         const embed = new EmbedBuilder()
-            .setTitle('📊 Weekly Whitelist Report')
+            .setTitle('Weekly Whitelist Report')
             .setDescription(`Week of ${lastWeekStart.toLocaleDateString()} - ${lastWeekEnd.toLocaleDateString()}`)
             .setColor('#3b82f6')
             .setTimestamp();
@@ -133,21 +133,21 @@ async function sendWeeklyReport(client) {
             let leaderboard = '';
             let rank = 1;
             for (const stat of sortedStats.slice(0, 15)) {
-                const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
-                leaderboard += `${medal} **${stat.username}** — ${stat.count} adds\n`;
+                const medal = rank <= 3 ? `#${rank}` : `${rank}.`;
+                leaderboard += `${medal} **${stat.username}** - ${stat.count} adds\n`;
                 rank++;
             }
 
             embed.addFields(
-                { name: '👥 Staff Leaderboard', value: leaderboard || 'No data', inline: false },
-                { name: '📈 Total Whitelist Adds', value: `${stats.totalAdds}`, inline: true },
-                { name: '👷 Active Staff', value: `${stats.stats.length}`, inline: true }
+                { name: 'Staff Leaderboard', value: leaderboard || 'No data', inline: false },
+                { name: 'Total Whitelist Adds', value: `${stats.totalAdds}`, inline: true },
+                { name: 'Active Staff', value: `${stats.stats.length}`, inline: true }
             );
 
             // Calculate averages
             if (stats.stats.length > 0) {
                 const avg = (stats.totalAdds / stats.stats.length).toFixed(1);
-                embed.addFields({ name: '📊 Avg per Staff', value: avg, inline: true });
+                embed.addFields({ name: 'Avg per Staff', value: avg, inline: true });
             }
         }
 
@@ -214,14 +214,14 @@ const slashCommands = [
 
             if (sub === 'current') {
                 if (!isAdmin(interaction.member)) {
-                    return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                    return interaction.reply({ content: 'Permission denied.', ephemeral: true });
                 }
 
                 const stats = await getCurrentWeekStats();
                 const { weekStart, weekEnd } = getCurrentWeekBounds();
 
                 const embed = new EmbedBuilder()
-                    .setTitle('📊 Current Week Whitelist Stats')
+                    .setTitle('Current Week Whitelist Stats')
                     .setDescription(`${weekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`)
                     .setColor('#3b82f6');
 
@@ -233,15 +233,15 @@ const slashCommands = [
                     let leaderboard = '';
                     let rank = 1;
                     for (const stat of sortedStats.slice(0, 15)) {
-                        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
-                        leaderboard += `${medal} **${stat.username}** — ${stat.count} adds\n`;
+                        const medal = rank <= 3 ? `#${rank}` : `${rank}.`;
+                        leaderboard += `${medal} **${stat.username}** - ${stat.count} adds\n`;
                         rank++;
                     }
 
                     embed.addFields(
-                        { name: '👥 Staff Leaderboard', value: leaderboard, inline: false },
-                        { name: '📈 Total', value: `${stats.totalAdds}`, inline: true },
-                        { name: '👷 Staff', value: `${stats.stats.length}`, inline: true }
+                        { name: 'Staff Leaderboard', value: leaderboard, inline: false },
+                        { name: 'Total', value: `${stats.totalAdds}`, inline: true },
+                        { name: 'Staff', value: `${stats.stats.length}`, inline: true }
                     );
                 }
 
@@ -250,17 +250,17 @@ const slashCommands = [
 
             if (sub === 'send') {
                 if (!isOwner(interaction.member)) {
-                    return interaction.reply({ content: '❌ Only the owner can manually send reports.', ephemeral: true });
+                    return interaction.reply({ content: 'Only the owner can manually send reports.', ephemeral: true });
                 }
 
                 await interaction.deferReply({ ephemeral: true });
                 await sendWeeklyReport(client);
-                return interaction.editReply({ content: '✅ Weekly report sent (if there was one to send).' });
+                return interaction.editReply({ content: 'Weekly report sent (if there was one to send).' });
             }
 
             if (sub === 'history') {
                 if (!isAdmin(interaction.member)) {
-                    return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                    return interaction.reply({ content: 'Permission denied.', ephemeral: true });
                 }
 
                 const weeksBack = interaction.options.getInteger('weeks') || 1;
@@ -280,7 +280,7 @@ const slashCommands = [
                 });
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`📊 Whitelist Stats (${weeksBack} week${weeksBack > 1 ? 's' : ''} ago)`)
+                    .setTitle(`Whitelist Stats (${weeksBack} week${weeksBack > 1 ? 's' : ''} ago)`)
                     .setDescription(`${targetWeekStart.toLocaleDateString()} - ${targetWeekEnd.toLocaleDateString()}`)
                     .setColor('#6366f1');
 
@@ -291,14 +291,14 @@ const slashCommands = [
                     const sortedStats = stats.stats.sort((a, b) => b.count - a.count);
                     let rank = 1;
                     for (const stat of sortedStats.slice(0, 15)) {
-                        const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
-                        leaderboard += `${medal} **${stat.username}** — ${stat.count} adds\n`;
+                        const medal = rank <= 3 ? `#${rank}` : `${rank}.`;
+                        leaderboard += `${medal} **${stat.username}** - ${stat.count} adds\n`;
                         rank++;
                     }
 
                     embed.addFields(
-                        { name: '👥 Staff Leaderboard', value: leaderboard, inline: false },
-                        { name: '📈 Total', value: `${stats.totalAdds}`, inline: true }
+                        { name: 'Staff Leaderboard', value: leaderboard, inline: false },
+                        { name: 'Total', value: `${stats.totalAdds}`, inline: true }
                     );
                 }
 

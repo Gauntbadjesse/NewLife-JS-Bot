@@ -68,7 +68,7 @@ const slashCommands = [
 
         async execute(interaction, client) {
             if (!isAdmin(interaction.member)) {
-                return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                return interaction.reply({ content: 'Permission denied.', ephemeral: true });
             }
 
             const sub = interaction.options.getSubcommand();
@@ -79,7 +79,7 @@ const slashCommands = [
                 // Check if name exists
                 const existing = await CustomEmbed.findOne({ name, guildId: interaction.guild.id });
                 if (existing) {
-                    return interaction.reply({ content: '❌ An embed with this name already exists.', ephemeral: true });
+                    return interaction.reply({ content: 'An embed with this name already exists.', ephemeral: true });
                 }
 
                 // Show modal for embed creation
@@ -139,16 +139,16 @@ const slashCommands = [
 
                 const embedData = await CustomEmbed.findOne({ name, guildId: interaction.guild.id });
                 if (!embedData) {
-                    return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+                    return interaction.reply({ content: 'Embed not found.', ephemeral: true });
                 }
 
                 const { embed, components } = buildEmbed(embedData);
 
                 try {
                     await channel.send({ embeds: [embed], components });
-                    return interaction.reply({ content: `✅ Embed sent to <#${channel.id}>.`, ephemeral: true });
+                    return interaction.reply({ content: `Embed sent to <#${channel.id}>.`, ephemeral: true });
                 } catch (error) {
-                    return interaction.reply({ content: '❌ Failed to send embed. Check permissions.', ephemeral: true });
+                    return interaction.reply({ content: 'Failed to send embed. Check permissions.', ephemeral: true });
                 }
             }
 
@@ -156,7 +156,7 @@ const slashCommands = [
                 const embeds = await CustomEmbed.find({ guildId: interaction.guild.id });
 
                 if (embeds.length === 0) {
-                    return interaction.reply({ content: '📝 No custom embeds saved.', ephemeral: true });
+                    return interaction.reply({ content: 'No custom embeds saved.', ephemeral: true });
                 }
 
                 const list = embeds.map(e => {
@@ -165,7 +165,7 @@ const slashCommands = [
                 }).join('\n');
 
                 const embed = new EmbedBuilder()
-                    .setTitle('📋 Custom Embeds')
+                    .setTitle('Custom Embeds')
                     .setDescription(list)
                     .setColor('#3b82f6')
                     .setFooter({ text: `${embeds.length} embed(s)` });
@@ -178,10 +178,10 @@ const slashCommands = [
 
                 const result = await CustomEmbed.deleteOne({ name, guildId: interaction.guild.id });
                 if (result.deletedCount === 0) {
-                    return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+                    return interaction.reply({ content: 'Embed not found.', ephemeral: true });
                 }
 
-                return interaction.reply({ content: `✅ Deleted embed **${name}**.`, ephemeral: true });
+                return interaction.reply({ content: `Deleted embed **${name}**.`, ephemeral: true });
             }
 
             if (sub === 'preview') {
@@ -189,7 +189,7 @@ const slashCommands = [
 
                 const embedData = await CustomEmbed.findOne({ name, guildId: interaction.guild.id });
                 if (!embedData) {
-                    return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+                    return interaction.reply({ content: 'Embed not found.', ephemeral: true });
                 }
 
                 const { embed, components } = buildEmbed(embedData);
@@ -206,16 +206,16 @@ const slashCommands = [
 
                 const embedData = await CustomEmbed.findOne({ name, guildId: interaction.guild.id });
                 if (!embedData) {
-                    return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+                    return interaction.reply({ content: 'Embed not found.', ephemeral: true });
                 }
 
                 if (embedData.buttons.length >= 25) {
-                    return interaction.reply({ content: '❌ Maximum 25 buttons per embed.', ephemeral: true });
+                    return interaction.reply({ content: 'Maximum 25 buttons per embed.', ephemeral: true });
                 }
 
                 // Validate URL action
                 if (action === 'url' && !value) {
-                    return interaction.reply({ content: '❌ URL action requires a value (URL).', ephemeral: true });
+                    return interaction.reply({ content: 'URL action requires a value (URL).', ephemeral: true });
                 }
 
                 const button = {
@@ -230,7 +230,7 @@ const slashCommands = [
                 embedData.buttons.push(button);
                 await embedData.save();
 
-                return interaction.reply({ content: `✅ Added button **${label}** to embed **${name}**.`, ephemeral: true });
+                return interaction.reply({ content: `Added button **${label}** to embed **${name}**.`, ephemeral: true });
             }
 
             if (sub === 'removebutton') {
@@ -239,17 +239,17 @@ const slashCommands = [
 
                 const embedData = await CustomEmbed.findOne({ name, guildId: interaction.guild.id });
                 if (!embedData) {
-                    return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+                    return interaction.reply({ content: 'Embed not found.', ephemeral: true });
                 }
 
                 if (index < 0 || index >= embedData.buttons.length) {
-                    return interaction.reply({ content: '❌ Invalid button index.', ephemeral: true });
+                    return interaction.reply({ content: 'Invalid button index.', ephemeral: true });
                 }
 
                 const removed = embedData.buttons.splice(index, 1);
                 await embedData.save();
 
-                return interaction.reply({ content: `✅ Removed button **${removed[0].label}** from embed.`, ephemeral: true });
+                return interaction.reply({ content: `Removed button **${removed[0].label}** from embed.`, ephemeral: true });
             }
         },
 
@@ -388,12 +388,12 @@ async function handleEmbedModal(interaction) {
         await embedData.save();
 
         return interaction.reply({
-            content: `✅ Embed **${name}** created!\n\nUse \`/embed addbutton\` to add buttons, or \`/embed send\` to send it.`,
+            content: `Embed **${name}** created!\n\nUse \`/embed addbutton\` to add buttons, or \`/embed send\` to send it.`,
             ephemeral: true
         });
     } catch (error) {
         console.error('Error creating embed:', error);
-        return interaction.reply({ content: '❌ Failed to create embed.', ephemeral: true });
+        return interaction.reply({ content: 'Failed to create embed.', ephemeral: true });
     }
 }
 

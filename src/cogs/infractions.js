@@ -8,6 +8,7 @@ const Infraction = require('../database/models/Infraction');
 const { getNextCaseNumber } = require('../database/caseCounter');
 const { isAdmin, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
 const { sendDM } = require('../utils/dm');
+const { logError } = require('../utils/errorLogger');
 
 // Channel to post infractions
 const INFRACTION_CHANNEL_ID = '1450253088693686313';
@@ -15,27 +16,23 @@ const INFRACTION_CHANNEL_ID = '1450253088693686313';
 // Infraction type configurations
 const INFRACTION_TYPES = {
     termination: {
-        label: 'TERMINATION',
+        label: 'Termination',
         color: 0x8B0000, // Dark red
-        emoji: ' ',
         description: 'Employment/Position Terminated'
     },
     warning: {
-        label: 'WARNING',
+        label: 'Warning',
         color: 0xFF4500, // Orange red
-        emoji: ' ',
         description: 'Formal Warning Issued'
     },
     notice: {
-        label: 'NOTICE',
+        label: 'Notice',
         color: 0xFFD700, // Gold
-        emoji: ' ',
         description: 'Notice Issued'
     },
     strike: {
-        label: 'STRIKE',
+        label: 'Strike',
         color: 0xDC143C, // Crimson
-        emoji: ' ',
         description: 'Strike Issued'
     }
 };
@@ -47,33 +44,33 @@ function buildInfractionEmbed(infraction, targetUser, issuerNickname) {
     const typeConfig = INFRACTION_TYPES[infraction.type];
     
     const embed = new EmbedBuilder()
-        .setTitle(`${typeConfig.emoji} STAFF ${typeConfig.label}`)
+        .setTitle(`Staff ${typeConfig.label}`)
         .setColor(typeConfig.color)
         .setDescription(`**${typeConfig.description}**`)
         .addFields(
             { 
-                name: ' Staff Member', 
+                name: 'Staff Member', 
                 value: `<@${infraction.targetId}>\n\`${infraction.targetTag}\``, 
                 inline: true 
             },
             { 
-                name: ' Type', 
+                name: 'Type', 
                 value: `**${typeConfig.label}**`, 
                 inline: true 
             },
             { 
-                name: ' Case', 
+                name: 'Case', 
                 value: `\`#${infraction.caseNumber}\``, 
                 inline: true 
             },
             { 
-                name: ' Reason', 
+                name: 'Reason', 
                 value: infraction.reason, 
                 inline: false 
             }
         )
         .setFooter({ 
-            text: `Issued by ${issuerNickname} • Case #${infraction.caseNumber}` 
+            text: `Issued by ${issuerNickname} - Case #${infraction.caseNumber}` 
         })
         .setTimestamp(infraction.createdAt);
     
@@ -102,10 +99,10 @@ const slashCommands = [
                 .setDescription('Type of infraction')
                 .setRequired(true)
                 .addChoices(
-                    { name: ' Termination', value: 'termination' },
-                    { name: ' Warning', value: 'warning' },
-                    { name: ' Notice', value: 'notice' },
-                    { name: ' Strike', value: 'strike' }
+                    { name: 'Termination', value: 'termination' },
+                    { name: 'Warning', value: 'warning' },
+                    { name: 'Notice', value: 'notice' },
+                    { name: 'Strike', value: 'strike' }
                 ))
             .addStringOption(opt => opt
                 .setName('reason')
@@ -116,7 +113,7 @@ const slashCommands = [
             // Permission check - Management+ only
             if (!isManagement(interaction.member) && !isOwner(interaction.member)) {
                 return interaction.reply({ 
-                    content: '❌ You do not have permission to issue staff infractions.', 
+                    content: 'You do not have permission to issue staff infractions.', 
                     ephemeral: true 
                 });
             }
@@ -165,16 +162,16 @@ const slashCommands = [
                 
                 // DM the user
                 const dmEmbed = new EmbedBuilder()
-                    .setTitle(`${INFRACTION_TYPES[type].emoji} You Have Received a Staff ${INFRACTION_TYPES[type].label}`)
+                    .setTitle(`You Have Received a Staff ${INFRACTION_TYPES[type].label}`)
                     .setColor(INFRACTION_TYPES[type].color)
                     .setDescription(
                         `You have received an official **${INFRACTION_TYPES[type].label.toLowerCase()}** from **NewLife SMP** management.\n\n` +
                         `Please review the details below.`
                     )
                     .addFields(
-                        { name: ' Type', value: `**${INFRACTION_TYPES[type].label}**`, inline: true },
-                        { name: ' Case', value: `\`#${caseNumber}\``, inline: true },
-                        { name: ' Reason', value: reason, inline: false }
+                        { name: 'Type', value: `**${INFRACTION_TYPES[type].label}**`, inline: true },
+                        { name: 'Case', value: `\`#${caseNumber}\``, inline: true },
+                        { name: 'Reason', value: reason, inline: false }
                     )
                     .setFooter({ text: `Issued by ${issuerNickname}` })
                     .setTimestamp();
@@ -184,13 +181,18 @@ const slashCommands = [
                 // Confirm to issuer
                 const typeConfig = INFRACTION_TYPES[type];
                 await interaction.editReply({
-                    content: `✅ **${typeConfig.label}** issued to ${targetUser} (Case #${caseNumber})${dmSent ? '' : '\n⚠️ Could not DM user.'}`
+                    content: `**${typeConfig.label}** issued to ${targetUser} (Case #${caseNumber})${dmSent ? '' : '\nNote: Could not DM user.'}`
                 });
                 
             } catch (error) {
-                console.error('[Infractions] Error issuing infraction:', error);
+                await logError('infractions: /infract', error, {
+                    issuer: interaction.user.tag,
+                    target: targetUser?.tag,
+                    type,
+                    reason
+                });
                 await interaction.editReply({
-                    content: '❌ Failed to issue infraction. Please try again.'
+                    content: 'Failed to issue infraction. Please try again.'
                 });
             }
         }
@@ -209,17 +211,17 @@ const slashCommands = [
                 .setDescription('Filter by infraction type')
                 .setRequired(false)
                 .addChoices(
-                    { name: ' Terminations', value: 'termination' },
-                    { name: ' Warnings', value: 'warning' },
-                    { name: ' Notices', value: 'notice' },
-                    { name: ' Strikes', value: 'strike' }
+                    { name: 'Terminations', value: 'termination' },
+                    { name: 'Warnings', value: 'warning' },
+                    { name: 'Notices', value: 'notice' },
+                    { name: 'Strikes', value: 'strike' }
                 )),
         
         async execute(interaction, client) {
             // Permission check - Supervisor+ only
             if (!isSupervisor(interaction.member) && !isManagement(interaction.member) && !isOwner(interaction.member)) {
                 return interaction.reply({ 
-                    content: '❌ You do not have permission to view infractions.', 
+                    content: 'You do not have permission to view infractions.', 
                     ephemeral: true 
                 });
             }
@@ -241,13 +243,13 @@ const slashCommands = [
                 
                 if (infractions.length === 0) {
                     return interaction.editReply({
-                        content: '📋 No infractions found matching your criteria.'
+                        content: 'No infractions found matching your criteria.'
                     });
                 }
                 
                 // Build embed
                 const embed = new EmbedBuilder()
-                    .setTitle(' Staff Infractions')
+                    .setTitle('Staff Infractions')
                     .setColor(0x2F3136)
                     .setTimestamp();
                 
@@ -260,8 +262,8 @@ const slashCommands = [
                     const typeConfig = INFRACTION_TYPES[inf.type];
                     const date = `<t:${Math.floor(new Date(inf.createdAt).getTime() / 1000)}:R>`;
                     const status = inf.active ? '' : ' *(revoked)*';
-                    return `${typeConfig.emoji} **#${inf.caseNumber}** ${typeConfig.label}${status}\n` +
-                           `└ <@${inf.targetId}> • ${inf.reason.substring(0, 50)}${inf.reason.length > 50 ? '...' : ''} • ${date}`;
+                    return `**#${inf.caseNumber}** ${typeConfig.label}${status}\n` +
+                           `- <@${inf.targetId}> - ${inf.reason.substring(0, 50)}${inf.reason.length > 50 ? '...' : ''} - ${date}`;
                 });
                 
                 embed.setDescription((embed.data.description ? embed.data.description + '\n\n' : '') + lines.join('\n\n'));
@@ -270,9 +272,17 @@ const slashCommands = [
                 await interaction.editReply({ embeds: [embed] });
                 
             } catch (error) {
-                console.error('[Infractions] Error fetching infractions:', error);
+                await logError('infractions: /infractions', error, {
+                    user: interaction.user.tag,
+                    userId: interaction.user.id,
+                    options: {
+                        user: interaction.options.getUser('user')?.id,
+                        type: interaction.options.getString('type'),
+                        active: interaction.options.getBoolean('active')
+                    }
+                });
                 await interaction.editReply({
-                    content: '❌ Failed to fetch infractions.'
+                    content: 'Failed to fetch infractions.'
                 });
             }
         }
@@ -291,7 +301,7 @@ const slashCommands = [
             // Permission check - Management+ only
             if (!isManagement(interaction.member) && !isOwner(interaction.member)) {
                 return interaction.reply({ 
-                    content: '❌ You do not have permission to revoke infractions.', 
+                    content: 'You do not have permission to revoke infractions.', 
                     ephemeral: true 
                 });
             }
@@ -305,13 +315,13 @@ const slashCommands = [
                 
                 if (!infraction) {
                     return interaction.editReply({
-                        content: `❌ No infraction found with case #${caseNumber}.`
+                        content: `No infraction found with case #${caseNumber}.`
                     });
                 }
                 
                 if (!infraction.active) {
                     return interaction.editReply({
-                        content: `⚠️ Infraction #${caseNumber} is already revoked.`
+                        content: `Infraction #${caseNumber} is already revoked.`
                     });
                 }
                 
@@ -320,13 +330,17 @@ const slashCommands = [
                 
                 const typeConfig = INFRACTION_TYPES[infraction.type];
                 await interaction.editReply({
-                    content: `✅ **${typeConfig.label}** #${caseNumber} for <@${infraction.targetId}> has been revoked.`
+                    content: `**${typeConfig.label}** #${caseNumber} for <@${infraction.targetId}> has been revoked.`
                 });
                 
             } catch (error) {
-                console.error('[Infractions] Error revoking infraction:', error);
+                await logError('infractions: /revokeinfraction', error, {
+                    user: interaction.user.tag,
+                    userId: interaction.user.id,
+                    caseNumber: interaction.options.getInteger('case')
+                });
                 await interaction.editReply({
-                    content: '❌ Failed to revoke infraction.'
+                    content: 'Failed to revoke infraction.'
                 });
             }
         }

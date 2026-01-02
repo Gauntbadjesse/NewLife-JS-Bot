@@ -51,7 +51,7 @@ const slashCommands = [
 
         async execute(interaction, client) {
             if (!isAdmin(interaction.member)) {
-                return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                return interaction.reply({ content: 'Permission denied.', ephemeral: true });
             }
 
             const sub = interaction.options.getSubcommand();
@@ -72,11 +72,11 @@ const slashCommands = [
                     const message = await channel.send({ embeds: [embed] });
                     
                     return interaction.reply({
-                        content: `✅ Reaction role message created!\n**Message ID:** \`${message.id}\`\n\nNow use \`/reactionroles add\` to add roles.`,
+                        content: `Reaction role message created!\n**Message ID:** \`${message.id}\`\n\nNow use \`/reactionroles add\` to add roles.`,
                         ephemeral: true
                     });
                 } catch (error) {
-                    return interaction.reply({ content: '❌ Failed to send message. Check channel permissions.', ephemeral: true });
+                    return interaction.reply({ content: 'Failed to send message. Check channel permissions.', ephemeral: true });
                 }
             }
 
@@ -91,13 +91,13 @@ const slashCommands = [
                 // Check if role already exists for this message
                 const existing = await ReactionRole.findOne({ messageId, roleId: role.id });
                 if (existing) {
-                    return interaction.editReply({ content: '❌ This role is already added to this message.' });
+                    return interaction.editReply({ content: 'This role is already added to this message.' });
                 }
 
                 // Count existing roles for this message
                 const count = await ReactionRole.countDocuments({ messageId });
                 if (count >= 25) {
-                    return interaction.editReply({ content: '❌ Maximum 25 roles per message.' });
+                    return interaction.editReply({ content: 'Maximum 25 roles per message.' });
                 }
 
                 // Find the message
@@ -112,7 +112,7 @@ const slashCommands = [
                 }
 
                 if (!message) {
-                    return interaction.editReply({ content: '❌ Message not found.' });
+                    return interaction.editReply({ content: 'Message not found.' });
                 }
 
                 // Save to database
@@ -130,7 +130,7 @@ const slashCommands = [
                 await updateReactionRoleMessage(message, interaction.guild.id);
 
                 return interaction.editReply({
-                    content: `✅ Added **${role.name}** with ${emoji} to the reaction role message.`
+                    content: `Added **${role.name}** with ${emoji} to the reaction role message.`
                 });
             }
 
@@ -142,7 +142,7 @@ const slashCommands = [
 
                 const result = await ReactionRole.deleteOne({ messageId, roleId: role.id });
                 if (result.deletedCount === 0) {
-                    return interaction.editReply({ content: '❌ Role not found on this message.' });
+                    return interaction.editReply({ content: 'Role not found on this message.' });
                 }
 
                 // Find and update the message
@@ -160,7 +160,7 @@ const slashCommands = [
                     await updateReactionRoleMessage(message, interaction.guild.id);
                 }
 
-                return interaction.editReply({ content: `✅ Removed **${role.name}** from the reaction role message.` });
+                return interaction.editReply({ content: `Removed **${role.name}** from the reaction role message.` });
             }
 
             if (sub === 'list') {
@@ -170,11 +170,11 @@ const slashCommands = [
                 ]);
 
                 if (messages.length === 0) {
-                    return interaction.reply({ content: '📝 No reaction role messages set up.', ephemeral: true });
+                    return interaction.reply({ content: 'No reaction role messages set up.', ephemeral: true });
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle('🎭 Reaction Role Messages')
+                    .setTitle('Reaction Role Messages')
                     .setColor('#3b82f6');
 
                 for (const msg of messages.slice(0, 10)) {
@@ -196,8 +196,8 @@ const slashCommands = [
                 
                 return interaction.reply({
                     content: result.deletedCount > 0
-                        ? `✅ Deleted reaction role setup (${result.deletedCount} role(s) removed).`
-                        : '❌ No reaction roles found for this message.',
+                        ? `Deleted reaction role setup (${result.deletedCount} role(s) removed).`
+                        : 'No reaction roles found for this message.',
                     ephemeral: true
                 });
             }
@@ -219,11 +219,11 @@ const slashCommands = [
                 }
 
                 if (!message) {
-                    return interaction.editReply({ content: '❌ Message not found.' });
+                    return interaction.editReply({ content: 'Message not found.' });
                 }
 
                 await updateReactionRoleMessage(message, interaction.guild.id);
-                return interaction.editReply({ content: '✅ Reaction role buttons refreshed.' });
+                return interaction.editReply({ content: 'Reaction role buttons refreshed.' });
             }
         }
     }
@@ -295,38 +295,38 @@ async function handleReactionRoleButton(interaction, client) {
     });
 
     if (!reactionRole) {
-        return interaction.reply({ content: '❌ This reaction role no longer exists.', ephemeral: true });
+        return interaction.reply({ content: 'This reaction role no longer exists.', ephemeral: true });
     }
 
     const member = interaction.member;
     const role = interaction.guild.roles.cache.get(roleId);
 
     if (!role) {
-        return interaction.reply({ content: '❌ Role not found.', ephemeral: true });
+        return interaction.reply({ content: 'Role not found.', ephemeral: true });
     }
 
     // Check if bot can manage this role
     if (role.position >= interaction.guild.members.me.roles.highest.position) {
-        return interaction.reply({ content: '❌ I cannot manage this role due to role hierarchy.', ephemeral: true });
+        return interaction.reply({ content: 'I cannot manage this role due to role hierarchy.', ephemeral: true });
     }
 
     try {
         if (member.roles.cache.has(roleId)) {
             await member.roles.remove(roleId);
             return interaction.reply({
-                content: `✅ Removed **${role.name}** role.`,
+                content: `Removed **${role.name}** role.`,
                 ephemeral: true
             });
         } else {
             await member.roles.add(roleId);
             return interaction.reply({
-                content: `✅ Added **${role.name}** role.`,
+                content: `Added **${role.name}** role.`,
                 ephemeral: true
             });
         }
     } catch (error) {
         console.error('Reaction role error:', error);
-        return interaction.reply({ content: '❌ Failed to update role.', ephemeral: true });
+        return interaction.reply({ content: 'Failed to update role.', ephemeral: true });
     }
 }
 

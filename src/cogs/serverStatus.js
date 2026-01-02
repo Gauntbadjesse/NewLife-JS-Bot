@@ -85,10 +85,10 @@ function parseTPS(response) {
  * Get TPS color indicator
  */
 function getTpsColor(tps) {
-    if (tps >= 19.5) return '🟢';
-    if (tps >= 18) return '🟡';
-    if (tps >= 15) return '🟠';
-    return '🔴';
+    if (tps >= 19.5) return '[Good]';
+    if (tps >= 18) return '[OK]';
+    if (tps >= 15) return '[Fair]';
+    return '[Poor]';
 }
 
 /**
@@ -141,20 +141,20 @@ const slashCommands = [
                     }
 
                     const embed = new EmbedBuilder()
-                        .setTitle('🖥️ Server Status')
+                        .setTitle('Server Status')
                         .setColor('#22c55e')
                         .setTimestamp();
 
                     // Connection status
                     embed.addFields({
-                        name: '📡 Connection',
-                        value: '🟢 Online',
+                        name: 'Connection',
+                        value: 'Online',
                         inline: true
                     });
 
                     // Player count
                     embed.addFields({
-                        name: '👥 Players',
+                        name: 'Players',
                         value: `${playerData.online}/${playerData.max}`,
                         inline: true
                     });
@@ -163,7 +163,7 @@ const slashCommands = [
                     if (tpsData) {
                         const tpsIcon = getTpsColor(tpsData.tps1m);
                         embed.addFields({
-                            name: '⚡ TPS',
+                            name: 'TPS',
                             value: `${tpsIcon} ${tpsData.tps1m.toFixed(1)} (${getTpsHealth(tpsData.tps1m)})`,
                             inline: true
                         });
@@ -174,7 +174,7 @@ const slashCommands = [
                         const playerList = playerData.players.slice(0, 30).join(', ');
                         const truncated = playerData.players.length > 30 ? ` (+${playerData.players.length - 30} more)` : '';
                         embed.addFields({
-                            name: '🎮 Online Players',
+                            name: 'Online Players',
                             value: playerList + truncated || 'None',
                             inline: false
                         });
@@ -191,7 +191,7 @@ const slashCommands = [
                     const playerData = parsePlayerList(listResponse);
 
                     const embed = new EmbedBuilder()
-                        .setTitle('👥 Online Players')
+                        .setTitle('Online Players')
                         .setColor('#3b82f6')
                         .setDescription(`**${playerData.online}** of **${playerData.max}** players online`)
                         .setTimestamp();
@@ -239,7 +239,7 @@ const slashCommands = [
                         tpsResponse = await executeRcon('tps');
                     } catch (e) {
                         return interaction.editReply({
-                            content: '❌ TPS command not available on this server. Make sure you have a plugin that provides `/tps`.'
+                            content: 'TPS command not available on this server. Make sure you have a plugin that provides `/tps`.'
                         });
                     }
 
@@ -247,12 +247,12 @@ const slashCommands = [
 
                     if (!tpsData) {
                         return interaction.editReply({
-                            content: `📊 Raw TPS Response:\n\`\`\`\n${tpsResponse}\n\`\`\``
+                            content: `Raw TPS Response:\n\`\`\`\n${tpsResponse}\n\`\`\``
                         });
                     }
 
                     const embed = new EmbedBuilder()
-                        .setTitle('⚡ Server Performance')
+                        .setTitle('Server Performance')
                         .setColor(tpsData.tps1m >= 18 ? '#22c55e' : tpsData.tps1m >= 15 ? '#f59e0b' : '#ef4444')
                         .setTimestamp();
 
@@ -277,7 +277,7 @@ const slashCommands = [
                     // Overall health
                     const avgTps = (tpsData.tps1m + tpsData.tps5m + tpsData.tps15m) / 3;
                     embed.addFields({
-                        name: '📊 Overall Health',
+                        name: 'Overall Health',
                         value: `${getTpsHealth(avgTps)} (${avgTps.toFixed(1)} avg TPS)`,
                         inline: false
                     });
@@ -299,11 +299,11 @@ const slashCommands = [
                 console.error('Status command error:', error);
                 
                 const embed = new EmbedBuilder()
-                    .setTitle('🖥️ Server Status')
+                    .setTitle('Server Status')
                     .setColor('#ef4444')
                     .addFields({
-                        name: '📡 Connection',
-                        value: '🔴 Offline / Unreachable',
+                        name: 'Connection',
+                        value: 'Offline / Unreachable',
                         inline: true
                     })
                     .setDescription('Could not connect to the Minecraft server via RCON.')

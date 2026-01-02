@@ -24,7 +24,7 @@ const {
     createErrorEmbed,
     getEmbedColor
 } = require('../utils/embeds');
-const { isStaff, isAdmin } = require('../utils/permissions');
+const { isStaff, isAdmin, isModerator, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
 
 /**
  * Prefix Commands
@@ -37,6 +37,7 @@ const commands = {
         usage: '!help [command]',
         async execute(message, args, client) {
             const prefix = process.env.BOT_PREFIX || '!';
+            const member = message.member;
 
             if (args[0]) {
                 // Show specific command help
@@ -59,7 +60,7 @@ const commands = {
                         value: `\`${command.usage || `${prefix}${command.name}`}\``,
                         inline: false
                     })
-                    .setFooter({ text: 'NewLife Management | Help System' })
+                    .setFooter({ text: 'NewLife Management' })
                     .setTimestamp();
 
                 return message.reply({
@@ -68,49 +69,57 @@ const commands = {
                 });
             }
 
-            // Show all commands
+            // Build permission-filtered help
             const embed = new EmbedBuilder()
                 .setColor(getEmbedColor())
                 .setTitle('NewLife Management Commands')
                 .setDescription(`Use \`${prefix}help <command>\` for detailed information about a specific command.`)
-                .addFields(
-                    {
-                        name: 'Warning Commands',
-                        value: [
-                            `\`${prefix}warn <case_id>\` - Look up a warning by ID`,
-                            `\`${prefix}warnings <player> [page]\` - List player warnings`,
-                            `\`${prefix}activewarnings [page]\` - List all active warnings`,
-                            `\`${prefix}recentwarnings [count]\` - Show recent warnings`,
-                            `\`${prefix}punishwarn <player> <reason>\` - Warn a player via RCON`
-                        ].join('\n'),
-                        inline: false
-                    },
-                    {
-                        name: 'Ban Commands',
-                        value: [
-                            `\`${prefix}ban <case_id>\` - Look up a ban by ID`,
-                            `\`${prefix}bans <player> [page]\` - List player bans`,
-                            `\`${prefix}activebans [page]\` - List all active bans`,
-                            `\`${prefix}recentbans [count]\` - Show recent bans`,
-                            `\`${prefix}checkban <player>\` - Check if player is banned`,
-                            `\`${prefix}punishban <player> <reason>\` - Ban a player via RCON`
-                        ].join('\n'),
-                        inline: false
-                    },
-                    {
-                        name: 'General Commands',
-                        value: [
-                            `\`${prefix}help [command]\` - Show this help menu`,
-                            `\`${prefix}history <player>\` - Show player's full history`,
-                            `\`${prefix}lookup <case_id>\` - Look up any case by ID`,
-                            `\`${prefix}stats\` - Show database statistics`,
-                            `\`${prefix}ping\` - Check bot latency`
-                        ].join('\n'),
-                        inline: false
-                    }
-                )
-                .setFooter({ text: 'NewLife Management | NewLife SMP' })
+                .setFooter({ text: 'NewLife Management' })
                 .setTimestamp();
+
+            // Everyone commands
+            const everyoneCommands = [
+                `\`${prefix}help [command]\` - Show this help menu`,
+                `\`${prefix}ping\` - Check bot latency`,
+                `\`${prefix}kingdom\` - Kingdom management`
+            ];
+            embed.addFields({ name: 'General Commands', value: everyoneCommands.join('\n'), inline: false });
+
+            // Moderator+ commands
+            if (isModerator(member)) {
+                const modCommands = [
+                    `\`${prefix}warn <case_id>\` - Look up a warning by ID`,
+                    `\`${prefix}warnings <player> [page]\` - List player warnings`,
+                    `\`${prefix}activewarnings [page]\` - List all active warnings`,
+                    `\`${prefix}recentwarnings [count]\` - Show recent warnings`,
+                    `\`${prefix}punishwarn <player> <reason>\` - Warn a player via RCON`,
+                    `\`${prefix}history <player>\` - Show player's full history`,
+                    `\`${prefix}lookup <case_id>\` - Look up any case by ID`,
+                    `\`${prefix}checkban <player>\` - Check if player is banned`
+                ];
+                embed.addFields({ name: 'Moderator Commands', value: modCommands.join('\n'), inline: false });
+            }
+
+            // Admin+ commands
+            if (isAdmin(member)) {
+                const adminCommands = [
+                    `\`${prefix}ban <case_id>\` - Look up a ban by ID`,
+                    `\`${prefix}bans <player> [page]\` - List player bans`,
+                    `\`${prefix}activebans [page]\` - List all active bans`,
+                    `\`${prefix}recentbans [count]\` - Show recent bans`,
+                    `\`${prefix}punishban <player> <reason>\` - Ban a player via RCON`,
+                    `\`${prefix}stats\` - Show database statistics`
+                ];
+                embed.addFields({ name: 'Admin Commands', value: adminCommands.join('\n'), inline: false });
+            }
+
+            // Owner commands
+            if (isOwner(member)) {
+                const ownerCommands = [
+                    `\`${prefix}update\` - Pull latest from git and restart`
+                ];
+                embed.addFields({ name: 'Owner Commands', value: ownerCommands.join('\n'), inline: false });
+            }
 
             return message.reply({
                 embeds: [embed],
@@ -223,22 +232,22 @@ const commands = {
                 if (!infraction && !isNaN(Number(caseId))) infraction = await Infraction.findOne({ caseNumber: Number(caseId) });
                 if (infraction) {
                     const INFRACTION_TYPES = {
-                        termination: { label: 'TERMINATION', color: 0x8B0000, emoji: '🔴' },
-                        warning: { label: 'WARNING', color: 0xFF4500, emoji: '🟠' },
-                        notice: { label: 'NOTICE', color: 0xFFD700, emoji: '🟡' },
-                        strike: { label: 'STRIKE', color: 0xDC143C, emoji: '⚠️' }
+                        termination: { label: 'Termination', color: 0x8B0000 },
+                        warning: { label: 'Warning', color: 0xFF4500 },
+                        notice: { label: 'Notice', color: 0xFFD700 },
+                        strike: { label: 'Strike', color: 0xDC143C }
                     };
                     const typeConfig = INFRACTION_TYPES[infraction.type];
                     const embed = new EmbedBuilder()
-                        .setTitle(`${typeConfig.emoji} Staff ${typeConfig.label} • Case #${infraction.caseNumber}`)
+                        .setTitle(`Staff ${typeConfig.label} - Case #${infraction.caseNumber}`)
                         .setColor(typeConfig.color)
                         .addFields(
-                            { name: '👤 Staff Member', value: `<@${infraction.targetId}>\n\`${infraction.targetTag}\``, inline: true },
-                            { name: '📋 Type', value: `**${typeConfig.label}**`, inline: true },
-                            { name: '📅 Date', value: `<t:${Math.floor(new Date(infraction.createdAt).getTime() / 1000)}:F>`, inline: true },
-                            { name: '📝 Reason', value: infraction.reason, inline: false },
-                            { name: '👮 Issued By', value: infraction.issuerNickname || infraction.issuerTag, inline: true },
-                            { name: '📊 Status', value: infraction.active ? '🔴 Active' : '⚪ Revoked', inline: true }
+                            { name: 'Staff Member', value: `<@${infraction.targetId}>\n\`${infraction.targetTag}\``, inline: true },
+                            { name: 'Type', value: `**${typeConfig.label}**`, inline: true },
+                            { name: 'Date', value: `<t:${Math.floor(new Date(infraction.createdAt).getTime() / 1000)}:F>`, inline: true },
+                            { name: 'Reason', value: infraction.reason, inline: false },
+                            { name: 'Issued By', value: infraction.issuerNickname || infraction.issuerTag, inline: true },
+                            { name: 'Status', value: infraction.active ? 'Active' : 'Revoked', inline: true }
                         )
                         .setFooter({ text: `Case #${infraction.caseNumber}` })
                         .setTimestamp(infraction.createdAt);
@@ -291,30 +300,30 @@ const commands = {
 
                 const embed = new EmbedBuilder()
                     .setColor(getEmbedColor())
-                    .setTitle('📊 NewLife Management Statistics')
+                    .setTitle('NewLife Management Statistics')
                     .addFields(
                         {
-                            name: '⚠️ Warnings',
+                            name: 'Warnings',
                             value: `**Total:** ${totalWarnings}\n**Active:** ${activeWarnings}\n**Unique Players:** ${uniqueWarnedPlayers.length}`,
                             inline: true
                         },
                         {
-                            name: '🔨 Bans',
+                            name: 'Bans',
                             value: `**Total:** ${totalBans}\n**Active:** ${activeBans}\n**Unique Players:** ${uniqueBannedPlayers.length}`,
                             inline: true
                         },
                         {
-                            name: '📋 Staff Infractions',
+                            name: 'Staff Infractions',
                             value: `**Total:** ${totalInfractions}\n**Active:** ${activeInfractions}\n**Unique Staff:** ${uniqueInfractedStaff.length}`,
                             inline: true
                         },
                         {
-                            name: '🤖 Bot Info',
+                            name: 'Bot Info',
                             value: `**Uptime:** ${formatUptime(client.uptime)}\n**Servers:** ${client.guilds.cache.size}\n**Ping:** ${client.ws.ping}ms`,
                             inline: true
                         }
                     )
-                    .setFooter({ text: 'NewLife Management • Statistics' })
+                    .setFooter({ text: 'NewLife Management | Statistics' })
                     .setTimestamp();
 
                 return message.reply({
@@ -391,9 +400,9 @@ const commands = {
                 .setDescription(`Preparing update from **${branch}**...`)
                 .setTimestamp()
                 .addFields(
-                    { name: 'Step 1', value: '⏳ Fetching updates', inline: true },
-                    { name: 'Step 2', value: '⏳ Applying changes', inline: true },
-                    { name: 'Step 3', value: '⏳ Installing dependencies', inline: true }
+                    { name: 'Step 1', value: 'Fetching updates...', inline: true },
+                    { name: 'Step 2', value: 'Pending...', inline: true },
+                    { name: 'Step 3', value: 'Pending...', inline: true }
                 );
 
             const status = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
@@ -411,7 +420,7 @@ const commands = {
 
             try {
                 // Step 1: Fetch and reset
-                await updateSteps(['⏳ Fetching updates', '⏳ Applying changes', '⏳ Installing dependencies']);
+                await updateSteps(['Fetching...', 'Pending...', 'Pending...']);
                 await execAsync(`git fetch --all`, { cwd: repoDir, timeout: 5 * 60 * 1000 });
                 await execAsync(`git reset --hard origin/${branch}`, { cwd: repoDir, timeout: 5 * 60 * 1000 });
 
@@ -425,11 +434,11 @@ const commands = {
                     commitInfo = 'Unable to read commit info';
                 }
 
-                await updateSteps([`✅ Fetched updates\n${commitInfo}`, '⏳ Applying changes', '⏳ Installing dependencies']);
+                await updateSteps([`Fetched updates\n${commitInfo}`, 'Applying changes', 'Installing dependencies']);
 
                 // Step 3: Install dependencies
                 await execAsync(`npm install --production`, { cwd: repoDir, timeout: 10 * 60 * 1000 });
-                await updateSteps([`✅ Fetched updates\n${commitInfo}`, '✅ Changes applied', '✅ Dependencies installed']);
+                await updateSteps([`Fetched updates\n${commitInfo}`, 'Changes applied', 'Dependencies installed']);
 
                 // Finalize
                 embed.setColor(0x57F287); // green
@@ -456,7 +465,7 @@ const commands = {
                 embed.setColor(0xED4245); // red
                 embed.setTitle('Update Failed');
                 embed.setDescription('An error occurred while applying the update.');
-                updateSteps(['❌ Failed', '❌ Failed', '❌ Failed']).catch(() => {});
+                updateSteps(['Failed', 'Failed', 'Failed']).catch(() => {});
                 await status.edit({ embeds: [embed], allowedMentions: { repliedUser: false } });
                 // Send truncated error details as a followup to keep embed clean
                 try {
@@ -491,10 +500,10 @@ const commands = {
                     }
                 }
 
-                await statusMsg.edit({ content: '✅ Permission overwrites applied to all channels.' });
+                await statusMsg.edit({ content: 'Permission overwrites applied to all channels.' });
             } catch (error) {
                 console.error('Error applying test1 perms:', error);
-                await statusMsg.edit({ content: '❌ Failed to apply permission overwrites to all channels.' }).catch(() => {});
+                await statusMsg.edit({ content: 'Failed to apply permission overwrites to all channels.' }).catch(() => {});
             } finally {
                 try { await message.delete(); } catch (e) { /* ignore */ }
             }
@@ -529,63 +538,66 @@ const slashCommands = [
             .setDescription('Show all available commands'),
         async execute(interaction, client) {
             const prefix = process.env.BOT_PREFIX || '!';
+            const member = interaction.member;
 
             const embed = new EmbedBuilder()
                 .setColor(getEmbedColor())
                 .setTitle('NewLife Management Commands')
                 .setDescription('All commands are available as both prefix and slash commands.')
-                .addFields(
-                    {
-                        name: 'Warning Commands (Moderator+)',
-                        value: [
-                            `\`/warn case <id>\` - Look up a warning by ID`,
-                            `\`/warn user <player> <reason>\` - Issue a warning`,
-                            `\`/warnings <player>\` - List player warnings`
-                        ].join('\n'),
-                        inline: false
-                    },
-                    {
-                        name: 'Ban Commands (Admin+)',
-                        value: [
-                            `\`/ban case <id>\` - Look up a ban by ID`,
-                            `\`/ban user <player> <duration> <reason>\` - Ban a player`,
-                            `\`/bans <player>\` - List player bans`,
-                            `\`/checkban <player>\` - Check if player is banned (Mod+)`
-                        ].join('\n'),
-                        inline: false
-                    },
-                    {
-                        name: 'General Commands',
-                        value: [
-                            `\`/help\` - Show this help menu`,
-                            `\`/history <player>\` - Show player's history (Mod+)`,
-                            `\`/lookup <id>\` - Look up any case by ID (Mod+)`,
-                            `\`/stats\` - Show database statistics (Admin+)`,
-                            `\`/ping\` - Check bot latency`
-                        ].join('\n'),
-                        inline: false
-                    },
-                    {
-                        name: 'Ticket Commands',
-                        value: [
-                            `\`/panel\` - Send the support panel (Supervisor+)`,
-                            `\`/close <reason>\` - Close current ticket`,
-                            `\`/tclose <time> <reason>\` - Timed ticket close`
-                        ].join('\n'),
-                        inline: false
-                    },
-                    {
-                        name: 'Staff Infraction Commands (Management+)',
-                        value: [
-                            `\`/infract <user> <type> <reason>\` - Issue a staff infraction`,
-                            `\`/infractions [user] [type]\` - View staff infractions`,
-                            `\`/revokeinfraction <case>\` - Revoke an infraction`
-                        ].join('\n'),
-                        inline: false
-                    }
-                )
-                .setFooter({ text: 'NewLife Management | NewLife SMP' })
+                .setFooter({ text: 'NewLife Management' })
                 .setTimestamp();
+
+            // Everyone commands
+            const everyoneCommands = [
+                `\`/help\` - Show this help menu`,
+                `\`/ping\` - Check bot latency`,
+                `\`!kingdom\` - Kingdom management`
+            ];
+            embed.addFields({ name: 'General Commands', value: everyoneCommands.join('\n'), inline: false });
+
+            // Moderator+ commands
+            if (isModerator(member)) {
+                const modCommands = [
+                    `\`/warn case <id>\` - Look up a warning by ID`,
+                    `\`/warn user <player> <reason>\` - Issue a warning`,
+                    `\`/warnings <player>\` - List player warnings`,
+                    `\`/history <player>\` - Show player's history`,
+                    `\`/lookup <id>\` - Look up any case by ID`,
+                    `\`/checkban <player>\` - Check if player is banned`
+                ];
+                embed.addFields({ name: 'Moderator Commands', value: modCommands.join('\n'), inline: false });
+            }
+
+            // Admin+ commands
+            if (isAdmin(member)) {
+                const adminCommands = [
+                    `\`/ban case <id>\` - Look up a ban by ID`,
+                    `\`/ban user <player> <duration> <reason>\` - Ban a player`,
+                    `\`/bans <player>\` - List player bans`,
+                    `\`/stats\` - Show database statistics`
+                ];
+                embed.addFields({ name: 'Admin Commands', value: adminCommands.join('\n'), inline: false });
+            }
+
+            // Supervisor+ commands
+            if (isSupervisor(member)) {
+                const supervisorCommands = [
+                    `\`/panel\` - Send the support panel`,
+                    `\`/close <reason>\` - Close current ticket`,
+                    `\`/tclose <time> <reason>\` - Timed ticket close`
+                ];
+                embed.addFields({ name: 'Supervisor Commands', value: supervisorCommands.join('\n'), inline: false });
+            }
+
+            // Management+ commands
+            if (isManagement(member)) {
+                const managementCommands = [
+                    `\`/infract <user> <type> <reason>\` - Issue a staff infraction`,
+                    `\`/infractions [user] [type]\` - View staff infractions`,
+                    `\`/revokeinfraction <case>\` - Revoke an infraction`
+                ];
+                embed.addFields({ name: 'Management Commands', value: managementCommands.join('\n'), inline: false });
+            }
 
             return interaction.reply({
                 embeds: [embed]
@@ -688,22 +700,22 @@ const slashCommands = [
                 if (!infraction && !isNaN(Number(caseId))) infraction = await Infraction.findOne({ caseNumber: Number(caseId) });
                 if (infraction) {
                     const INFRACTION_TYPES = {
-                        termination: { label: 'TERMINATION', color: 0x8B0000, emoji: '🔴' },
-                        warning: { label: 'WARNING', color: 0xFF4500, emoji: '🟠' },
-                        notice: { label: 'NOTICE', color: 0xFFD700, emoji: '🟡' },
-                        strike: { label: 'STRIKE', color: 0xDC143C, emoji: '⚠️' }
+                        termination: { label: 'Termination', color: 0x8B0000 },
+                        warning: { label: 'Warning', color: 0xFF4500 },
+                        notice: { label: 'Notice', color: 0xFFD700 },
+                        strike: { label: 'Strike', color: 0xDC143C }
                     };
                     const typeConfig = INFRACTION_TYPES[infraction.type];
                     const embed = new EmbedBuilder()
-                        .setTitle(`${typeConfig.emoji} Staff ${typeConfig.label} • Case #${infraction.caseNumber}`)
+                        .setTitle(`Staff ${typeConfig.label} - Case #${infraction.caseNumber}`)
                         .setColor(typeConfig.color)
                         .addFields(
-                            { name: '👤 Staff Member', value: `<@${infraction.targetId}>\n\`${infraction.targetTag}\``, inline: true },
-                            { name: '📋 Type', value: `**${typeConfig.label}**`, inline: true },
-                            { name: '📅 Date', value: `<t:${Math.floor(new Date(infraction.createdAt).getTime() / 1000)}:F>`, inline: true },
-                            { name: '📝 Reason', value: infraction.reason, inline: false },
-                            { name: '👮 Issued By', value: infraction.issuerNickname || infraction.issuerTag, inline: true },
-                            { name: '📊 Status', value: infraction.active ? '🔴 Active' : '⚪ Revoked', inline: true }
+                            { name: 'Staff Member', value: `<@${infraction.targetId}>\n\`${infraction.targetTag}\``, inline: true },
+                            { name: 'Type', value: `**${typeConfig.label}**`, inline: true },
+                            { name: 'Date', value: `<t:${Math.floor(new Date(infraction.createdAt).getTime() / 1000)}:F>`, inline: true },
+                            { name: 'Reason', value: infraction.reason, inline: false },
+                            { name: 'Issued By', value: infraction.issuerNickname || infraction.issuerTag, inline: true },
+                            { name: 'Status', value: infraction.active ? 'Active' : 'Revoked', inline: true }
                         )
                         .setFooter({ text: `Case #${infraction.caseNumber}` })
                         .setTimestamp(infraction.createdAt);
@@ -753,27 +765,27 @@ const slashCommands = [
                     .setTitle('NewLife Management Statistics')
                     .addFields(
                         {
-                            name: '⚠️ Warnings',
+                            name: 'Warnings',
                             value: `**Total:** ${totalWarnings}\n**Active:** ${activeWarnings}\n**Unique Players:** ${uniqueWarnedPlayers.length}`,
                             inline: true
                         },
                         {
-                            name: '🔨 Bans',
+                            name: 'Bans',
                             value: `**Total:** ${totalBans}\n**Active:** ${activeBans}\n**Unique Players:** ${uniqueBannedPlayers.length}`,
                             inline: true
                         },
                         {
-                            name: '📋 Staff Infractions',
+                            name: 'Staff Infractions',
                             value: `**Total:** ${totalInfractions}\n**Active:** ${activeInfractions}\n**Unique Staff:** ${uniqueInfractedStaff.length}`,
                             inline: true
                         },
                         {
-                            name: '🤖 Bot Info',
+                            name: 'Bot Info',
                             value: `**Uptime:** ${formatUptime(client.uptime)}\n**Servers:** ${client.guilds.cache.size}\n**Ping:** ${client.ws.ping}ms`,
                             inline: true
                         }
                     )
-                    .setFooter({ text: 'NewLife Management | Statistics' })
+                    .setFooter({ text: 'NewLife Management' })
                     .setTimestamp();
 
                 return interaction.editReply({

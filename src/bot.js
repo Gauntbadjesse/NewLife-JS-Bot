@@ -10,6 +10,7 @@ const { REST } = require('@discordjs/rest');
 const { connectDatabase } = require('./database/connection');
 const { initWatcher } = require('./database/watcher');
 const { logCommand, sendCommandLogToChannel } = require('./utils/commandLogger');
+const { initErrorLogger, logError } = require('./utils/errorLogger');
 const emojis = require('./utils/emojis');
 
 // Create Discord client with necessary intents
@@ -104,6 +105,9 @@ client.once('ready', async () => {
     console.log(` Slash Commands: ${String(client.slashCommands.size).padEnd(21)} `);
     console.log('\\n');
 
+    // Initialize error logger with client
+    initErrorLogger(client);
+
     await initWatcher(client);
 
     client.user.setActivity('NewLife SMP | !help', { type: 3 });
@@ -124,7 +128,12 @@ client.on('messageCreate', async (message) => {
     try {
         await command.execute(message, args, client);
     } catch (error) {
-        console.error(`Error executing command ${commandName}:`, error);
+        await logError(`Prefix Command: ${commandName}`, error, {
+            user: message.author.tag,
+            userId: message.author.id,
+            channel: message.channel.name,
+            content: message.content
+        });
         await message.reply({ content: `${emojis.CROSS} An error occurred while executing this command.`, allowedMentions: { repliedUser: false } });
     }
 });
@@ -137,21 +146,27 @@ client.on('interactionCreate', async (interaction) => {
             try {
                 const ticketsCog = require('./cogs/tickets');
                 if (ticketsCog.handleButton) await ticketsCog.handleButton(interaction);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: tickets', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
 
             // Try verification cog
             try {
                 const verificationCog = require('./cogs/verification');
                 if (verificationCog.handleButton) await verificationCog.handleButton(interaction);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: verification', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
 
             // Try applications cog
             try {
                 const applicationsCog = require('./cogs/applications');
                 if (applicationsCog.handleButton) await applicationsCog.handleButton(interaction);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: applications', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
         } catch (error) {
-            console.error('Error handling button:', error);
+            await logError('Button Handler', error, { customId: interaction.customId, user: interaction.user.tag });
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
             }
@@ -165,15 +180,19 @@ client.on('interactionCreate', async (interaction) => {
             try {
                 const ticketsCog = require('./cogs/tickets');
                 if (ticketsCog.handleModalSubmit) await ticketsCog.handleModalSubmit(interaction);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Modal: tickets', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
 
             // Try applications cog
             try {
                 const applicationsCog = require('./cogs/applications');
                 if (applicationsCog.handleModal) await applicationsCog.handleModal(interaction);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Modal: applications', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
         } catch (error) {
-            console.error('Error handling modal:', error);
+            await logError('Modal Handler', error, { customId: interaction.customId, user: interaction.user.tag });
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
             }
@@ -195,7 +214,11 @@ client.on('interactionCreate', async (interaction) => {
     } catch (error) {
         success = false;
         errorMessage = error.message;
-        console.error(`Error executing slash command ${interaction.commandName}:`, error);
+        await logError(`Slash Command: /${interaction.commandName}`, error, {
+            user: interaction.user.tag,
+            userId: interaction.user.id,
+            options: interaction.options?.data?.map(o => `${o.name}=${o.value}`).join(', ') || 'none'
+        });
 
         const errorReply = { content: `${emojis.CROSS} An error occurred while executing this command.`, ephemeral: true };
         if (interaction.replied || interaction.deferred) await interaction.followUp(errorReply);
@@ -224,10 +247,10 @@ client.on('guildMemberAdd', async (member) => {
                 await ch.setTopic(`Members: ${member.guild.memberCount}`).catch(() => {});
             }
         } catch (e) {
-            console.error('Failed to update member counter:', e);
+            await logError('guildMemberAdd: counter', e, { member: member.user.tag });
         }
     } catch (e) {
-        console.error('Error in guildMemberAdd:', e);
+        await logError('guildMemberAdd', e, { member: member?.user?.tag || 'unknown' });
     }
 });
 

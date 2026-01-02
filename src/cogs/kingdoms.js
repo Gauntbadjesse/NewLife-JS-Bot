@@ -1,12 +1,11 @@
 /**
  * Kingdoms Cog
  * Discord-side kingdom management via !kingdom commands
- * Uses existing MongoDB kingdoms collection
+ * Uses existing MongoDB kingdoms collection from discord_bot database
  */
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const Kingdom = require('../database/models/Kingdom');
+const { getKingdomModel } = require('../database/models/Kingdom');
 const { createErrorEmbed, createSuccessEmbed, createInfoEmbed, getEmbedColor } = require('../utils/embeds');
-const emojis = require('../utils/emojis');
 
 const STAFF_ROLE_FALLBACK = process.env.STAFF_ROLE_ID || '1374421915938324583';
 
@@ -28,17 +27,18 @@ const commands = {
         usage: '!kingdom <subcommand>',
         async execute(message, args, client) {
             const sub = (args[0] || '').toLowerCase();
+            const Kingdom = await getKingdomModel();
             
             // Help
             if (!sub || sub === 'help') {
                 const embed = createInfoEmbed('Kingdom Commands',
-                    '**!kingdom list** — list all kingdoms\n' +
-                    '**!kingdom info <name>** — show kingdom details\n' +
-                    '**!kingdom members <name>** — list all members\n' +
-                    '**!kingdom add @user <name>** — add member (leader/staff)\n' +
-                    '**!kingdom remove @user <name>** — remove member (leader/staff)\n' +
-                    '**!kingdom promote @user <name>** — promote to leader (staff)\n' +
-                    '**!kingdom demote @user <name>** — demote from leader (staff)'
+                    '**!kingdom list** - List all kingdoms\n' +
+                    '**!kingdom info <name>** - Show kingdom details\n' +
+                    '**!kingdom members <name>** - List all members\n' +
+                    '**!kingdom add @user <name>** - Add member (leader/staff)\n' +
+                    '**!kingdom remove @user <name>** - Remove member (leader/staff)\n' +
+                    '**!kingdom promote @user <name>** - Promote to leader (staff)\n' +
+                    '**!kingdom demote @user <name>** - Demote from leader (staff)'
                 );
                 return message.channel.send({ embeds: [embed] });
             }
@@ -54,11 +54,11 @@ const commands = {
                 for (const k of kingdoms) {
                     const memberRole = message.guild.roles.cache.get(k.member_role_id);
                     const count = memberRole ? message.guild.members.cache.filter(m => m.roles.cache.has(memberRole.id)).size : 0;
-                    lines.push(`• **${k.name}** — ${count} members`);
+                    lines.push(`**${k.name}** - ${count} members`);
                 }
                 
                 const embed = new EmbedBuilder()
-                    .setTitle('�� Kingdoms')
+                    .setTitle('Kingdoms')
                     .setDescription(lines.join('\n'))
                     .setColor(getEmbedColor())
                     .setFooter({ text: 'Use !kingdom info <name> for details' })
@@ -80,12 +80,12 @@ const commands = {
                 const memberCount = memberRole ? message.guild.members.cache.filter(m => m.roles.cache.has(memberRole.id)).size : 0;
                 
                 const embed = new EmbedBuilder()
-                    .setTitle(`🏰 ${k.name.charAt(0).toUpperCase() + k.name.slice(1)}`)
+                    .setTitle(k.name.charAt(0).toUpperCase() + k.name.slice(1))
                     .setColor(getEmbedColor())
                     .addFields(
-                        { name: '👑 Leaders', value: leaders.length ? leaders.join(', ') : 'None', inline: false },
-                        { name: '👥 Members', value: `${memberCount}`, inline: true },
-                        { name: '📅 Created', value: k.created_at ? `<t:${Math.floor(new Date(k.created_at).getTime() / 1000)}:R>` : 'Unknown', inline: true }
+                        { name: 'Leaders', value: leaders.length ? leaders.join(', ') : 'None', inline: false },
+                        { name: 'Members', value: `${memberCount}`, inline: true },
+                        { name: 'Created', value: k.created_at ? `<t:${Math.floor(new Date(k.created_at).getTime() / 1000)}:R>` : 'Unknown', inline: true }
                     )
                     .setFooter({ text: 'NewLife SMP' })
                     .setTimestamp();
@@ -108,7 +108,7 @@ const commands = {
                 
                 const list = members.map(m => m.displayName).slice(0, 50).join(', ');
                 const embed = new EmbedBuilder()
-                    .setTitle(`👥 ${k.name} Members`)
+                    .setTitle(`${k.name} Members`)
                     .setDescription(list + (members.size > 50 ? `\n... and ${members.size - 50} more` : ''))
                     .setColor(getEmbedColor())
                     .setFooter({ text: `Total: ${members.size}` });
@@ -137,7 +137,7 @@ const commands = {
                 }
                 
                 await user.roles.add(memberRole);
-                return message.channel.send({ content: `${emojis.CHECK} ${user} added to **${k.name}**` });
+                return message.channel.send({ content: `${user} added to **${k.name}**` });
             }
 
             // Remove member
@@ -166,7 +166,7 @@ const commands = {
                 if (leaderRole && user.roles.cache.has(leaderRole.id)) {
                     await user.roles.remove(leaderRole);
                 }
-                return message.channel.send({ content: `${emojis.CHECK} ${user} removed from **${k.name}**` });
+                return message.channel.send({ content: `${user} removed from **${k.name}**` });
             }
 
             // Promote to leader (staff only)
@@ -191,7 +191,7 @@ const commands = {
                     await user.roles.add(memberRole);
                 }
                 await user.roles.add(leaderRole);
-                return message.channel.send({ content: `${emojis.CHECK} ${user} promoted to leader of **${k.name}**` });
+                return message.channel.send({ content: `${user} promoted to leader of **${k.name}**` });
             }
 
             // Demote from leader (staff only)
@@ -215,7 +215,7 @@ const commands = {
                 }
                 
                 await user.roles.remove(leaderRole);
-                return message.channel.send({ content: `${emojis.CHECK} ${user} demoted from leader of **${k.name}**` });
+                return message.channel.send({ content: `${user} demoted from leader of **${k.name}**` });
             }
 
             return message.reply({ embeds: [createErrorEmbed('Unknown', 'Unknown subcommand. Use `!kingdom help`.')] });

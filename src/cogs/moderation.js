@@ -454,7 +454,7 @@ const commands = {
 
             try {
                 await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false });
-                await message.channel.send('🔒 Channel has been locked.');
+                await message.channel.send('Channel has been locked.');
             } catch (error) {
                 console.error('Error locking channel:', error);
                 return message.reply({ embeds: [createErrorEmbed('Error', 'Failed to lock the channel.')], allowedMentions: { repliedUser: false } });
@@ -476,7 +476,7 @@ const commands = {
 
             try {
                 await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: true });
-                await message.channel.send('🔓 Channel has been unlocked.');
+                await message.channel.send('Channel has been unlocked.');
             } catch (error) {
                 console.error('Error unlocking channel:', error);
                 return message.reply({ embeds: [createErrorEmbed('Error', 'Failed to unlock the channel.')], allowedMentions: { repliedUser: false } });

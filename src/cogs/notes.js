@@ -43,7 +43,7 @@ const slashCommands = [
 
         async execute(interaction, client) {
             if (!isStaff(interaction.member)) {
-                return interaction.reply({ content: '❌ Permission denied. Staff only.', ephemeral: true });
+                return interaction.reply({ content: 'Permission denied. Staff only.', ephemeral: true });
             }
 
             const sub = interaction.options.getSubcommand();
@@ -80,7 +80,7 @@ const slashCommands = [
                 await note.save();
 
                 const embed = new EmbedBuilder()
-                    .setTitle('📝 Note Added')
+                    .setTitle('Note Added')
                     .setColor('#22c55e')
                     .addFields(
                         { name: 'Player', value: playerName, inline: true },
@@ -110,11 +110,11 @@ const slashCommands = [
                 const notes = await Note.find({ playerName }).sort({ createdAt: -1 }).limit(25);
 
                 if (notes.length === 0) {
-                    return interaction.editReply({ content: `📝 No notes found for **${playerInput}**.` });
+                    return interaction.editReply({ content: `No notes found for **${playerInput}**.` });
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`📝 Notes for ${playerInput}`)
+                    .setTitle(`Notes for ${playerInput}`)
                     .setColor('#3b82f6')
                     .setDescription(`Found ${notes.length} note(s)`)
                     .setTimestamp();
@@ -149,19 +149,19 @@ const slashCommands = [
                 }
 
                 if (!note) {
-                    return interaction.reply({ content: '❌ Note not found.', ephemeral: true });
+                    return interaction.reply({ content: 'Note not found.', ephemeral: true });
                 }
 
                 // Only the author or admin can delete
                 if (note.staffId !== interaction.user.id && !isAdmin(interaction.member)) {
-                    return interaction.reply({ content: '❌ You can only delete your own notes (unless admin).', ephemeral: true });
+                    return interaction.reply({ content: 'You can only delete your own notes (unless admin).', ephemeral: true });
                 }
 
                 const playerName = note.playerName;
                 await Note.deleteOne({ _id: note._id });
 
                 return interaction.reply({
-                    content: `✅ Deleted note for **${playerName}**.`,
+                    content: `Deleted note for **${playerName}**.`,
                     ephemeral: true
                 });
             }
@@ -176,11 +176,11 @@ const slashCommands = [
                 }).sort({ createdAt: -1 }).limit(15);
 
                 if (notes.length === 0) {
-                    return interaction.editReply({ content: `📝 No notes found matching "**${query}**".` });
+                    return interaction.editReply({ content: `No notes found matching "**${query}**".` });
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`📝 Search Results: "${query}"`)
+                    .setTitle(`Search Results: "${query}"`)
                     .setColor('#f59e0b')
                     .setDescription(`Found ${notes.length} matching note(s)`)
                     .setTimestamp();
@@ -204,11 +204,11 @@ const slashCommands = [
                 const notes = await Note.find({}).sort({ createdAt: -1 }).limit(15);
 
                 if (notes.length === 0) {
-                    return interaction.editReply({ content: '📝 No notes in the system yet.' });
+                    return interaction.editReply({ content: 'No notes in the system yet.' });
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle('📝 Recent Notes')
+                    .setTitle('Recent Notes')
                     .setColor('#8b5cf6')
                     .setDescription(`Showing ${notes.length} most recent notes`)
                     .setTimestamp();

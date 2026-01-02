@@ -83,7 +83,7 @@ const slashCommands = [
 
         async execute(interaction, client) {
             if (!isModerator(interaction.member)) {
-                return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                return interaction.reply({ content: 'Permission denied.', ephemeral: true });
             }
 
             await interaction.deferReply();
@@ -164,7 +164,7 @@ const slashCommands = [
 
             // Build the embed
             const embed = new EmbedBuilder()
-                .setTitle(`🔍 Player Lookup: ${playerName}`)
+                .setTitle(`Player Lookup: ${playerName}`)
                 .setColor('#3b82f6')
                 .setTimestamp();
 
@@ -182,7 +182,7 @@ const slashCommands = [
             }
 
             if (basicInfo) {
-                embed.addFields({ name: '📋 Basic Info', value: basicInfo, inline: false });
+                embed.addFields({ name: 'Basic Info', value: basicInfo, inline: false });
             }
 
             // Statistics
@@ -190,9 +190,9 @@ const slashCommands = [
             const activeBans = bans.filter(b => b.active).length;
 
             embed.addFields(
-                { name: '⚠️ Warnings', value: `${activeWarnings} active / ${warnings.length} total`, inline: true },
-                { name: '🔨 Bans', value: `${activeBans} active / ${bans.length} total`, inline: true },
-                { name: '📝 Notes', value: `${notes.length}`, inline: true }
+                { name: 'Warnings', value: `${activeWarnings} active / ${warnings.length} total`, inline: true },
+                { name: 'Bans', value: `${activeBans} active / ${bans.length} total`, inline: true },
+                { name: 'Notes', value: `${notes.length}`, inline: true }
             );
 
             // Active ban status
@@ -206,55 +206,55 @@ const slashCommands = [
                 } else {
                     banInfo += '\n**Duration:** Permanent';
                 }
-                embed.addFields({ name: '🚫 CURRENTLY BANNED', value: banInfo, inline: false });
+                embed.addFields({ name: 'Currently Banned', value: banInfo, inline: false });
             }
 
             // Recent warnings
             if (warnings.length > 0 && detailed) {
                 const recentWarnings = warnings.slice(0, 5).map((w, i) => {
-                    const status = w.active ? '🔴' : '⚪';
+                    const status = w.active ? '[Active]' : '[Inactive]';
                     const date = `<t:${Math.floor(new Date(w.createdAt).getTime() / 1000)}:R>`;
                     return `${status} \`#${w.caseNumber || i + 1}\` ${w.reason.substring(0, 40)}${w.reason.length > 40 ? '...' : ''} - ${date}`;
                 }).join('\n');
-                embed.addFields({ name: '📜 Recent Warnings', value: recentWarnings, inline: false });
+                embed.addFields({ name: 'Recent Warnings', value: recentWarnings, inline: false });
             }
 
             // Recent bans
             if (bans.length > 0 && detailed) {
                 const recentBans = bans.slice(0, 3).map((b, i) => {
-                    const status = b.active ? '🔴' : '⚪';
+                    const status = b.active ? '[Active]' : '[Inactive]';
                     const date = `<t:${Math.floor(new Date(b.createdAt).getTime() / 1000)}:R>`;
                     return `${status} \`#${b.caseNumber || i + 1}\` ${b.reason.substring(0, 40)}${b.reason.length > 40 ? '...' : ''} - ${date}`;
                 }).join('\n');
-                embed.addFields({ name: '🔨 Ban History', value: recentBans, inline: false });
+                embed.addFields({ name: 'Ban History', value: recentBans, inline: false });
             }
 
             // Staff notes (only visible to admins or if detailed)
             if (notes.length > 0 && (isAdmin(interaction.member) || detailed)) {
                 const recentNotes = notes.slice(0, 3).map(n => {
                     const date = `<t:${Math.floor(new Date(n.createdAt).getTime() / 1000)}:R>`;
-                    return `• ${n.content.substring(0, 60)}${n.content.length > 60 ? '...' : ''}\n  _by ${n.staffName} ${date}_`;
+                    return `- ${n.content.substring(0, 60)}${n.content.length > 60 ? '...' : ''}\n  _by ${n.staffName} ${date}_`;
                 }).join('\n');
-                embed.addFields({ name: '📝 Staff Notes', value: recentNotes, inline: false });
+                embed.addFields({ name: 'Staff Notes', value: recentNotes, inline: false });
             }
 
             // Risk assessment
             let riskLevel = 'Low';
-            let riskColor = '🟢';
+            let riskColor = '[Low]';
             const totalInfractions = warnings.length + (bans.length * 3);
             
             if (activeBan) {
                 riskLevel = 'Banned';
-                riskColor = '🔴';
+                riskColor = '[Banned]';
             } else if (totalInfractions >= 10 || activeWarnings >= 3) {
                 riskLevel = 'High';
-                riskColor = '🟠';
+                riskColor = '[High]';
             } else if (totalInfractions >= 5 || activeWarnings >= 1) {
                 riskLevel = 'Medium';
-                riskColor = '🟡';
+                riskColor = '[Medium]';
             }
 
-            embed.addFields({ name: '⚖️ Risk Level', value: `${riskColor} ${riskLevel}`, inline: true });
+            embed.addFields({ name: 'Risk Level', value: `${riskColor}`, inline: true });
 
             // Set thumbnail if we have MC profile
             if (uuid) {
@@ -268,13 +268,11 @@ const slashCommands = [
                 new ButtonBuilder()
                     .setCustomId(`pl_refresh_${playerName}`)
                     .setLabel('Refresh')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('🔄'),
+                    .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`pl_addnote_${playerName}`)
                     .setLabel('Add Note')
                     .setStyle(ButtonStyle.Primary)
-                    .setEmoji('📝')
             );
 
             if (!activeBan) {
@@ -283,7 +281,6 @@ const slashCommands = [
                         .setCustomId(`pl_warn_${playerName}`)
                         .setLabel('Warn')
                         .setStyle(ButtonStyle.Danger)
-                        .setEmoji('⚠️')
                 );
             }
 
@@ -302,7 +299,7 @@ const commands = {
         description: 'Show linked Minecraft accounts for a Discord user or Minecraft name',
         usage: '!linked <@user|discordId|minecraft>',
         async execute(message, args, client) {
-            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: '❌ Permission denied.', allowedMentions: { repliedUser: false } });
+            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: 'Permission denied.', allowedMentions: { repliedUser: false } });
             if (!args[0]) return message.reply({ content: 'Usage: !linked <@user|discordId|minecraft>', allowedMentions: { repliedUser: false } });
 
             const target = args[0];
@@ -324,8 +321,8 @@ const commands = {
             if (!results || results.length === 0) return message.reply({ content: 'No linked accounts found.', allowedMentions: { repliedUser: false } });
 
             const lines = results.map(r => {
-                const icon = r.platform === 'bedrock' ? '🟦' : '🟩';
-                const primary = r.primary ? ' ⭐' : '';
+                const icon = r.platform === 'bedrock' ? '[Bedrock]' : '[Java]';
+                const primary = r.primary ? ' [Primary]' : '';
                 return `${icon} **${r.minecraftUsername}**${primary} (\`${r.uuid}\`) — <@${r.discordId}> — linked <t:${Math.floor(new Date(r.linkedAt).getTime()/1000)}:R>`;
             });
             const chunk = [];
@@ -344,7 +341,7 @@ const commands = {
         description: 'Manually link a Minecraft account to a Discord user (staff-only)',
         usage: '!link <@user|discordId> <java|bedrock> <minecraftUsername>',
         async execute(message, args, client) {
-            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: '❌ Permission denied.', allowedMentions: { repliedUser: false } });
+            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: 'Permission denied.', allowedMentions: { repliedUser: false } });
             if (!args[0] || !args[1] || !args[2]) return message.reply({ content: 'Usage: !link <@user|discordId> <java|bedrock> <minecraftUsername>', allowedMentions: { repliedUser: false } });
 
             // Resolve discord id
@@ -354,7 +351,7 @@ const commands = {
             const mcName = args.slice(2).join(' '); // Allow spaces for bedrock names
 
             if (platform !== 'java' && platform !== 'bedrock') {
-                return message.reply({ content: '❌ Platform must be `java` or `bedrock`.', allowedMentions: { repliedUser: false } });
+                return message.reply({ content: 'Platform must be `java` or `bedrock`.', allowedMentions: { repliedUser: false } });
             }
 
             // Resolve mc uuid/fuuid
@@ -382,8 +379,8 @@ const commands = {
                 primary: count === 0
             }).save();
             
-            const icon = platform === 'bedrock' ? '🟦' : '🟩';
-            await message.channel.send({ content: `✅ Linked ${icon} **${mcName}** (${platform}) to <@${discordId}>.`, allowedMentions: { repliedUser: false } });
+            const icon = platform === 'bedrock' ? '[Bedrock]' : '[Java]';
+            await message.channel.send({ content: `Linked ${icon} **${mcName}** (${platform}) to <@${discordId}>.`, allowedMentions: { repliedUser: false } });
             try { await message.delete(); } catch (e) { /* ignore */ }
         }
     },
@@ -394,7 +391,7 @@ const commands = {
         description: 'Remove a linked Minecraft account from a Discord user (staff-only)',
         usage: '!unlink <@user|discordId> <minecraftUsername|uuid>',
         async execute(message, args, client) {
-            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: '❌ Permission denied.', allowedMentions: { repliedUser: false } });
+            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: 'Permission denied.', allowedMentions: { repliedUser: false } });
             if (!args[0] || !args[1]) return message.reply({ content: 'Usage: !unlink <@user|discordId> <minecraftUsername|uuid>', allowedMentions: { repliedUser: false } });
 
             const mentionMatch = args[0].match(/<@!?(\d+)>/);
@@ -405,7 +402,7 @@ const commands = {
             const res = await LinkedAccount.findOneAndDelete({ discordId: String(discordId), $or: [ { minecraftUsername: { $regex: new RegExp(`^${target}$`, 'i') } }, { uuid: target } ] });
             if (!res) return message.reply({ content: 'No matching linked account found.', allowedMentions: { repliedUser: false } });
 
-            await message.channel.send({ content: `✅ Removed link for **${res.minecraftUsername}** (uuid: ${res.uuid}) from <@${discordId}>.`, allowedMentions: { repliedUser: false } });
+            await message.channel.send({ content: `Removed link for **${res.minecraftUsername}** (uuid: ${res.uuid}) from <@${discordId}>.`, allowedMentions: { repliedUser: false } });
             try { await message.delete(); } catch (e) { /* ignore */ }
         }
     }
@@ -489,7 +486,7 @@ async function handleLookupNoteModal(interaction) {
     await note.save();
 
     return interaction.reply({
-        content: `✅ Note added for **${playerName}**.`,
+        content: `Note added for **${playerName}**.`,
         ephemeral: true
     });
 }

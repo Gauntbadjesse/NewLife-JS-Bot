@@ -72,7 +72,7 @@ const slashCommands = [
         
         async execute(interaction, client) {
             if (!isAdmin(interaction.member) && !isSupervisor(interaction.member)) {
-                return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                return interaction.reply({ content: 'Permission denied.', ephemeral: true });
             }
 
             const embed = new EmbedBuilder()
@@ -80,8 +80,8 @@ const slashCommands = [
                 .setDescription(
                     '**Want to join NewLife SMP?**\n\n' +
                     'Before applying, you must:\n' +
-                    '1️⃣ Link your Minecraft account(s) to your Discord\n' +
-                    '2️⃣ Complete the application form\n\n' +
+                    '1. Link your Minecraft account(s) to your Discord\n' +
+                    '2. Complete the application form\n\n' +
                     '*You can link multiple accounts (Java & Bedrock supported)*\n\n' +
                     '**Click the button below to start!**'
                 )
@@ -94,11 +94,10 @@ const slashCommands = [
                     .setCustomId('app_start')
                     .setLabel('Apply for Whitelist')
                     .setStyle(ButtonStyle.Primary)
-                    .setEmoji('📝')
             );
 
             await interaction.channel.send({ embeds: [embed], components: [row] });
-            return interaction.reply({ content: '✅ Application panel posted.', ephemeral: true });
+            return interaction.reply({ content: 'Application panel posted.', ephemeral: true });
         }
     },
     {
@@ -127,7 +126,7 @@ const slashCommands = [
             // Validate bedrock username format hint
             if (platform === 'bedrock' && !username.startsWith('.') && username.includes(' ')) {
                 return interaction.editReply({ 
-                    content: '⚠️ Bedrock usernames with spaces should start with a `.` (e.g., `.Player Name`). Please try again with the correct format.' 
+                    content: 'Bedrock usernames with spaces should start with a `.` (e.g., `.Player Name`). Please try again with the correct format.' 
                 });
             }
 
@@ -142,7 +141,7 @@ const slashCommands = [
                 
                 if (existing) {
                     return interaction.editReply({ 
-                        content: `⚠️ **${profile.username}** is already linked to your account.` 
+                        content: `**${profile.username}** is already linked to your account.` 
                     });
                 }
 
@@ -150,7 +149,7 @@ const slashCommands = [
                 const otherLink = await LinkedAccount.findOne({ uuid: profile.uuid });
                 if (otherLink && otherLink.discordId !== interaction.user.id) {
                     return interaction.editReply({ 
-                        content: '❌ This Minecraft account is already linked to another Discord user. Contact staff if this is an error.' 
+                        content: 'This Minecraft account is already linked to another Discord user. Contact staff if this is an error.' 
                     });
                 }
 
@@ -170,7 +169,7 @@ const slashCommands = [
                 }).save();
 
                 const embed = new EmbedBuilder()
-                    .setTitle('✅ Account Linked')
+                    .setTitle('Account Linked')
                     .setDescription(
                         `Successfully linked **${profile.username}** (${platform.charAt(0).toUpperCase() + platform.slice(1)}) to your Discord.\n\n` +
                         `**UUID:** \`${profile.uuid}\`\n` +
@@ -185,7 +184,7 @@ const slashCommands = [
             } catch (e) {
                 console.error('Link account error:', e);
                 return interaction.editReply({ 
-                    content: `❌ Failed to link account: ${e.message}\n\nMake sure you entered your username correctly.` 
+                    content: `Failed to link account: ${e.message}\n\nMake sure you entered your username correctly.` 
                 });
             }
         }
@@ -207,8 +206,8 @@ const slashCommands = [
             }
 
             const lines = accounts.map((acc, i) => {
-                const platform = acc.platform === 'bedrock' ? '🟦 Bedrock' : '🟩 Java';
-                const primary = acc.primary ? ' ⭐' : '';
+                const platform = acc.platform === 'bedrock' ? '[Bedrock]' : '[Java]';
+                const primary = acc.primary ? ' [Primary]' : '';
                 return `${i + 1}. **${acc.minecraftUsername}**${primary}\n   ${platform} • \`${acc.uuid}\``;
             });
 
@@ -216,7 +215,7 @@ const slashCommands = [
                 .setTitle('Your Linked Accounts')
                 .setDescription(lines.join('\n\n'))
                 .setColor(getEmbedColor())
-                .setFooter({ text: `${accounts.length} account(s) linked • ⭐ = Primary` })
+                .setFooter({ text: `${accounts.length} account(s) linked` })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -243,12 +242,12 @@ const slashCommands = [
 
             if (!deleted) {
                 return interaction.editReply({ 
-                    content: `❌ No linked account found with username **${username}**.` 
+                    content: `No linked account found with username **${username}**.` 
                 });
             }
 
             return interaction.editReply({ 
-                content: `✅ Unlinked **${deleted.minecraftUsername}** from your Discord.` 
+                content: `Unlinked **${deleted.minecraftUsername}** from your Discord.` 
             });
         }
     }
@@ -268,7 +267,7 @@ async function handleButton(interaction) {
 
         if (!linkedAccounts || linkedAccounts.length === 0) {
             const embed = new EmbedBuilder()
-                .setTitle('⚠️ Link Your Account First')
+                .setTitle('Link Your Account First')
                 .setDescription(
                     'Before you can apply for whitelist, you need to link at least one Minecraft account.\n\n' +
                     '**How to link:**\n' +
@@ -291,7 +290,7 @@ async function handleButton(interaction) {
 
         if (existingApp) {
             return interaction.reply({
-                content: '⚠️ You already have a pending application. Please wait for it to be reviewed.',
+                content: 'You already have a pending application. Please wait for it to be reviewed.',
                 ephemeral: true
             });
         }
@@ -348,7 +347,7 @@ async function handleButton(interaction) {
     // Application review buttons (staff only)
     if (customId.startsWith('app_approve_') || customId.startsWith('app_deny_')) {
         if (!isAdmin(interaction.member) && !isSupervisor(interaction.member)) {
-            return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+            return interaction.reply({ content: 'Permission denied.', ephemeral: true });
         }
 
         const appId = customId.split('_')[2];
@@ -356,11 +355,11 @@ async function handleButton(interaction) {
 
         const app = await WhitelistApplication.findById(appId);
         if (!app) {
-            return interaction.reply({ content: '❌ Application not found.', ephemeral: true });
+            return interaction.reply({ content: 'Application not found.', ephemeral: true });
         }
 
         if (app.status !== 'pending') {
-            return interaction.reply({ content: '⚠️ This application has already been processed.', ephemeral: true });
+            return interaction.reply({ content: 'This application has already been processed.', ephemeral: true });
         }
 
         app.status = action;
@@ -380,7 +379,7 @@ async function handleButton(interaction) {
             const member = await interaction.guild.members.fetch(app.discordId).catch(() => null);
             if (member) {
                 const dmEmbed = new EmbedBuilder()
-                    .setTitle(action === 'approved' ? '✅ Application Approved!' : '❌ Application Denied')
+                    .setTitle(action === 'approved' ? 'Application Approved' : 'Application Denied')
                     .setDescription(
                         action === 'approved'
                             ? 'Congratulations! Your whitelist application has been approved.\n\nYou should be whitelisted shortly. Check <#general> for server IP and instructions!'
@@ -412,7 +411,7 @@ async function handleModal(interaction) {
         const playstyle = interaction.fields.getTextInputValue('playstyle') || null;
 
         if (isNaN(age) || age < 1 || age > 120) {
-            return interaction.editReply({ content: '❌ Please enter a valid age.' });
+            return interaction.editReply({ content: 'Please enter a valid age.' });
         }
 
         // Get linked accounts
@@ -439,18 +438,18 @@ async function handleModal(interaction) {
 
         // Build the application embed for staff
         const accountsText = linkedAccounts.map(a => {
-            const icon = a.platform === 'bedrock' ? '🟦' : '🟩';
-            return `${icon} ${a.minecraftUsername} (\`${a.uuid}\`)`;
+            const platform = a.platform === 'bedrock' ? '[Bedrock]' : '[Java]';
+            return `${platform} ${a.minecraftUsername} (\`${a.uuid}\`)`;
         }).join('\n');
 
         const appEmbed = new EmbedBuilder()
-            .setTitle('📝 New Whitelist Application')
+            .setTitle('New Whitelist Application')
             .setDescription(`**Applicant:** ${interaction.user.tag} (<@${interaction.user.id}>)`)
             .addFields(
-                { name: '🎮 Linked Accounts', value: accountsText || 'None', inline: false },
-                { name: '📅 Age', value: String(age), inline: true },
-                { name: '🔍 Found Us Via', value: whereFound, inline: true },
-                { name: '💬 Why Join', value: whyJoin.substring(0, 1024), inline: false }
+                { name: 'Linked Accounts', value: accountsText || 'None', inline: false },
+                { name: 'Age', value: String(age), inline: true },
+                { name: 'Found Us Via', value: whereFound, inline: true },
+                { name: 'Why Join', value: whyJoin.substring(0, 1024), inline: false }
             )
             .setColor(getEmbedColor())
             .setThumbnail(interaction.user.displayAvatarURL({ size: 128 }))
@@ -458,20 +457,18 @@ async function handleModal(interaction) {
             .setTimestamp();
 
         if (playstyle) {
-            appEmbed.addFields({ name: '🎯 Playstyle', value: playstyle.substring(0, 1024), inline: false });
+            appEmbed.addFields({ name: 'Playstyle', value: playstyle.substring(0, 1024), inline: false });
         }
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`app_approve_${app._id}`)
                 .setLabel('Approve')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('✅'),
+                .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId(`app_deny_${app._id}`)
                 .setLabel('Deny')
                 .setStyle(ButtonStyle.Danger)
-                .setEmoji('❌')
         );
 
         // Send to application log channel
@@ -484,7 +481,7 @@ async function handleModal(interaction) {
 
         // Success response to user
         const successEmbed = new EmbedBuilder()
-            .setTitle('✅ Application Submitted')
+            .setTitle('Application Submitted')
             .setDescription(
                 'Your whitelist application has been submitted!\n\n' +
                 'Our staff will review it as soon as possible. You will receive a DM when a decision is made.\n\n' +
@@ -497,7 +494,7 @@ async function handleModal(interaction) {
         return interaction.editReply({ embeds: [successEmbed] });
     } catch (e) {
         console.error('Application modal error:', e);
-        return interaction.editReply({ content: '❌ An error occurred while submitting your application.' });
+        return interaction.editReply({ content: 'An error occurred while submitting your application.' });
     }
 }
 
