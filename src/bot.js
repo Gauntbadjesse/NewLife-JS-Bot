@@ -119,8 +119,8 @@ client.once('ready', async () => {
         const guild = await client.guilds.fetch(guildId).catch(() => null);
         if (guild) {
             const ch = await guild.channels.fetch(memberCounterChannel).catch(() => null);
-            if (ch && typeof ch.setTopic === 'function') {
-                await ch.setTopic(`Members: ${guild.memberCount}`).catch(() => {});
+            if (ch && typeof ch.setName === 'function') {
+                await ch.setName(`Members: ${guild.memberCount}`).catch(() => {});
                 console.log(` Member counter refreshed: ${guild.memberCount} members`);
             }
         }
@@ -266,8 +266,8 @@ client.on('guildMemberAdd', async (member) => {
         // Update member counter channel
         try {
             const ch = await member.guild.channels.fetch(memberCounterChannel).catch(() => null);
-            if (ch && typeof ch.setTopic === 'function') {
-                await ch.setTopic(`Members: ${member.guild.memberCount}`).catch(() => {});
+            if (ch && typeof ch.setName === 'function') {
+                await ch.setName(`Members: ${member.guild.memberCount}`).catch(() => {});
             }
         } catch (e) {
             await logError('guildMemberAdd: counter', e, { member: member.user.tag });

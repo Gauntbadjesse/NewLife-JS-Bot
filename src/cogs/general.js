@@ -558,10 +558,10 @@ const commands = {
         }
     },
 
-    // !memberupdate - Update the member counter channel topic (Admin only)
+    // !memberupdate - Update the member counter channel name (Admin only)
     memberupdate: {
         name: 'memberupdate',
-        description: 'Update the member counter channel topic (Admin only)',
+        description: 'Update the member counter channel name (Admin only)',
         usage: '!memberupdate',
         async execute(message, args, client) {
             if (!isAdmin(message.member)) {
@@ -576,12 +576,12 @@ const commands = {
                     return message.reply({ content: `Could not find counter channel: ${memberCounterChannel}`, allowedMentions: { repliedUser: false } });
                 }
                 
-                if (typeof ch.setTopic !== 'function') {
-                    return message.reply({ content: 'Counter channel does not support topics.', allowedMentions: { repliedUser: false } });
+                if (typeof ch.setName !== 'function') {
+                    return message.reply({ content: 'Counter channel does not support renaming.', allowedMentions: { repliedUser: false } });
                 }
                 
                 const memberCount = message.guild.memberCount;
-                await ch.setTopic(`Members: ${memberCount}`);
+                await ch.setName(`Members: ${memberCount}`);
                 
                 return message.reply({ content: `Member counter updated! **Members: ${memberCount}**`, allowedMentions: { repliedUser: false } });
             } catch (error) {
@@ -644,82 +644,56 @@ const commands = {
         description: 'Show online members or members in a specific role',
         usage: '!m [role name]',
         async execute(message, args, client) {
-            // Role name mappings (case insensitive)
-            const ROLE_MAPPINGS = {
-                'owner': process.env.OWNER_ROLE_ID,
-                'management': process.env.MANAGEMENT_ROLE_ID,
-                'supervisor': process.env.SUPERVISOR_ROLE_ID,
-                'admin': process.env.ADMIN_ROLE_ID,
-                'sr mod': process.env.SR_MOD_ROLE_ID,
-                'senior mod': process.env.SR_MOD_ROLE_ID,
-                'moderator': process.env.MODERATOR_ROLE_ID,
-                'mod': process.env.MODERATOR_ROLE_ID,
-                'staff': process.env.STAFF_TEAM,
-                'whitelist guru': '1456563910919454786',
-                'whitelistguru': '1456563910919454786',
-                'guru': '1456563910919454786',
-                'whitelisted': '1374421917284565046',
-                'member': '1374421919373328434'
-            };
-
             try {
                 // Fetch all members to ensure presence data
                 await message.guild.members.fetch({ withPresences: true });
 
                 if (args.length === 0) {
-                    // Show online members
+                    // Show online count and total server members
+                    const totalMembers = message.guild.members.cache.filter(m => !m.user.bot).size;
                     const onlineMembers = message.guild.members.cache.filter(m => 
                         !m.user.bot && m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status)
                     );
 
-                    const online = onlineMembers.filter(m => m.presence?.status === 'online').size;
-                    const idle = onlineMembers.filter(m => m.presence?.status === 'idle').size;
-                    const dnd = onlineMembers.filter(m => m.presence?.status === 'dnd').size;
-                    const offline = message.guild.members.cache.filter(m => !m.user.bot).size - onlineMembers.size;
-
                     const embed = new EmbedBuilder()
                         .setColor(getEmbedColor())
-                        .setTitle('Member Status')
+                        .setTitle('Server Members')
                         .setDescription(`**${message.guild.name}**`)
                         .addFields(
-                            { name: 'Online', value: `${online}`, inline: true },
-                            { name: 'Idle', value: `${idle}`, inline: true },
-                            { name: 'Do Not Disturb', value: `${dnd}`, inline: true },
-                            { name: 'Offline', value: `${offline}`, inline: true },
-                            { name: 'Total Members', value: `${message.guild.memberCount}`, inline: true }
+                            { name: 'Online', value: `${onlineMembers.size}`, inline: true },
+                            { name: 'Total', value: `${totalMembers}`, inline: true }
                         )
                         .setFooter({ text: 'NewLife SMP' })
                         .setTimestamp();
 
                     return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
                 } else {
-                    // Show members in a role
-                    const roleName = args.join(' ').toLowerCase();
-                    let roleId = ROLE_MAPPINGS[roleName];
+                    // Show members in a role - fuzzy match
+                    const input = args.join(' ').toLowerCase();
+                    
+                    // Get all roles and calculate similarity
+                    const roles = message.guild.roles.cache
+                        .filter(r => r.id !== message.guild.id) // Exclude @everyone
+                        .map(r => ({
+                            role: r,
+                            name: r.name.toLowerCase(),
+                            score: calculateSimilarity(input, r.name.toLowerCase())
+                        }))
+                        .sort((a, b) => b.score - a.score);
 
-                    // If not in mappings, try to find by name
-                    if (!roleId) {
-                        const foundRole = message.guild.roles.cache.find(r => 
-                            r.name.toLowerCase() === roleName || 
-                            r.name.toLowerCase().includes(roleName)
-                        );
-                        if (foundRole) roleId = foundRole.id;
-                    }
-
-                    if (!roleId) {
+                    // Get the best match (must have some similarity)
+                    const bestMatch = roles[0];
+                    if (!bestMatch || bestMatch.score < 0.2) {
                         return message.reply({ 
-                            content: `Role not found: **${args.join(' ')}**\n\nAvailable shortcuts: owner, management, supervisor, admin, sr mod, moderator, staff, whitelist guru, whitelisted, member`, 
+                            content: `No matching role found for: **${args.join(' ')}**`, 
                             allowedMentions: { repliedUser: false } 
                         });
                     }
 
-                    const role = message.guild.roles.cache.get(roleId);
-                    if (!role) {
-                        return message.reply({ content: 'Role not found in server.', allowedMentions: { repliedUser: false } });
-                    }
+                    const role = bestMatch.role;
 
                     const membersWithRole = message.guild.members.cache.filter(m => 
-                        !m.user.bot && m.roles.cache.has(roleId)
+                        !m.user.bot && m.roles.cache.has(role.id)
                     );
 
                     const online = membersWithRole.filter(m => m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status));
@@ -764,6 +738,46 @@ const commands = {
         }
     },
 };
+
+/**
+ * Calculate similarity between two strings (0-1)
+ * Uses a combination of includes check and Levenshtein-like scoring
+ */
+function calculateSimilarity(input, target) {
+    // Exact match
+    if (input === target) return 1;
+    
+    // Target starts with input
+    if (target.startsWith(input)) return 0.9;
+    
+    // Target contains input
+    if (target.includes(input)) return 0.7;
+    
+    // Input contains target
+    if (input.includes(target)) return 0.6;
+    
+    // Calculate character overlap
+    const inputChars = new Set(input.split(''));
+    const targetChars = new Set(target.split(''));
+    let overlap = 0;
+    for (const char of inputChars) {
+        if (targetChars.has(char)) overlap++;
+    }
+    const overlapScore = overlap / Math.max(inputChars.size, targetChars.size);
+    
+    // Check for word matches
+    const inputWords = input.split(/\s+/);
+    const targetWords = target.split(/\s+/);
+    let wordMatches = 0;
+    for (const word of inputWords) {
+        if (targetWords.some(tw => tw.includes(word) || word.includes(tw))) {
+            wordMatches++;
+        }
+    }
+    const wordScore = inputWords.length > 0 ? wordMatches / inputWords.length : 0;
+    
+    return Math.max(overlapScore * 0.4, wordScore * 0.5);
+}
 
 /**
  * Format uptime to human readable string
