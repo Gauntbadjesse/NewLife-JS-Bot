@@ -17,25 +17,25 @@ const INFRACTION_TYPES = {
     termination: {
         label: 'TERMINATION',
         color: 0x8B0000, // Dark red
-        emoji: '🔴',
+        emoji: ' ',
         description: 'Employment/Position Terminated'
     },
     warning: {
         label: 'WARNING',
         color: 0xFF4500, // Orange red
-        emoji: '🟠',
+        emoji: ' ',
         description: 'Formal Warning Issued'
     },
     notice: {
         label: 'NOTICE',
         color: 0xFFD700, // Gold
-        emoji: '🟡',
+        emoji: ' ',
         description: 'Notice Issued'
     },
     strike: {
         label: 'STRIKE',
         color: 0xDC143C, // Crimson
-        emoji: '⚠️',
+        emoji: ' ',
         description: 'Strike Issued'
     }
 };
@@ -52,22 +52,22 @@ function buildInfractionEmbed(infraction, targetUser, issuerNickname) {
         .setDescription(`**${typeConfig.description}**`)
         .addFields(
             { 
-                name: '👤 Staff Member', 
+                name: ' Staff Member', 
                 value: `<@${infraction.targetId}>\n\`${infraction.targetTag}\``, 
                 inline: true 
             },
             { 
-                name: '📋 Type', 
+                name: ' Type', 
                 value: `**${typeConfig.label}**`, 
                 inline: true 
             },
             { 
-                name: '🔢 Case', 
+                name: ' Case', 
                 value: `\`#${infraction.caseNumber}\``, 
                 inline: true 
             },
             { 
-                name: '📝 Reason', 
+                name: ' Reason', 
                 value: infraction.reason, 
                 inline: false 
             }
@@ -102,10 +102,10 @@ const slashCommands = [
                 .setDescription('Type of infraction')
                 .setRequired(true)
                 .addChoices(
-                    { name: '🔴 Termination', value: 'termination' },
-                    { name: '🟠 Warning', value: 'warning' },
-                    { name: '🟡 Notice', value: 'notice' },
-                    { name: '⚠️ Strike', value: 'strike' }
+                    { name: ' Termination', value: 'termination' },
+                    { name: ' Warning', value: 'warning' },
+                    { name: ' Notice', value: 'notice' },
+                    { name: ' Strike', value: 'strike' }
                 ))
             .addStringOption(opt => opt
                 .setName('reason')
@@ -172,9 +172,9 @@ const slashCommands = [
                         `Please review the details below.`
                     )
                     .addFields(
-                        { name: '📋 Type', value: `**${INFRACTION_TYPES[type].label}**`, inline: true },
-                        { name: '🔢 Case', value: `\`#${caseNumber}\``, inline: true },
-                        { name: '📝 Reason', value: reason, inline: false }
+                        { name: ' Type', value: `**${INFRACTION_TYPES[type].label}**`, inline: true },
+                        { name: ' Case', value: `\`#${caseNumber}\``, inline: true },
+                        { name: ' Reason', value: reason, inline: false }
                     )
                     .setFooter({ text: `Issued by ${issuerNickname}` })
                     .setTimestamp();
@@ -209,10 +209,10 @@ const slashCommands = [
                 .setDescription('Filter by infraction type')
                 .setRequired(false)
                 .addChoices(
-                    { name: '🔴 Terminations', value: 'termination' },
-                    { name: '🟠 Warnings', value: 'warning' },
-                    { name: '🟡 Notices', value: 'notice' },
-                    { name: '⚠️ Strikes', value: 'strike' }
+                    { name: ' Terminations', value: 'termination' },
+                    { name: ' Warnings', value: 'warning' },
+                    { name: ' Notices', value: 'notice' },
+                    { name: ' Strikes', value: 'strike' }
                 )),
         
         async execute(interaction, client) {
@@ -247,7 +247,7 @@ const slashCommands = [
                 
                 // Build embed
                 const embed = new EmbedBuilder()
-                    .setTitle('📋 Staff Infractions')
+                    .setTitle(' Staff Infractions')
                     .setColor(0x2F3136)
                     .setTimestamp();
                 
