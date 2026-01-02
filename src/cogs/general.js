@@ -14,6 +14,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const Warning = require('../database/models/Warning');
 const Ban = require('../database/models/Ban');
+const Infraction = require('../database/models/Infraction');
 const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
@@ -217,6 +218,36 @@ const commands = {
                     });
                 }
 
+                // Try to find as infraction (by _id or numeric caseNumber)
+                let infraction = await Infraction.findById(caseId);
+                if (!infraction && !isNaN(Number(caseId))) infraction = await Infraction.findOne({ caseNumber: Number(caseId) });
+                if (infraction) {
+                    const INFRACTION_TYPES = {
+                        termination: { label: 'TERMINATION', color: 0x8B0000, emoji: '🔴' },
+                        warning: { label: 'WARNING', color: 0xFF4500, emoji: '🟠' },
+                        notice: { label: 'NOTICE', color: 0xFFD700, emoji: '🟡' },
+                        strike: { label: 'STRIKE', color: 0xDC143C, emoji: '⚠️' }
+                    };
+                    const typeConfig = INFRACTION_TYPES[infraction.type];
+                    const embed = new EmbedBuilder()
+                        .setTitle(`${typeConfig.emoji} Staff ${typeConfig.label} • Case #${infraction.caseNumber}`)
+                        .setColor(typeConfig.color)
+                        .addFields(
+                            { name: '👤 Staff Member', value: `<@${infraction.targetId}>\n\`${infraction.targetTag}\``, inline: true },
+                            { name: '📋 Type', value: `**${typeConfig.label}**`, inline: true },
+                            { name: '📅 Date', value: `<t:${Math.floor(new Date(infraction.createdAt).getTime() / 1000)}:F>`, inline: true },
+                            { name: '📝 Reason', value: infraction.reason, inline: false },
+                            { name: '👮 Issued By', value: infraction.issuerNickname || infraction.issuerTag, inline: true },
+                            { name: '📊 Status', value: infraction.active ? '🔴 Active' : '⚪ Revoked', inline: true }
+                        )
+                        .setFooter({ text: `Case #${infraction.caseNumber}` })
+                        .setTimestamp(infraction.createdAt);
+                    return message.reply({
+                        embeds: [embed],
+                        allowedMentions: { repliedUser: false }
+                    });
+                }
+
                 return message.reply({
                     embeds: [createErrorEmbed('Not Found', `No case found with ID: \`${caseId}\``)],
                     allowedMentions: { repliedUser: false }
@@ -250,10 +281,13 @@ const commands = {
                 const activeWarnings = await Warning.countDocuments({ active: true });
                 const totalBans = await Ban.countDocuments();
                 const activeBans = await Ban.countDocuments({ active: true });
+                const totalInfractions = await Infraction.countDocuments();
+                const activeInfractions = await Infraction.countDocuments({ active: true });
 
                 // Get unique players
                 const uniqueWarnedPlayers = await Warning.distinct('uuid');
                 const uniqueBannedPlayers = await Ban.distinct('uuid');
+                const uniqueInfractedStaff = await Infraction.distinct('targetId');
 
                 const embed = new EmbedBuilder()
                     .setColor(getEmbedColor())
@@ -267,6 +301,11 @@ const commands = {
                         {
                             name: '🔨 Bans',
                             value: `**Total:** ${totalBans}\n**Active:** ${activeBans}\n**Unique Players:** ${uniqueBannedPlayers.length}`,
+                            inline: true
+                        },
+                        {
+                            name: '📋 Staff Infractions',
+                            value: `**Total:** ${totalInfractions}\n**Active:** ${activeInfractions}\n**Unique Staff:** ${uniqueInfractedStaff.length}`,
                             inline: true
                         },
                         {
@@ -534,6 +573,15 @@ const slashCommands = [
                             `\`/tclose <time> <reason>\` - Timed ticket close`
                         ].join('\n'),
                         inline: false
+                    },
+                    {
+                        name: 'Staff Infraction Commands (Management+)',
+                        value: [
+                            `\`/infract <user> <type> <reason>\` - Issue a staff infraction`,
+                            `\`/infractions [user] [type]\` - View staff infractions`,
+                            `\`/revokeinfraction <case>\` - Revoke an infraction`
+                        ].join('\n'),
+                        inline: false
                     }
                 )
                 .setFooter({ text: 'NewLife Management | NewLife SMP' })
@@ -635,6 +683,33 @@ const slashCommands = [
                     });
                 }
 
+                // Try to find as infraction (by _id or numeric caseNumber)
+                let infraction = await Infraction.findById(caseId);
+                if (!infraction && !isNaN(Number(caseId))) infraction = await Infraction.findOne({ caseNumber: Number(caseId) });
+                if (infraction) {
+                    const INFRACTION_TYPES = {
+                        termination: { label: 'TERMINATION', color: 0x8B0000, emoji: '🔴' },
+                        warning: { label: 'WARNING', color: 0xFF4500, emoji: '🟠' },
+                        notice: { label: 'NOTICE', color: 0xFFD700, emoji: '🟡' },
+                        strike: { label: 'STRIKE', color: 0xDC143C, emoji: '⚠️' }
+                    };
+                    const typeConfig = INFRACTION_TYPES[infraction.type];
+                    const embed = new EmbedBuilder()
+                        .setTitle(`${typeConfig.emoji} Staff ${typeConfig.label} • Case #${infraction.caseNumber}`)
+                        .setColor(typeConfig.color)
+                        .addFields(
+                            { name: '👤 Staff Member', value: `<@${infraction.targetId}>\n\`${infraction.targetTag}\``, inline: true },
+                            { name: '📋 Type', value: `**${typeConfig.label}**`, inline: true },
+                            { name: '📅 Date', value: `<t:${Math.floor(new Date(infraction.createdAt).getTime() / 1000)}:F>`, inline: true },
+                            { name: '📝 Reason', value: infraction.reason, inline: false },
+                            { name: '👮 Issued By', value: infraction.issuerNickname || infraction.issuerTag, inline: true },
+                            { name: '📊 Status', value: infraction.active ? '🔴 Active' : '⚪ Revoked', inline: true }
+                        )
+                        .setFooter({ text: `Case #${infraction.caseNumber}` })
+                        .setTimestamp(infraction.createdAt);
+                    return interaction.editReply({ embeds: [embed] });
+                }
+
                 return interaction.editReply({
                     embeds: [createErrorEmbed('Not Found', `No case found with ID: \`${caseId}\``)]
                 });
@@ -666,26 +741,34 @@ const slashCommands = [
                 const activeWarnings = await Warning.countDocuments({ active: true });
                 const totalBans = await Ban.countDocuments();
                 const activeBans = await Ban.countDocuments({ active: true });
+                const totalInfractions = await Infraction.countDocuments();
+                const activeInfractions = await Infraction.countDocuments({ active: true });
 
                 const uniqueWarnedPlayers = await Warning.distinct('uuid');
                 const uniqueBannedPlayers = await Ban.distinct('uuid');
+                const uniqueInfractedStaff = await Infraction.distinct('targetId');
 
                 const embed = new EmbedBuilder()
                     .setColor(getEmbedColor())
                     .setTitle('NewLife Management Statistics')
                     .addFields(
                         {
-                            name: 'Warnings',
+                            name: '⚠️ Warnings',
                             value: `**Total:** ${totalWarnings}\n**Active:** ${activeWarnings}\n**Unique Players:** ${uniqueWarnedPlayers.length}`,
                             inline: true
                         },
                         {
-                            name: 'Bans',
+                            name: '🔨 Bans',
                             value: `**Total:** ${totalBans}\n**Active:** ${activeBans}\n**Unique Players:** ${uniqueBannedPlayers.length}`,
                             inline: true
                         },
                         {
-                            name: 'Bot Info',
+                            name: '📋 Staff Infractions',
+                            value: `**Total:** ${totalInfractions}\n**Active:** ${activeInfractions}\n**Unique Staff:** ${uniqueInfractedStaff.length}`,
+                            inline: true
+                        },
+                        {
+                            name: '🤖 Bot Info',
                             value: `**Uptime:** ${formatUptime(client.uptime)}\n**Servers:** ${client.guilds.cache.size}\n**Ping:** ${client.ws.ping}ms`,
                             inline: true
                         }

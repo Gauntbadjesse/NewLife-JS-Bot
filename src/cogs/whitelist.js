@@ -61,10 +61,6 @@ const slashCommands = [
 						.addChoices({ name: 'java', value: 'java' }, { name: 'bedrock', value: 'bedrock' }))
 					.addStringOption(o => o.setName('mcname').setDescription('Minecraft username').setRequired(true))
 					.addUserOption(o => o.setName('discord').setDescription('Discord user to link').setRequired(true))
-				)
-				.addSubcommand(sub => sub
-					.setName('stats')
-					.setDescription('Show /whitelist add usage statistics (owner only)')
 				),
 
 		async execute(interaction, client) {
@@ -156,24 +152,6 @@ const slashCommands = [
 				} catch (err) {
 					console.error('Whitelist execute error:', err);
 					return interaction.editReply({ content: 'An unexpected error occurred.' });
-				}
-			} else if (sub === 'stats') {
-				const ownerId = process.env.OWNER_ID || process.env.OWNER_USER_ID;
-				if (!ownerId || interaction.user.id !== ownerId) return interaction.reply({ content: 'Permission denied.', ephemeral: true });
-				await interaction.deferReply({ ephemeral: true });
-				try {
-					const CommandLog = require('../models/CommandLog');
-					const stats = await CommandLog.aggregate([
-						{ $match: { command: 'whitelist', subcommand: 'add' } },
-						{ $group: { _id: '$userId', count: { $sum: 1 }, name: { $first: '$username' } } },
-						{ $sort: { count: -1 } }
-					]).limit(200);
-					if (!stats || stats.length === 0) return interaction.editReply({ content: 'No /whitelist add usages logged.' });
-					const lines = stats.map(s => `${s.name} (<@${s._id}>): ${s.count}`);
-					return interaction.editReply({ content: `**/whitelist add usage**\n${lines.join('\n')}` });
-				} catch (e) {
-					console.error('Failed to fetch whitelist stats:', e);
-					return interaction.editReply({ content: 'Failed to fetch stats.' });
 				}
 			} else {
 				return interaction.reply({ content: 'Unknown subcommand', ephemeral: true });

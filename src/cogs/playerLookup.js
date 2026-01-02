@@ -8,6 +8,7 @@ const Ban = require('../database/models/Ban');
 const Warning = require('../database/models/Warning');
 const Note = require('../database/models/Note');
 const Application = require('../database/models/Application');
+const WhitelistApplication = require('../database/models/WhitelistApplication');
 const LinkedAccount = require('../database/models/LinkedAccount');
 const { isModerator, isAdmin, isStaff, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
 const { resolvePlayer } = require('../utils/playerResolver');
@@ -57,7 +58,7 @@ async function getLinkedInfo(playerName, uuid, discordId) {
     
     if (!linked && playerName) {
         linked = await LinkedAccount.findOne({ 
-            playerName: { $regex: new RegExp(`^${playerName}$`, 'i') }
+            minecraftUsername: { $regex: new RegExp(`^${playerName}$`, 'i') }
         });
     }
     
@@ -129,7 +130,7 @@ const slashCommands = [
             
             // If we found a linked account, update our search params
             if (linked) {
-                playerName = linked.playerName || playerName;
+                playerName = linked.minecraftUsername || playerName;
                 uuid = linked.uuid || uuid;
                 discordId = linked.discordId || discordId;
                 
@@ -147,12 +148,19 @@ const slashCommands = [
             
             const banQuery = warningQuery;
 
-            const [warnings, bans, notes, application] = await Promise.all([
+            const [warnings, bans, notes, application, whitelistApp] = await Promise.all([
                 Warning.find(warningQuery).sort({ createdAt: -1 }),
                 Ban.find(banQuery).sort({ createdAt: -1 }),
                 Note.find({ playerName: playerName.toLowerCase() }).sort({ createdAt: -1 }),
-                Application.findOne({ playerName: { $regex: new RegExp(`^${playerName}$`, 'i') } }).sort({ createdAt: -1 })
+                Application.findOne({ playerName: { $regex: new RegExp(`^${playerName}$`, 'i') } }).sort({ createdAt: -1 }),
+                // Also check WhitelistApplication by discordId or linked accounts
+                discordId 
+                    ? WhitelistApplication.findOne({ discordId }).sort({ createdAt: -1 })
+                    : WhitelistApplication.findOne({ 'linkedAccounts.minecraftUsername': { $regex: new RegExp(`^${playerName}$`, 'i') } }).sort({ createdAt: -1 })
             ]);
+
+            // Use whichever application we found (prefer WhitelistApplication as it's newer)
+            const effectiveApplication = whitelistApp || application;
 
             // Build the embed
             const embed = new EmbedBuilder()
@@ -165,10 +173,10 @@ const slashCommands = [
             if (uuid) basicInfo += `**UUID:** \`${uuid}\`\n`;
             if (discordUser) basicInfo += `**Discord:** ${discordUser.tag} (<@${discordId}>)\n`;
             if (linked?.linkedAt) basicInfo += `**Linked:** <t:${Math.floor(new Date(linked.linkedAt).getTime() / 1000)}:R>\n`;
-            if (application) {
-                basicInfo += `**Application:** ${application.status} `;
-                if (application.createdAt) {
-                    basicInfo += `(<t:${Math.floor(new Date(application.createdAt).getTime() / 1000)}:R>)`;
+            if (effectiveApplication) {
+                basicInfo += `**Application:** ${effectiveApplication.status || 'submitted'} `;
+                if (effectiveApplication.createdAt) {
+                    basicInfo += `(<t:${Math.floor(new Date(effectiveApplication.createdAt).getTime() / 1000)}:R>)`;
                 }
                 basicInfo += '\n';
             }

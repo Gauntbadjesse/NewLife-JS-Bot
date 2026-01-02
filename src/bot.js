@@ -12,18 +12,11 @@ const { initWatcher } = require('./database/watcher');
 const { logCommand, sendCommandLogToChannel } = require('./utils/commandLogger');
 const emojis = require('./utils/emojis');
 
-// Start web UI when bot starts (lightweight site with Discord OAuth)
-try {
-    require('./web/server');
-    console.log(`${emojis.CHECK} Web UI: started`);
-} catch (e) {
-    console.error(`${emojis.CROSS} Web UI failed to start:`, e);
-}
-
 // Create Discord client with necessary intents
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
     ],
@@ -214,47 +207,27 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Assign unverified role to new guild members
+// Update member counter when someone joins
 client.on('guildMemberAdd', async (member) => {
     try {
-        const unverifiedRole = process.env.UNVERIFIED_ROLE || '1454700802752118906';
-        const ensureMemberRole = process.env.MEMBER_ROLE_ID || '1374421919373328434';
         const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
+        const memberRoleId = process.env.MEMBER_ROLE_ID || '1374421919373328434';
         const guildId = process.env.GUILD_ID;
+        
         if (guildId && member.guild && String(member.guild.id) !== String(guildId)) return;
         if (!member.guild) return;
 
-        // Add unverified role
-        const role = member.guild.roles.cache.get(unverifiedRole) || unverifiedRole;
-        await member.roles.add(role).catch(err => {
-            console.error('Failed to add unverified role to new member:', err);
-        });
-
-        // Ensure member role is present
-        try {
-            const memberRole = member.guild.roles.cache.get(ensureMemberRole) || ensureMemberRole;
-            if (!member.roles.cache.has(String(ensureMemberRole))) {
-                await member.roles.add(memberRole).catch(err => {
-                    console.error('Failed to add member role to new member:', err);
-                });
-            }
-        } catch (err) {
-            console.error('Failed to ensure member role on join:', err);
-        }
-
-        // Update member counter channel topic to show current member count
+        // Update member counter channel
         try {
             const ch = await member.guild.channels.fetch(memberCounterChannel).catch(() => null);
             if (ch && typeof ch.setTopic === 'function') {
-                await ch.setTopic(`Members: ${member.guild.memberCount}`).catch(err => {
-                    console.error('Failed to set member counter channel topic:', err);
-                });
+                await ch.setTopic(`Members: ${member.guild.memberCount}`).catch(() => {});
             }
-        } catch (err) {
-            console.error('Failed to update member counter channel:', err);
+        } catch (e) {
+            console.error('Failed to update member counter:', e);
         }
     } catch (e) {
-        console.error('Error in guildMemberAdd handler:', e);
+        console.error('Error in guildMemberAdd:', e);
     }
 });
 
