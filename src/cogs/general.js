@@ -557,6 +557,86 @@ const commands = {
             }
         }
     },
+
+    // !memberupdate - Update the member counter channel topic (Admin only)
+    memberupdate: {
+        name: 'memberupdate',
+        description: 'Update the member counter channel topic (Admin only)',
+        usage: '!memberupdate',
+        async execute(message, args, client) {
+            if (!isAdmin(message.member)) {
+                return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'You do not have permission to use this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
+            
+            try {
+                const ch = await message.guild.channels.fetch(memberCounterChannel).catch(() => null);
+                if (!ch) {
+                    return message.reply({ content: `Could not find counter channel: ${memberCounterChannel}`, allowedMentions: { repliedUser: false } });
+                }
+                
+                if (typeof ch.setTopic !== 'function') {
+                    return message.reply({ content: 'Counter channel does not support topics.', allowedMentions: { repliedUser: false } });
+                }
+                
+                const memberCount = message.guild.memberCount;
+                await ch.setTopic(`Members: ${memberCount}`);
+                
+                return message.reply({ content: `Member counter updated! **Members: ${memberCount}**`, allowedMentions: { repliedUser: false } });
+            } catch (error) {
+                console.error('Error updating member counter:', error);
+                return message.reply({ content: 'Failed to update member counter.', allowedMentions: { repliedUser: false } });
+            }
+        }
+    },
+
+    // !addkingdoms - Add the preset kingdoms to the database (Owner only)
+    addkingdoms: {
+        name: 'addkingdoms',
+        description: 'Add preset kingdoms to the database (Owner only)',
+        usage: '!addkingdoms',
+        async execute(message, args, client) {
+            if (!isOwner(message.member)) {
+                return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'Only the owner can run this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            const statusMsg = await message.reply({ content: 'Adding kingdoms to database...', allowedMentions: { repliedUser: false } });
+
+            try {
+                const { getKingdomModel } = require('../database/models/Kingdom');
+                const Kingdom = await getKingdomModel();
+                
+                const kingdoms = [
+                    { guild_id: '1372672239245459498', name: 'builders league', leader_role_id: '1453163359469043812', member_role_id: '1453163231886708900', created_by: '1237471534541439068', created_at: new Date('2025-12-23T23:12:57.300Z') },
+                    { guild_id: '1372672239245459498', name: 'themonarch', leader_role_id: '1453168137792131166', member_role_id: '1453167996980822086', created_by: '1237471534541439068', created_at: new Date('2025-12-24T00:04:54.742Z') },
+                    { guild_id: '1372672239245459498', name: 'reaverking', leader_role_id: '1454195529612267737', member_role_id: '1454195395641999524', created_by: '1237471534541439068', created_at: new Date('2025-12-26T19:42:12.602Z') },
+                    { guild_id: '1372672239245459498', name: 'northwatch', leader_role_id: '1454704723885031435', member_role_id: '1454704562589143051', created_by: '1237471534541439068', created_at: new Date('2025-12-28T05:18:13.655Z') },
+                    { guild_id: '1372672239245459498', name: 'los craftos hermanos', leader_role_id: '1454705253462180025', member_role_id: '1454705158326980817', created_by: '1237471534541439068', created_at: new Date('2025-12-28T05:20:26.886Z') }
+                ];
+                
+                let added = 0;
+                let updated = 0;
+                
+                for (const k of kingdoms) {
+                    const existing = await Kingdom.findOne({ guild_id: k.guild_id, name: k.name });
+                    if (existing) {
+                        await Kingdom.updateOne({ _id: existing._id }, k);
+                        updated++;
+                    } else {
+                        await new Kingdom(k).save();
+                        added++;
+                    }
+                }
+                
+                const total = await Kingdom.countDocuments({ guild_id: '1372672239245459498' });
+                await statusMsg.edit({ content: `Done! Added **${added}** kingdoms, updated **${updated}** kingdoms. Total kingdoms: **${total}**` });
+            } catch (error) {
+                console.error('Error adding kingdoms:', error);
+                await statusMsg.edit({ content: `Failed to add kingdoms: ${error.message}` }).catch(() => {});
+            }
+        }
+    },
 };
 
 /**
