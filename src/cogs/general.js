@@ -645,22 +645,23 @@ const commands = {
         usage: '!m [role name]',
         async execute(message, args, client) {
             try {
-                // Fetch all members to ensure presence data
-                await message.guild.members.fetch({ withPresences: true });
+                // Fetch all members (without presence requirement)
+                await message.guild.members.fetch().catch(() => {});
 
                 if (args.length === 0) {
                     // Show online count and total server members
-                    const totalMembers = message.guild.members.cache.filter(m => !m.user.bot).size;
-                    const onlineMembers = message.guild.members.cache.filter(m => 
-                        !m.user.bot && m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status)
-                    );
+                    const allMembers = message.guild.members.cache.filter(m => !m.user.bot);
+                    const totalMembers = allMembers.size;
+                    const onlineCount = allMembers.filter(m => 
+                        m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status)
+                    ).size;
 
                     const embed = new EmbedBuilder()
                         .setColor(getEmbedColor())
                         .setTitle('Server Members')
                         .setDescription(`**${message.guild.name}**`)
                         .addFields(
-                            { name: 'Online', value: `${onlineMembers.size}`, inline: true },
+                            { name: 'Online', value: `${onlineCount}`, inline: true },
                             { name: 'Total', value: `${totalMembers}`, inline: true }
                         )
                         .setFooter({ text: 'NewLife SMP' })
@@ -672,17 +673,20 @@ const commands = {
                     const input = args.join(' ').toLowerCase();
                     
                     // Get all roles and calculate similarity
-                    const roles = message.guild.roles.cache
-                        .filter(r => r.id !== message.guild.id) // Exclude @everyone
-                        .map(r => ({
-                            role: r,
-                            name: r.name.toLowerCase(),
-                            score: calculateSimilarity(input, r.name.toLowerCase())
-                        }))
-                        .sort((a, b) => b.score - a.score);
+                    const rolesArray = [];
+                    message.guild.roles.cache.forEach(r => {
+                        if (r.id !== message.guild.id) { // Exclude @everyone
+                            rolesArray.push({
+                                role: r,
+                                name: r.name.toLowerCase(),
+                                score: calculateSimilarity(input, r.name.toLowerCase())
+                            });
+                        }
+                    });
+                    rolesArray.sort((a, b) => b.score - a.score);
 
                     // Get the best match (must have some similarity)
-                    const bestMatch = roles[0];
+                    const bestMatch = rolesArray[0];
                     if (!bestMatch || bestMatch.score < 0.2) {
                         return message.reply({ 
                             content: `No matching role found for: **${args.join(' ')}**`, 
@@ -692,48 +696,50 @@ const commands = {
 
                     const role = bestMatch.role;
 
-                    const membersWithRole = message.guild.members.cache.filter(m => 
-                        !m.user.bot && m.roles.cache.has(role.id)
-                    );
+                    // Get members with this role
+                    const membersArray = [];
+                    message.guild.members.cache.forEach(m => {
+                        if (!m.user.bot && m.roles.cache.has(role.id)) {
+                            membersArray.push(m);
+                        }
+                    });
 
-                    const online = membersWithRole.filter(m => m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status));
-                    const offline = membersWithRole.filter(m => !m.presence || m.presence.status === 'offline');
+                    const onlineCount = membersArray.filter(m => m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status)).length;
+                    const offlineCount = membersArray.length - onlineCount;
+
+                    // Sort: online first, then by name
+                    membersArray.sort((a, b) => {
+                        const aOnline = a.presence && ['online', 'idle', 'dnd'].includes(a.presence.status);
+                        const bOnline = b.presence && ['online', 'idle', 'dnd'].includes(b.presence.status);
+                        if (aOnline && !bOnline) return -1;
+                        if (!aOnline && bOnline) return 1;
+                        return a.displayName.localeCompare(b.displayName);
+                    });
 
                     // Build member list (max 30 shown)
-                    const memberList = membersWithRole
-                        .sort((a, b) => {
-                            // Sort by online status first, then by name
-                            const aOnline = a.presence && ['online', 'idle', 'dnd'].includes(a.presence.status);
-                            const bOnline = b.presence && ['online', 'idle', 'dnd'].includes(b.presence.status);
-                            if (aOnline && !bOnline) return -1;
-                            if (!aOnline && bOnline) return 1;
-                            return a.displayName.localeCompare(b.displayName);
-                        })
-                        .first(30)
-                        .map(m => {
-                            const status = m.presence?.status;
-                            const indicator = status === 'online' ? '🟢' : status === 'idle' ? '🟡' : status === 'dnd' ? '🔴' : '⚫';
-                            return `${indicator} ${m.displayName}`;
-                        })
-                        .join('\n');
+                    const memberList = membersArray.slice(0, 30).map(m => {
+                        const status = m.presence?.status;
+                        const indicator = status === 'online' ? '🟢' : status === 'idle' ? '🟡' : status === 'dnd' ? '🔴' : '⚫';
+                        return `${indicator} ${m.displayName}`;
+                    }).join('\n');
 
                     const embed = new EmbedBuilder()
                         .setColor(role.color || getEmbedColor())
                         .setTitle(`Members with ${role.name}`)
                         .setDescription(memberList || 'No members')
                         .addFields(
-                            { name: 'Online', value: `${online.size}`, inline: true },
-                            { name: 'Offline', value: `${offline.size}`, inline: true },
-                            { name: 'Total', value: `${membersWithRole.size}`, inline: true }
+                            { name: 'Online', value: `${onlineCount}`, inline: true },
+                            { name: 'Offline', value: `${offlineCount}`, inline: true },
+                            { name: 'Total', value: `${membersArray.length}`, inline: true }
                         )
-                        .setFooter({ text: membersWithRole.size > 30 ? `Showing 30 of ${membersWithRole.size} members` : 'NewLife SMP' })
+                        .setFooter({ text: membersArray.length > 30 ? `Showing 30 of ${membersArray.length} members` : 'NewLife SMP' })
                         .setTimestamp();
 
                     return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
                 }
             } catch (error) {
                 console.error('Error in !m command:', error);
-                return message.reply({ content: 'Failed to fetch member data.', allowedMentions: { repliedUser: false } });
+                return message.reply({ content: `Error: ${error.message}`, allowedMentions: { repliedUser: false } });
             }
         }
     },
