@@ -509,6 +509,54 @@ const commands = {
             }
         }
     },
+
+    // !temp2 - Add member role to all users (Owner only)
+    temp2: {
+        name: 'temp2',
+        description: 'Add member role to all users in the server (Owner only)',
+        usage: '!temp2',
+        async execute(message, args, client) {
+            if (!isOwner(message.member)) {
+                return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'Only the owner can run this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            const memberRoleId = '1374421919373328434';
+            const statusMsg = await message.reply({ content: 'Adding member role to all users... This may take a while.', allowedMentions: { repliedUser: false } });
+
+            try {
+                // Fetch all members
+                await message.guild.members.fetch();
+                const members = message.guild.members.cache.filter(m => !m.user.bot);
+                let added = 0;
+                let skipped = 0;
+                let failed = 0;
+
+                for (const [, member] of members) {
+                    if (member.roles.cache.has(memberRoleId)) {
+                        skipped++;
+                        continue;
+                    }
+                    try {
+                        await member.roles.add(memberRoleId, 'Bulk member role assignment via !temp2');
+                        added++;
+                    } catch (e) {
+                        failed++;
+                    }
+
+                    // Rate limit: 1 per 100ms
+                    if (added % 10 === 0) {
+                        await statusMsg.edit({ content: `Adding member role... ${added} added, ${skipped} already had it, ${failed} failed.` }).catch(() => {});
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+                }
+
+                await statusMsg.edit({ content: `Done! Added member role to **${added}** users. **${skipped}** already had it. **${failed}** failed.` });
+            } catch (error) {
+                console.error('Error in temp2:', error);
+                await statusMsg.edit({ content: 'Failed to add member role to users.' }).catch(() => {});
+            }
+        }
+    },
 };
 
 /**

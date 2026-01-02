@@ -32,8 +32,9 @@ async function lookupMcProfile(platform, username) {
         let fetcher = globalThis.fetch;
         if (!fetcher) fetcher = require('node-fetch');
         
+        // Different endpoint for bedrock vs java
         const endpoint = platform === 'bedrock' 
-            ? `https://mcprofile.io/api/v1/bedrock/username/${encodeURIComponent(username)}`
+            ? `https://mcprofile.io/api/v1/bedrock/gamertag/${encodeURIComponent(username)}`
             : `https://mcprofile.io/api/v1/java/username/${encodeURIComponent(username)}`;
         
         const res = await fetcher(endpoint);

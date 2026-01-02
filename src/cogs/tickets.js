@@ -32,6 +32,18 @@ const Application = require('../database/models/Application');
 const { randomUUID } = require('crypto');
 const { getNextCaseNumber } = require('../database/caseCounter');
 
+// Whitelist guru role ID - can access apply tickets and use close/tclose
+const WHITELIST_GURU_ROLE_ID = '1456563910919454786';
+
+/**
+ * Check if member is whitelist guru or staff
+ */
+function canAccessApplyTickets(member) {
+    if (isStaff(member)) return true;
+    if (member && member.roles && member.roles.cache.has(WHITELIST_GURU_ROLE_ID)) return true;
+    return false;
+}
+
 /**
  * Upload transcript to paste.rs
  * @param {string} content - Transcript content
@@ -382,6 +394,12 @@ async function createApplicationTicket(guild, user, application, client) {
         permissionOverwrites.push({ id: staffRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] });
     }
 
+    // Add whitelist guru role permissions
+    permissionOverwrites.push({ 
+        id: WHITELIST_GURU_ROLE_ID, 
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] 
+    });
+
     // Create channel
     const channelName = `ticket-apply-${user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
     const ticketChannel = await guild.channels.create({ name: channelName, type: ChannelType.GuildText, parent: categoryId, permissionOverwrites });
@@ -393,7 +411,8 @@ async function createApplicationTicket(guild, user, application, client) {
         .setDescription(`${user} - A new whitelist application has been submitted. Staff will review shortly.`)
         .setTimestamp();
 
-    await ticketChannel.send({ content: `${user} @here - A new whitelist application has been submitted.`, embeds: [initial] });
+    // Ping whitelist guru role when ticket is opened
+    await ticketChannel.send({ content: `${user} <@&${WHITELIST_GURU_ROLE_ID}> - A new whitelist application has been submitted.`, embeds: [initial] });
 
     // Post application responses
     const respEmbed = new EmbedBuilder()
@@ -562,8 +581,12 @@ const slashCommands = [
                 });
             }
 
-            // Check permissions (staff only)
-            if (!isStaff(interaction.member)) {
+            // Check permissions - staff or whitelist guru in apply tickets
+            const isApplyTicket = interaction.channel.name.includes('-apply-');
+            const hasPermission = isStaff(interaction.member) || 
+                (isApplyTicket && interaction.member.roles.cache.has(WHITELIST_GURU_ROLE_ID));
+            
+            if (!hasPermission) {
                 return interaction.reply({
                     embeds: [createErrorEmbed('Permission Denied', 'Only staff members can close tickets.')],
                     ephemeral: true
@@ -603,8 +626,12 @@ const slashCommands = [
                 });
             }
 
-            // Check permissions (staff only)
-            if (!isStaff(interaction.member)) {
+            // Check permissions - staff or whitelist guru in apply tickets
+            const isApplyTicket = interaction.channel.name.includes('-apply-');
+            const hasPermission = isStaff(interaction.member) || 
+                (isApplyTicket && interaction.member.roles.cache.has(WHITELIST_GURU_ROLE_ID));
+            
+            if (!hasPermission) {
                 return interaction.reply({
                     embeds: [createErrorEmbed('Permission Denied', 'Only staff members can close tickets.')],
                     ephemeral: true

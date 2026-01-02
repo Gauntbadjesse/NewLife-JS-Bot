@@ -9,6 +9,17 @@ const LinkedAccount = require('../database/models/LinkedAccount');
 const { isStaff } = require('../utils/permissions');
 
 const WHITELIST_ROLE_ID = process.env.WHITELIST_ROLE_ID || null;
+const WHITELISTED_ROLE_ID = '1374421917284565046'; // Role to add after user is whitelisted
+const WHITELIST_GURU_ROLE_ID = '1456563910919454786'; // Whitelist guru can use whitelist commands
+
+/**
+ * Check if member has whitelist guru role or is staff
+ */
+function canUseWhitelistCommands(member) {
+    if (isStaff(member)) return true;
+    if (member && member.roles && member.roles.cache.has(WHITELIST_GURU_ROLE_ID)) return true;
+    return false;
+}
 
 async function getFetcher() {
 	if (globalThis.fetch) return globalThis.fetch;
@@ -22,13 +33,20 @@ async function getFetcher() {
 
 async function lookupProfile(platform, username) {
 	const fetch = await getFetcher();
-	const url = `https://mcprofile.io/api/v1/${platform}/username/${encodeURIComponent(username)}`;
+	// Different endpoint for bedrock vs java
+	const url = platform === 'bedrock'
+		? `https://mcprofile.io/api/v1/bedrock/gamertag/${encodeURIComponent(username)}`
+		: `https://mcprofile.io/api/v1/java/username/${encodeURIComponent(username)}`;
 	const res = await fetch(url);
 	if (!res.ok) throw new Error(`Profile lookup failed (${res.status})`);
 	const data = await res.json();
-	const id = (data && (data.id || data.uuid || data.fuuid))
-		|| (Array.isArray(data) && data[0] && (data[0].id || data[0].uuid || data[0].fuuid))
-		|| (data && data.data && (data.data.id || data.data.uuid || data.data.fuuid));
+	// For bedrock, use fuuid; for java, use uuid
+	let id = null;
+	if (platform === 'bedrock') {
+		id = data.fuuid || data.floodgateuid || data.id;
+	} else {
+		id = data.uuid || data.id;
+	}
 	if (!id) throw new Error('Could not determine UUID/fUUID from profile response');
 	return id;
 }
@@ -66,7 +84,7 @@ const slashCommands = [
 		async execute(interaction, client) {
 			const sub = interaction.options.getSubcommand();
 			if (sub === 'add') {
-				if (!isStaff(interaction.member)) return interaction.reply({ content: 'Permission denied.', ephemeral: true });
+				if (!canUseWhitelistCommands(interaction.member)) return interaction.reply({ content: 'Permission denied.', ephemeral: true });
 				await interaction.deferReply({ ephemeral: false });
 				try {
 					const platform = interaction.options.getString('platform');
@@ -106,6 +124,8 @@ const slashCommands = [
 								if (WHITELIST_ROLE_ID) {
 									try { await member.roles.add(WHITELIST_ROLE_ID, 'Auto whitelist role'); } catch (e) {}
 								}
+								// Add the whitelisted role
+								try { await member.roles.add(WHITELISTED_ROLE_ID, 'User whitelisted'); } catch (e) {}
 							}
 						}
 					} catch (err) { console.error('Failed to update guild member:', err); }

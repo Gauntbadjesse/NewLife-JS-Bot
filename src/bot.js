@@ -111,6 +111,22 @@ client.once('ready', async () => {
     await initWatcher(client);
 
     client.user.setActivity('NewLife SMP | !help', { type: 3 });
+
+    // Refresh member counter on startup
+    try {
+        const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
+        const guildId = process.env.GUILD_ID || '1372672239245459498';
+        const guild = await client.guilds.fetch(guildId).catch(() => null);
+        if (guild) {
+            const ch = await guild.channels.fetch(memberCounterChannel).catch(() => null);
+            if (ch && typeof ch.setTopic === 'function') {
+                await ch.setTopic(`Members: ${guild.memberCount}`).catch(() => {});
+                console.log(` Member counter refreshed: ${guild.memberCount} members`);
+            }
+        }
+    } catch (e) {
+        console.error('Failed to refresh member counter on startup:', e);
+    }
 });
 
 // Prefix command handler
@@ -239,6 +255,13 @@ client.on('guildMemberAdd', async (member) => {
         
         if (guildId && member.guild && String(member.guild.id) !== String(guildId)) return;
         if (!member.guild) return;
+
+        // Add member role to new users
+        try {
+            await member.roles.add(memberRoleId, 'Auto member role on join');
+        } catch (e) {
+            await logError('guildMemberAdd: addRole', e, { member: member.user.tag });
+        }
 
         // Update member counter channel
         try {
