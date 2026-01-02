@@ -637,6 +637,132 @@ const commands = {
             }
         }
     },
+
+    // !m - Show online members or members in a role
+    m: {
+        name: 'm',
+        description: 'Show online members or members in a specific role',
+        usage: '!m [role name]',
+        async execute(message, args, client) {
+            // Role name mappings (case insensitive)
+            const ROLE_MAPPINGS = {
+                'owner': process.env.OWNER_ROLE_ID,
+                'management': process.env.MANAGEMENT_ROLE_ID,
+                'supervisor': process.env.SUPERVISOR_ROLE_ID,
+                'admin': process.env.ADMIN_ROLE_ID,
+                'sr mod': process.env.SR_MOD_ROLE_ID,
+                'senior mod': process.env.SR_MOD_ROLE_ID,
+                'moderator': process.env.MODERATOR_ROLE_ID,
+                'mod': process.env.MODERATOR_ROLE_ID,
+                'staff': process.env.STAFF_TEAM,
+                'whitelist guru': '1456563910919454786',
+                'whitelistguru': '1456563910919454786',
+                'guru': '1456563910919454786',
+                'whitelisted': '1374421917284565046',
+                'member': '1374421919373328434'
+            };
+
+            try {
+                // Fetch all members to ensure presence data
+                await message.guild.members.fetch({ withPresences: true });
+
+                if (args.length === 0) {
+                    // Show online members
+                    const onlineMembers = message.guild.members.cache.filter(m => 
+                        !m.user.bot && m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status)
+                    );
+
+                    const online = onlineMembers.filter(m => m.presence?.status === 'online').size;
+                    const idle = onlineMembers.filter(m => m.presence?.status === 'idle').size;
+                    const dnd = onlineMembers.filter(m => m.presence?.status === 'dnd').size;
+                    const offline = message.guild.members.cache.filter(m => !m.user.bot).size - onlineMembers.size;
+
+                    const embed = new EmbedBuilder()
+                        .setColor(getEmbedColor())
+                        .setTitle('Member Status')
+                        .setDescription(`**${message.guild.name}**`)
+                        .addFields(
+                            { name: 'Online', value: `${online}`, inline: true },
+                            { name: 'Idle', value: `${idle}`, inline: true },
+                            { name: 'Do Not Disturb', value: `${dnd}`, inline: true },
+                            { name: 'Offline', value: `${offline}`, inline: true },
+                            { name: 'Total Members', value: `${message.guild.memberCount}`, inline: true }
+                        )
+                        .setFooter({ text: 'NewLife SMP' })
+                        .setTimestamp();
+
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                } else {
+                    // Show members in a role
+                    const roleName = args.join(' ').toLowerCase();
+                    let roleId = ROLE_MAPPINGS[roleName];
+
+                    // If not in mappings, try to find by name
+                    if (!roleId) {
+                        const foundRole = message.guild.roles.cache.find(r => 
+                            r.name.toLowerCase() === roleName || 
+                            r.name.toLowerCase().includes(roleName)
+                        );
+                        if (foundRole) roleId = foundRole.id;
+                    }
+
+                    if (!roleId) {
+                        return message.reply({ 
+                            content: `Role not found: **${args.join(' ')}**\n\nAvailable shortcuts: owner, management, supervisor, admin, sr mod, moderator, staff, whitelist guru, whitelisted, member`, 
+                            allowedMentions: { repliedUser: false } 
+                        });
+                    }
+
+                    const role = message.guild.roles.cache.get(roleId);
+                    if (!role) {
+                        return message.reply({ content: 'Role not found in server.', allowedMentions: { repliedUser: false } });
+                    }
+
+                    const membersWithRole = message.guild.members.cache.filter(m => 
+                        !m.user.bot && m.roles.cache.has(roleId)
+                    );
+
+                    const online = membersWithRole.filter(m => m.presence && ['online', 'idle', 'dnd'].includes(m.presence.status));
+                    const offline = membersWithRole.filter(m => !m.presence || m.presence.status === 'offline');
+
+                    // Build member list (max 30 shown)
+                    const memberList = membersWithRole
+                        .sort((a, b) => {
+                            // Sort by online status first, then by name
+                            const aOnline = a.presence && ['online', 'idle', 'dnd'].includes(a.presence.status);
+                            const bOnline = b.presence && ['online', 'idle', 'dnd'].includes(b.presence.status);
+                            if (aOnline && !bOnline) return -1;
+                            if (!aOnline && bOnline) return 1;
+                            return a.displayName.localeCompare(b.displayName);
+                        })
+                        .first(30)
+                        .map(m => {
+                            const status = m.presence?.status;
+                            const indicator = status === 'online' ? '🟢' : status === 'idle' ? '🟡' : status === 'dnd' ? '🔴' : '⚫';
+                            return `${indicator} ${m.displayName}`;
+                        })
+                        .join('\n');
+
+                    const embed = new EmbedBuilder()
+                        .setColor(role.color || getEmbedColor())
+                        .setTitle(`Members with ${role.name}`)
+                        .setDescription(memberList || 'No members')
+                        .addFields(
+                            { name: 'Online', value: `${online.size}`, inline: true },
+                            { name: 'Offline', value: `${offline.size}`, inline: true },
+                            { name: 'Total', value: `${membersWithRole.size}`, inline: true }
+                        )
+                        .setFooter({ text: membersWithRole.size > 30 ? `Showing 30 of ${membersWithRole.size} members` : 'NewLife SMP' })
+                        .setTimestamp();
+
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                }
+            } catch (error) {
+                console.error('Error in !m command:', error);
+                return message.reply({ content: 'Failed to fetch member data.', allowedMentions: { repliedUser: false } });
+            }
+        }
+    },
 };
 
 /**

@@ -1,35 +1,41 @@
 /**
  * Kingdom Model
- * Uses existing MongoDB collection 'kingdoms' from discord_bot database
+ * Stores kingdom data in its own 'kingdoms' database
  */
 const mongoose = require('mongoose');
 
 const kingdomSchema = new mongoose.Schema({
-    guild_id: { type: String, required: true, index: true },
-    name: { type: String, required: true, lowercase: true, trim: true },
-    leader_role_id: { type: String, required: true },
-    member_role_id: { type: String, required: true },
-    created_by: { type: String },
-    created_at: { type: Date, default: Date.now }
+    guildId: { type: String, required: true, index: true },
+    name: { type: String, required: true, trim: true },
+    nameLower: { type: String, required: true, lowercase: true, trim: true },
+    memberRoleId: { type: String, required: true },
+    leaderRoleId: { type: String, required: true },
+    leaderPing: { type: Boolean, default: false },
+    color: { type: String, default: '#3b82f6' },
+    createdBy: { type: String },
+    createdAt: { type: Date, default: Date.now }
 }, {
     collection: 'kingdoms',
     versionKey: false
 });
 
-kingdomSchema.index({ guild_id: 1, name: 1 }, { unique: true });
+// Unique constraint on guildId + nameLower
+kingdomSchema.index({ guildId: 1, nameLower: 1 }, { unique: true });
 
-// Create a separate connection to the discord_bot database
+// Create a separate connection to the kingdoms database
+let kingdomConnection = null;
 let kingdomModel = null;
 
 async function getKingdomModel() {
     if (kingdomModel) return kingdomModel;
     
     const uri = process.env.MONGODB_URI;
-    const dbName = process.env.DISCORD_BOT_DATABASE || 'discord_bot';
+    if (!uri) throw new Error('MONGODB_URI not configured');
     
-    const conn = await mongoose.createConnection(uri, { dbName }).asPromise();
-    kingdomModel = conn.model('Kingdom', kingdomSchema);
+    kingdomConnection = await mongoose.createConnection(uri, { dbName: 'kingdoms' }).asPromise();
+    kingdomModel = kingdomConnection.model('Kingdom', kingdomSchema);
     
+    console.log('[Kingdom] Connected to kingdoms database');
     return kingdomModel;
 }
 

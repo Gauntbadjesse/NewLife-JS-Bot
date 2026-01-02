@@ -1,231 +1,508 @@
 /**
  * Kingdoms Cog
- * Discord-side kingdom management via !kingdom commands
- * Uses existing MongoDB kingdoms collection from discord_bot database
+ * Kingdom management system for NewLife SMP
+ * 
+ * Staff Commands (Slash):
+ * - /kingdom create - Create a new kingdom
+ * - /kingdom delete - Delete a kingdom
+ * - /kingdom list - List all kingdoms
+ * 
+ * Everyone Commands (Prefix):
+ * - !kingdom help - Show help
+ * - !kingdom add <user> - Add user to kingdom (rulers only)
+ * - !kingdom remove <user> - Remove user from kingdom (rulers only)
+ * - !kingdom list <kingdom> - List users in a kingdom
+ * - !kingdom transfer <user> - Transfer leadership (rulers only)
  */
-const { EmbedBuilder, PermissionsBitField } = require('discord.js');
+
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const { getKingdomModel } = require('../database/models/Kingdom');
-const { createErrorEmbed, createSuccessEmbed, createInfoEmbed, getEmbedColor } = require('../utils/embeds');
+const { isAdmin, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
+const { getEmbedColor } = require('../utils/embeds');
 
-const STAFF_ROLE_FALLBACK = process.env.STAFF_ROLE_ID || '1374421915938324583';
-
-function isStaff(member) {
-    if (!member || !member.guild) return false;
-    if (member.permissions?.has?.(PermissionsBitField.Flags.ManageGuild)) return true;
-    return member.roles.cache.has(String(STAFF_ROLE_FALLBACK));
+/**
+ * Check if user is staff (Admin+)
+ */
+function isStaffMember(member) {
+    return isAdmin(member) || isSupervisor(member) || isManagement(member) || isOwner(member);
 }
 
-function isLeaderOf(member, kingdom) {
-    return member.roles.cache.has(kingdom.leader_role_id);
+/**
+ * Find a kingdom by name (case insensitive)
+ */
+async function findKingdom(guildId, name) {
+    const Kingdom = await getKingdomModel();
+    return Kingdom.findOne({ guildId, nameLower: name.toLowerCase().trim() });
 }
 
-// Prefix commands only - Discord side
+/**
+ * Get the kingdom a user is a ruler of (has leader role)
+ */
+async function getUserRuledKingdom(guildId, member) {
+    const Kingdom = await getKingdomModel();
+    const kingdoms = await Kingdom.find({ guildId });
+    
+    for (const kingdom of kingdoms) {
+        if (member.roles.cache.has(kingdom.leaderRoleId)) {
+            return kingdom;
+        }
+    }
+    return null;
+}
+
+/**
+ * Get the kingdom a user is a member of
+ */
+async function getUserKingdom(guildId, member) {
+    const Kingdom = await getKingdomModel();
+    const kingdoms = await Kingdom.find({ guildId });
+    
+    for (const kingdom of kingdoms) {
+        if (member.roles.cache.has(kingdom.leaderRoleId) || member.roles.cache.has(kingdom.memberRoleId)) {
+            return kingdom;
+        }
+    }
+    return null;
+}
+
+/**
+ * Slash Commands (Staff Only)
+ */
+const slashCommands = [
+    {
+        data: new SlashCommandBuilder()
+            .setName('kingdom')
+            .setDescription('Kingdom management')
+            .addSubcommand(sub => sub
+                .setName('create')
+                .setDescription('Create a new kingdom')
+                .addStringOption(opt => opt
+                    .setName('name')
+                    .setDescription('Kingdom name')
+                    .setRequired(true))
+                .addRoleOption(opt => opt
+                    .setName('member_role')
+                    .setDescription('Member role for the kingdom')
+                    .setRequired(true))
+                .addRoleOption(opt => opt
+                    .setName('leader_role')
+                    .setDescription('Leader/Ruler role for the kingdom')
+                    .setRequired(true))
+                .addBooleanOption(opt => opt
+                    .setName('leader_ping')
+                    .setDescription('Allow leader to be pinged')
+                    .setRequired(true))
+                .addStringOption(opt => opt
+                    .setName('color')
+                    .setDescription('Hex color code (e.g., #ff0000)')
+                    .setRequired(true)))
+            .addSubcommand(sub => sub
+                .setName('delete')
+                .setDescription('Delete a kingdom')
+                .addStringOption(opt => opt
+                    .setName('name')
+                    .setDescription('Kingdom name to delete')
+                    .setRequired(true)
+                    .setAutocomplete(true)))
+            .addSubcommand(sub => sub
+                .setName('list')
+                .setDescription('List all kingdoms')),
+
+        async execute(interaction, client) {
+            // Staff only check
+            if (!isStaffMember(interaction.member)) {
+                return interaction.reply({ content: 'Permission denied. Staff only.', ephemeral: true });
+            }
+
+            const sub = interaction.options.getSubcommand();
+            const Kingdom = await getKingdomModel();
+
+            // CREATE
+            if (sub === 'create') {
+                const name = interaction.options.getString('name').trim();
+                const memberRole = interaction.options.getRole('member_role');
+                const leaderRole = interaction.options.getRole('leader_role');
+                const leaderPing = interaction.options.getBoolean('leader_ping');
+                const color = interaction.options.getString('color').trim();
+
+                // Validate color
+                if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+                    return interaction.reply({ content: 'Invalid color format. Use hex like #ff0000', ephemeral: true });
+                }
+
+                // Check if kingdom exists
+                const existing = await findKingdom(interaction.guild.id, name);
+                if (existing) {
+                    return interaction.reply({ content: `Kingdom **${name}** already exists.`, ephemeral: true });
+                }
+
+                await interaction.deferReply({ ephemeral: true });
+
+                try {
+                    const kingdom = new Kingdom({
+                        guildId: interaction.guild.id,
+                        name: name,
+                        nameLower: name.toLowerCase(),
+                        memberRoleId: memberRole.id,
+                        leaderRoleId: leaderRole.id,
+                        leaderPing: leaderPing,
+                        color: color,
+                        createdBy: interaction.user.id,
+                        createdAt: new Date()
+                    });
+
+                    await kingdom.save();
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('Kingdom Created')
+                        .setColor(color)
+                        .addFields(
+                            { name: 'Name', value: name, inline: true },
+                            { name: 'Member Role', value: `${memberRole}`, inline: true },
+                            { name: 'Leader Role', value: `${leaderRole}`, inline: true },
+                            { name: 'Leader Ping', value: leaderPing ? 'Enabled' : 'Disabled', inline: true },
+                            { name: 'Color', value: color, inline: true }
+                        )
+                        .setFooter({ text: `Created by ${interaction.user.tag}` })
+                        .setTimestamp();
+
+                    return interaction.editReply({ embeds: [embed] });
+                } catch (error) {
+                    console.error('Error creating kingdom:', error);
+                    return interaction.editReply({ content: `Failed to create kingdom: ${error.message}` });
+                }
+            }
+
+            // DELETE
+            if (sub === 'delete') {
+                const name = interaction.options.getString('name');
+
+                const kingdom = await findKingdom(interaction.guild.id, name);
+                if (!kingdom) {
+                    return interaction.reply({ content: `Kingdom **${name}** not found.`, ephemeral: true });
+                }
+
+                await interaction.deferReply({ ephemeral: true });
+
+                try {
+                    await Kingdom.deleteOne({ _id: kingdom._id });
+                    return interaction.editReply({ content: `Kingdom **${kingdom.name}** has been deleted.` });
+                } catch (error) {
+                    console.error('Error deleting kingdom:', error);
+                    return interaction.editReply({ content: `Failed to delete kingdom: ${error.message}` });
+                }
+            }
+
+            // LIST
+            if (sub === 'list') {
+                await interaction.deferReply({ ephemeral: true });
+
+                try {
+                    const kingdoms = await Kingdom.find({ guildId: interaction.guild.id }).sort({ name: 1 });
+
+                    if (kingdoms.length === 0) {
+                        return interaction.editReply({ content: 'No kingdoms configured.' });
+                    }
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('Kingdoms')
+                        .setColor(getEmbedColor())
+                        .setDescription(`${kingdoms.length} kingdom(s) configured`)
+                        .setTimestamp();
+
+                    for (const k of kingdoms.slice(0, 25)) {
+                        const memberRole = interaction.guild.roles.cache.get(k.memberRoleId);
+                        const leaderRole = interaction.guild.roles.cache.get(k.leaderRoleId);
+                        const memberCount = memberRole ? interaction.guild.members.cache.filter(m => m.roles.cache.has(k.memberRoleId)).size : 0;
+                        const leaderCount = leaderRole ? interaction.guild.members.cache.filter(m => m.roles.cache.has(k.leaderRoleId)).size : 0;
+
+                        embed.addFields({
+                            name: k.name,
+                            value: `Leader: ${leaderRole || 'Unknown'} (${leaderCount})\nMembers: ${memberRole || 'Unknown'} (${memberCount})\nColor: ${k.color}`,
+                            inline: true
+                        });
+                    }
+
+                    return interaction.editReply({ embeds: [embed] });
+                } catch (error) {
+                    console.error('Error listing kingdoms:', error);
+                    return interaction.editReply({ content: `Failed to list kingdoms: ${error.message}` });
+                }
+            }
+        },
+
+        async autocomplete(interaction) {
+            const focused = interaction.options.getFocused().toLowerCase();
+            const Kingdom = await getKingdomModel();
+            const kingdoms = await Kingdom.find({ guildId: interaction.guild.id });
+
+            const filtered = kingdoms
+                .filter(k => k.name.toLowerCase().includes(focused))
+                .slice(0, 25)
+                .map(k => ({ name: k.name, value: k.name }));
+
+            return interaction.respond(filtered);
+        }
+    }
+];
+
+/**
+ * Prefix Commands (Everyone)
+ */
 const commands = {
     kingdom: {
         name: 'kingdom',
-        description: 'Kingdom management',
-        usage: '!kingdom <subcommand>',
+        description: 'Kingdom management commands',
+        usage: '!kingdom <help|add|remove|list|transfer>',
         async execute(message, args, client) {
-            const sub = (args[0] || '').toLowerCase();
-            const Kingdom = await getKingdomModel();
-            
-            // Help
+            const sub = args[0]?.toLowerCase();
+
             if (!sub || sub === 'help') {
-                const embed = createInfoEmbed('Kingdom Commands',
-                    '**!kingdom list** - List all kingdoms\n' +
-                    '**!kingdom info <name>** - Show kingdom details\n' +
-                    '**!kingdom members <name>** - List all members\n' +
-                    '**!kingdom add @user <name>** - Add member (leader/staff)\n' +
-                    '**!kingdom remove @user <name>** - Remove member (leader/staff)\n' +
-                    '**!kingdom promote @user <name>** - Promote to leader (staff)\n' +
-                    '**!kingdom demote @user <name>** - Demote from leader (staff)'
-                );
-                return message.channel.send({ embeds: [embed] });
-            }
-
-            // List all kingdoms
-            if (sub === 'list') {
-                const kingdoms = await Kingdom.find({ guild_id: message.guild.id });
-                if (!kingdoms.length) {
-                    return message.reply({ embeds: [createInfoEmbed('No Kingdoms', 'No kingdoms configured.')] });
-                }
-                
-                const lines = [];
-                for (const k of kingdoms) {
-                    const memberRole = message.guild.roles.cache.get(k.member_role_id);
-                    const count = memberRole ? message.guild.members.cache.filter(m => m.roles.cache.has(memberRole.id)).size : 0;
-                    lines.push(`**${k.name}** - ${count} members`);
-                }
-                
                 const embed = new EmbedBuilder()
-                    .setTitle('Kingdoms')
-                    .setDescription(lines.join('\n'))
+                    .setTitle('Kingdom Commands')
                     .setColor(getEmbedColor())
-                    .setFooter({ text: 'Use !kingdom info <name> for details' })
-                    .setTimestamp();
-                return message.channel.send({ embeds: [embed] });
-            }
-
-            // Info about a kingdom
-            if (sub === 'info') {
-                const name = args.slice(1).join(' ').toLowerCase();
-                if (!name) return message.reply({ embeds: [createErrorEmbed('Usage', '!kingdom info <name>')] });
-                
-                const k = await Kingdom.findOne({ guild_id: message.guild.id, name });
-                if (!k) return message.reply({ embeds: [createErrorEmbed('Not Found', 'Kingdom not found.')] });
-                
-                const leaderRole = message.guild.roles.cache.get(k.leader_role_id);
-                const memberRole = message.guild.roles.cache.get(k.member_role_id);
-                const leaders = leaderRole ? message.guild.members.cache.filter(m => m.roles.cache.has(leaderRole.id)).map(m => m.toString()) : [];
-                const memberCount = memberRole ? message.guild.members.cache.filter(m => m.roles.cache.has(memberRole.id)).size : 0;
-                
-                const embed = new EmbedBuilder()
-                    .setTitle(k.name.charAt(0).toUpperCase() + k.name.slice(1))
-                    .setColor(getEmbedColor())
+                    .setDescription('Manage your kingdom membership')
                     .addFields(
-                        { name: 'Leaders', value: leaders.length ? leaders.join(', ') : 'None', inline: false },
-                        { name: 'Members', value: `${memberCount}`, inline: true },
-                        { name: 'Created', value: k.created_at ? `<t:${Math.floor(new Date(k.created_at).getTime() / 1000)}:R>` : 'Unknown', inline: true }
+                        { name: '!kingdom help', value: 'Show this help message', inline: false },
+                        { name: '!kingdom add <@user>', value: 'Add a user to your kingdom (Rulers only)', inline: false },
+                        { name: '!kingdom remove <@user>', value: 'Remove a user from your kingdom (Rulers only)', inline: false },
+                        { name: '!kingdom list <kingdom name>', value: 'List all members of a kingdom', inline: false },
+                        { name: '!kingdom transfer <@user>', value: 'Transfer leadership to another member (Rulers only)', inline: false }
                     )
                     .setFooter({ text: 'NewLife SMP' })
                     .setTimestamp();
-                return message.channel.send({ embeds: [embed] });
+
+                return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
             }
 
-            // List members
-            if (sub === 'members') {
-                const name = args.slice(1).join(' ').toLowerCase();
-                if (!name) return message.reply({ embeds: [createErrorEmbed('Usage', '!kingdom members <name>')] });
-                
-                const k = await Kingdom.findOne({ guild_id: message.guild.id, name });
-                if (!k) return message.reply({ embeds: [createErrorEmbed('Not Found', 'Kingdom not found.')] });
-                
-                const memberRole = message.guild.roles.cache.get(k.member_role_id);
-                if (!memberRole) return message.reply({ embeds: [createErrorEmbed('Error', 'Member role not found.')] });
-                
-                const members = message.guild.members.cache.filter(m => m.roles.cache.has(memberRole.id));
-                if (!members.size) return message.reply({ embeds: [createInfoEmbed('No Members', 'This kingdom has no members.')] });
-                
-                const list = members.map(m => m.displayName).slice(0, 50).join(', ');
-                const embed = new EmbedBuilder()
-                    .setTitle(`${k.name} Members`)
-                    .setDescription(list + (members.size > 50 ? `\n... and ${members.size - 50} more` : ''))
-                    .setColor(getEmbedColor())
-                    .setFooter({ text: `Total: ${members.size}` });
-                return message.channel.send({ embeds: [embed] });
-            }
+            const Kingdom = await getKingdomModel();
 
-            // Add member (leader or staff only)
+            // ADD
             if (sub === 'add') {
-                const user = message.mentions.members.first();
-                const name = args.slice(2).join(' ').toLowerCase();
-                if (!user || !name) return message.reply({ embeds: [createErrorEmbed('Usage', '!kingdom add @user <name>')] });
-                
-                const k = await Kingdom.findOne({ guild_id: message.guild.id, name });
-                if (!k) return message.reply({ embeds: [createErrorEmbed('Not Found', 'Kingdom not found.')] });
-                
-                // Permission check: must be leader or staff
-                if (!isLeaderOf(message.member, k) && !isStaff(message.member)) {
-                    return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'Only leaders or staff can add members.')] });
+                // Get the kingdom this user rules
+                const kingdom = await getUserRuledKingdom(message.guild.id, message.member);
+                if (!kingdom) {
+                    return message.reply({ content: 'You are not a ruler of any kingdom.', allowedMentions: { repliedUser: false } });
                 }
-                
-                const memberRole = message.guild.roles.cache.get(k.member_role_id);
-                if (!memberRole) return message.reply({ embeds: [createErrorEmbed('Error', 'Member role not found.')] });
-                
-                if (user.roles.cache.has(memberRole.id)) {
-                    return message.reply({ content: `${user} is already a member of ${k.name}.` });
+
+                // Get target user
+                const targetUser = message.mentions.members.first() || 
+                    (args[1] ? await message.guild.members.fetch(args[1]).catch(() => null) : null);
+
+                if (!targetUser) {
+                    return message.reply({ content: 'Please mention a user or provide their ID.\nUsage: `!kingdom add @user`', allowedMentions: { repliedUser: false } });
                 }
-                
-                await user.roles.add(memberRole);
-                return message.channel.send({ content: `${user} added to **${k.name}**` });
+
+                // Check if target is already in a kingdom
+                const targetKingdom = await getUserKingdom(message.guild.id, targetUser);
+                if (targetKingdom) {
+                    return message.reply({ content: `${targetUser.displayName} is already in **${targetKingdom.name}**.`, allowedMentions: { repliedUser: false } });
+                }
+
+                try {
+                    await targetUser.roles.add(kingdom.memberRoleId, `Added to ${kingdom.name} by ${message.author.tag}`);
+                    
+                    const embed = new EmbedBuilder()
+                        .setTitle('Member Added')
+                        .setColor(kingdom.color)
+                        .setDescription(`${targetUser} has been added to **${kingdom.name}**`)
+                        .setFooter({ text: `Added by ${message.author.tag}` })
+                        .setTimestamp();
+
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                } catch (error) {
+                    console.error('Error adding kingdom member:', error);
+                    return message.reply({ content: 'Failed to add member. Check bot permissions.', allowedMentions: { repliedUser: false } });
+                }
             }
 
-            // Remove member
+            // REMOVE
             if (sub === 'remove') {
-                const user = message.mentions.members.first();
-                const name = args.slice(2).join(' ').toLowerCase();
-                if (!user || !name) return message.reply({ embeds: [createErrorEmbed('Usage', '!kingdom remove @user <name>')] });
-                
-                const k = await Kingdom.findOne({ guild_id: message.guild.id, name });
-                if (!k) return message.reply({ embeds: [createErrorEmbed('Not Found', 'Kingdom not found.')] });
-                
-                if (!isLeaderOf(message.member, k) && !isStaff(message.member)) {
-                    return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'Only leaders or staff can remove members.')] });
+                // Get the kingdom this user rules
+                const kingdom = await getUserRuledKingdom(message.guild.id, message.member);
+                if (!kingdom) {
+                    return message.reply({ content: 'You are not a ruler of any kingdom.', allowedMentions: { repliedUser: false } });
                 }
-                
-                const memberRole = message.guild.roles.cache.get(k.member_role_id);
-                if (!memberRole) return message.reply({ embeds: [createErrorEmbed('Error', 'Member role not found.')] });
-                
-                if (!user.roles.cache.has(memberRole.id)) {
-                    return message.reply({ content: `${user} is not a member of ${k.name}.` });
+
+                // Get target user
+                const targetUser = message.mentions.members.first() || 
+                    (args[1] ? await message.guild.members.fetch(args[1]).catch(() => null) : null);
+
+                if (!targetUser) {
+                    return message.reply({ content: 'Please mention a user or provide their ID.\nUsage: `!kingdom remove @user`', allowedMentions: { repliedUser: false } });
                 }
-                
-                await user.roles.remove(memberRole);
-                // Also remove leader role if they have it
-                const leaderRole = message.guild.roles.cache.get(k.leader_role_id);
-                if (leaderRole && user.roles.cache.has(leaderRole.id)) {
-                    await user.roles.remove(leaderRole);
+
+                // Check if target is in this kingdom
+                const isMember = targetUser.roles.cache.has(kingdom.memberRoleId);
+                const isLeader = targetUser.roles.cache.has(kingdom.leaderRoleId);
+
+                if (!isMember && !isLeader) {
+                    return message.reply({ content: `${targetUser.displayName} is not in **${kingdom.name}**.`, allowedMentions: { repliedUser: false } });
                 }
-                return message.channel.send({ content: `${user} removed from **${k.name}**` });
+
+                // Cannot remove yourself if you're the only ruler
+                if (isLeader && targetUser.id === message.author.id) {
+                    return message.reply({ content: 'You cannot remove yourself. Use `!kingdom transfer` to pass leadership first.', allowedMentions: { repliedUser: false } });
+                }
+
+                // Cannot remove another ruler
+                if (isLeader && targetUser.id !== message.author.id) {
+                    return message.reply({ content: 'You cannot remove another ruler.', allowedMentions: { repliedUser: false } });
+                }
+
+                try {
+                    await targetUser.roles.remove(kingdom.memberRoleId, `Removed from ${kingdom.name} by ${message.author.tag}`);
+                    
+                    const embed = new EmbedBuilder()
+                        .setTitle('Member Removed')
+                        .setColor(kingdom.color)
+                        .setDescription(`${targetUser} has been removed from **${kingdom.name}**`)
+                        .setFooter({ text: `Removed by ${message.author.tag}` })
+                        .setTimestamp();
+
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                } catch (error) {
+                    console.error('Error removing kingdom member:', error);
+                    return message.reply({ content: 'Failed to remove member. Check bot permissions.', allowedMentions: { repliedUser: false } });
+                }
             }
 
-            // Promote to leader (staff only)
-            if (sub === 'promote') {
-                const user = message.mentions.members.first();
-                const name = args.slice(2).join(' ').toLowerCase();
-                if (!user || !name) return message.reply({ embeds: [createErrorEmbed('Usage', '!kingdom promote @user <name>')] });
-                
-                if (!isStaff(message.member)) {
-                    return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'Only staff can promote leaders.')] });
+            // LIST
+            if (sub === 'list') {
+                const kingdomName = args.slice(1).join(' ');
+
+                if (!kingdomName) {
+                    // List all kingdoms briefly
+                    const kingdoms = await Kingdom.find({ guildId: message.guild.id }).sort({ name: 1 });
+
+                    if (kingdoms.length === 0) {
+                        return message.reply({ content: 'No kingdoms configured.', allowedMentions: { repliedUser: false } });
+                    }
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('Kingdoms')
+                        .setColor(getEmbedColor())
+                        .setDescription('Use `!kingdom list <name>` to see members')
+                        .setTimestamp();
+
+                    const lines = [];
+                    for (const k of kingdoms) {
+                        const memberRole = message.guild.roles.cache.get(k.memberRoleId);
+                        const leaderRole = message.guild.roles.cache.get(k.leaderRoleId);
+                        const totalMembers = message.guild.members.cache.filter(m => 
+                            m.roles.cache.has(k.memberRoleId) || m.roles.cache.has(k.leaderRoleId)
+                        ).size;
+                        lines.push(`**${k.name}** - ${totalMembers} member(s)`);
+                    }
+
+                    embed.setDescription(lines.join('\n') || 'No kingdoms');
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
                 }
-                
-                const k = await Kingdom.findOne({ guild_id: message.guild.id, name });
-                if (!k) return message.reply({ embeds: [createErrorEmbed('Not Found', 'Kingdom not found.')] });
-                
-                const leaderRole = message.guild.roles.cache.get(k.leader_role_id);
-                const memberRole = message.guild.roles.cache.get(k.member_role_id);
-                if (!leaderRole) return message.reply({ embeds: [createErrorEmbed('Error', 'Leader role not found.')] });
-                
-                // Ensure they have member role too
-                if (memberRole && !user.roles.cache.has(memberRole.id)) {
-                    await user.roles.add(memberRole);
+
+                // Find the specific kingdom
+                const kingdom = await findKingdom(message.guild.id, kingdomName);
+                if (!kingdom) {
+                    return message.reply({ content: `Kingdom **${kingdomName}** not found.`, allowedMentions: { repliedUser: false } });
                 }
-                await user.roles.add(leaderRole);
-                return message.channel.send({ content: `${user} promoted to leader of **${k.name}**` });
+
+                // Get all members
+                const leaders = message.guild.members.cache.filter(m => m.roles.cache.has(kingdom.leaderRoleId));
+                const members = message.guild.members.cache.filter(m => 
+                    m.roles.cache.has(kingdom.memberRoleId) && !m.roles.cache.has(kingdom.leaderRoleId)
+                );
+
+                const embed = new EmbedBuilder()
+                    .setTitle(kingdom.name)
+                    .setColor(kingdom.color)
+                    .setTimestamp();
+
+                // Leaders
+                const leaderList = leaders.map(m => m.displayName).join('\n') || 'None';
+                embed.addFields({ name: `Rulers (${leaders.size})`, value: leaderList.substring(0, 1024), inline: false });
+
+                // Members (max 20 shown)
+                const memberList = members.first(20).map(m => m.displayName).join('\n') || 'None';
+                const memberValue = members.size > 20 
+                    ? `${memberList}\n... and ${members.size - 20} more`
+                    : memberList;
+                embed.addFields({ name: `Members (${members.size})`, value: memberValue.substring(0, 1024), inline: false });
+
+                embed.setFooter({ text: `Total: ${leaders.size + members.size} member(s)` });
+
+                return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
             }
 
-            // Demote from leader (staff only)
-            if (sub === 'demote') {
-                const user = message.mentions.members.first();
-                const name = args.slice(2).join(' ').toLowerCase();
-                if (!user || !name) return message.reply({ embeds: [createErrorEmbed('Usage', '!kingdom demote @user <name>')] });
-                
-                if (!isStaff(message.member)) {
-                    return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'Only staff can demote leaders.')] });
+            // TRANSFER
+            if (sub === 'transfer') {
+                // Get the kingdom this user rules
+                const kingdom = await getUserRuledKingdom(message.guild.id, message.member);
+                if (!kingdom) {
+                    return message.reply({ content: 'You are not a ruler of any kingdom.', allowedMentions: { repliedUser: false } });
                 }
-                
-                const k = await Kingdom.findOne({ guild_id: message.guild.id, name });
-                if (!k) return message.reply({ embeds: [createErrorEmbed('Not Found', 'Kingdom not found.')] });
-                
-                const leaderRole = message.guild.roles.cache.get(k.leader_role_id);
-                if (!leaderRole) return message.reply({ embeds: [createErrorEmbed('Error', 'Leader role not found.')] });
-                
-                if (!user.roles.cache.has(leaderRole.id)) {
-                    return message.reply({ content: `${user} is not a leader of ${k.name}.` });
+
+                // Get target user
+                const targetUser = message.mentions.members.first() || 
+                    (args[1] ? await message.guild.members.fetch(args[1]).catch(() => null) : null);
+
+                if (!targetUser) {
+                    return message.reply({ content: 'Please mention a user or provide their ID.\nUsage: `!kingdom transfer @user`', allowedMentions: { repliedUser: false } });
                 }
-                
-                await user.roles.remove(leaderRole);
-                return message.channel.send({ content: `${user} demoted from leader of **${k.name}**` });
+
+                // Cannot transfer to yourself
+                if (targetUser.id === message.author.id) {
+                    return message.reply({ content: 'You cannot transfer leadership to yourself.', allowedMentions: { repliedUser: false } });
+                }
+
+                // Check if target is in this kingdom (member or leader)
+                const isMember = targetUser.roles.cache.has(kingdom.memberRoleId);
+                const isLeader = targetUser.roles.cache.has(kingdom.leaderRoleId);
+
+                if (!isMember && !isLeader) {
+                    return message.reply({ content: `${targetUser.displayName} must be a member of **${kingdom.name}** first.`, allowedMentions: { repliedUser: false } });
+                }
+
+                if (isLeader) {
+                    return message.reply({ content: `${targetUser.displayName} is already a ruler of **${kingdom.name}**.`, allowedMentions: { repliedUser: false } });
+                }
+
+                try {
+                    // Give target the leader role
+                    await targetUser.roles.add(kingdom.leaderRoleId, `Leadership transferred from ${message.author.tag}`);
+                    // Remove member role from target (they're now leader)
+                    await targetUser.roles.remove(kingdom.memberRoleId, 'Promoted to leader').catch(() => {});
+                    
+                    // Remove leader role from current user
+                    await message.member.roles.remove(kingdom.leaderRoleId, `Transferred leadership to ${targetUser.user.tag}`);
+                    // Add member role to current user
+                    await message.member.roles.add(kingdom.memberRoleId, 'Demoted to member after transfer').catch(() => {});
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('Leadership Transferred')
+                        .setColor(kingdom.color)
+                        .setDescription(`Leadership of **${kingdom.name}** has been transferred to ${targetUser}`)
+                        .addFields(
+                            { name: 'New Ruler', value: `${targetUser}`, inline: true },
+                            { name: 'Previous Ruler', value: `${message.author}`, inline: true }
+                        )
+                        .setFooter({ text: 'NewLife SMP' })
+                        .setTimestamp();
+
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                } catch (error) {
+                    console.error('Error transferring kingdom leadership:', error);
+                    return message.reply({ content: 'Failed to transfer leadership. Check bot permissions.', allowedMentions: { repliedUser: false } });
+                }
             }
 
-            return message.reply({ embeds: [createErrorEmbed('Unknown', 'Unknown subcommand. Use `!kingdom help`.')] });
+            // Unknown subcommand
+            return message.reply({ content: 'Unknown subcommand. Use `!kingdom help` for available commands.', allowedMentions: { repliedUser: false } });
         }
     }
 };
 
-module.exports = { 
-    name: 'Kingdoms', 
-    description: 'Discord-side kingdom management', 
-    commands,
-    slashCommands: [] // No slash commands - Discord side uses prefix
+module.exports = {
+    name: 'Kingdoms',
+    description: 'Kingdom management system',
+    slashCommands,
+    commands
 };

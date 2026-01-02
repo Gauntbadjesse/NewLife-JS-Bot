@@ -7,7 +7,7 @@ const { randomUUID } = require('crypto');
 const Infraction = require('../database/models/Infraction');
 const { getNextCaseNumber } = require('../database/caseCounter');
 const { isAdmin, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
-const { sendDM } = require('../utils/dm');
+const { sendDm } = require('../utils/dm');
 const { logError } = require('../utils/errorLogger');
 
 // Channel to post infractions
@@ -176,12 +176,12 @@ const slashCommands = [
                     .setFooter({ text: `Issued by ${issuerNickname}` })
                     .setTimestamp();
                 
-                const dmSent = await sendDM(targetUser, { embeds: [dmEmbed] });
+                const dmResult = await sendDm(client, targetUser.id, { embeds: [dmEmbed] });
                 
                 // Confirm to issuer
                 const typeConfig = INFRACTION_TYPES[type];
                 await interaction.editReply({
-                    content: `**${typeConfig.label}** issued to ${targetUser} (Case #${caseNumber})${dmSent ? '' : '\nNote: Could not DM user.'}`
+                    content: `**${typeConfig.label}** issued to ${targetUser} (Case #${caseNumber})${dmResult.success ? '' : '\nNote: Could not DM user.'}`
                 });
                 
             } catch (error) {
