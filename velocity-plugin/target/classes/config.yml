@@ -5,7 +5,7 @@ api:
   # The URL of your Discord bot's Link API
   url: "http://localhost:3001"
   # API key for authentication (must match LINK_API_KEY in bot .env)
-  key: "jniuhiuf4yt873ghf87h39cn983hf"
+  key: "your-secure-api-key-here"
   # Request timeout in milliseconds
   timeout: 5000
 

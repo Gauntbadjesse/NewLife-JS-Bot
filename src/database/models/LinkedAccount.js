@@ -22,8 +22,6 @@ const linkedAccountSchema = new mongoose.Schema({
 
 // Compound index to prevent duplicate links
 linkedAccountSchema.index({ discordId: 1, uuid: 1 }, { unique: true });
-linkedAccountSchema.index({ discordId: 1 });
-linkedAccountSchema.index({ uuid: 1 });
 linkedAccountSchema.index({ minecraftUsername: 1 });
 
 module.exports = mongoose.model('LinkedAccount', linkedAccountSchema);
