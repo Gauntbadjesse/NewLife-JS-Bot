@@ -140,7 +140,7 @@ const slashCommands = [
                     // Create leader role (positioned higher than member role)
                     const leaderRole = await interaction.guild.roles.create({
                         name: `${name} Ruler`,
-                        color: colorInt,
+                        colors: colorInt,
                         mentionable: leaderPing,
                         position: targetPosition,
                         reason: `Kingdom created by ${interaction.user.tag}`
@@ -149,7 +149,7 @@ const slashCommands = [
                     // Create member role (positioned below leader role)
                     const memberRole = await interaction.guild.roles.create({
                         name: `${name} Member`,
-                        color: colorInt,
+                        colors: colorInt,
                         mentionable: false,
                         position: targetPosition - 1,
                         reason: `Kingdom created by ${interaction.user.tag}`
