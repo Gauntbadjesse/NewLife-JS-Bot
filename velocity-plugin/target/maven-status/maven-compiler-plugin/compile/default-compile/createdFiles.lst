@@ -1,0 +1,6 @@
+com/newlifesmp/link/LinkStatusCommand.class
+com/newlifesmp/link/Config.class
+com/newlifesmp/link/NewLifeLink.class
+com/newlifesmp/link/LinkApiClient.class
+com/newlifesmp/link/LinkApiClient$LinkResult.class
+com/newlifesmp/link/PlayerJoinListener.class

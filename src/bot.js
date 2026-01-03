@@ -11,6 +11,7 @@ const { connectDatabase } = require('./database/connection');
 const { initWatcher } = require('./database/watcher');
 const { logCommand, sendCommandLogToChannel } = require('./utils/commandLogger');
 const { initErrorLogger, logError } = require('./utils/errorLogger');
+const { startApiServer } = require('./api/server');
 const emojis = require('./utils/emojis');
 
 // Create Discord client with necessary intents
@@ -350,6 +351,14 @@ async function main() {
         await connectDatabase();
         await loadCogs();
         await registerSlashCommands();
+        
+        // Start the Link API server
+        try {
+            await startApiServer();
+        } catch (apiErr) {
+            console.error('Failed to start Link API server:', apiErr);
+        }
+        
         await client.login(process.env.DISCORD_TOKEN);
     } catch (error) {
         console.error(`${emojis.CROSS} Failed to start bot:`, error);
