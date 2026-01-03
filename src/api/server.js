@@ -53,16 +53,26 @@ app.get('/api/linked/:uuid', async (req, res) => {
         }
         
         // Normalize UUID (remove dashes if present)
-        const normalizedUuid = uuid.replace(/-/g, '');
+        const normalizedUuid = uuid.replace(/-/g, '').toLowerCase();
+        const uuidWithDashes = uuid.toLowerCase();
         
-        // Check for linked account
+        console.log(`[API] Checking link for UUID: ${uuid}`);
+        console.log(`[API] Normalized: ${normalizedUuid}`);
+        
+        // Check for linked account - try multiple formats
         const linked = await LinkedAccount.findOne({
             $or: [
                 { uuid: normalizedUuid },
+                { uuid: uuidWithDashes },
                 { uuid: uuid },
                 { uuid: { $regex: new RegExp(`^${normalizedUuid}$`, 'i') } }
             ]
         });
+        
+        console.log(`[API] Found linked account: ${linked ? 'yes' : 'no'}`);
+        if (linked) {
+            console.log(`[API] Stored UUID: ${linked.uuid}, Username: ${linked.minecraftUsername}`);
+        }
         
         if (linked) {
             return res.json({
