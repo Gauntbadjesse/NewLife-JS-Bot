@@ -127,7 +127,37 @@ client.once('ready', async () => {
     } catch (e) {
         console.error('Failed to refresh member counter on startup:', e);
     }
+
+    // Initialize timed close processor for tickets
+    try {
+        const { initTimedCloseProcessor } = require('./cogs/tickets');
+        initTimedCloseProcessor(client);
+    } catch (e) {
+        console.error('Failed to initialize timed close processor:', e);
+    }
+
+    // Schedule weekly whitelist stats (every Sunday at midnight UTC)
+    scheduleWeeklyWhitelistStats(client);
 });
+
+/**
+ * Schedule weekly whitelist stats to be sent to owner
+ */
+function scheduleWeeklyWhitelistStats(client) {
+    const { sendWeeklyStatsToOwner, getWeekStart } = require('./cogs/whitelist');
+    
+    const checkAndSend = () => {
+        const now = new Date();
+        // Check if it's Sunday and between 00:00-00:05 UTC
+        if (now.getUTCDay() === 0 && now.getUTCHours() === 0 && now.getUTCMinutes() < 5) {
+            sendWeeklyStatsToOwner(client);
+        }
+    };
+    
+    // Check every 5 minutes
+    setInterval(checkAndSend, 5 * 60 * 1000);
+    console.log(' Weekly whitelist stats scheduler initialized');
+}
 
 // Prefix command handler
 client.on('messageCreate', async (message) => {

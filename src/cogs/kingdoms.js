@@ -75,18 +75,10 @@ const slashCommands = [
             .setDescription('Kingdom management')
             .addSubcommand(sub => sub
                 .setName('create')
-                .setDescription('Create a new kingdom')
+                .setDescription('Create a new kingdom (auto-creates roles)')
                 .addStringOption(opt => opt
                     .setName('name')
                     .setDescription('Kingdom name')
-                    .setRequired(true))
-                .addRoleOption(opt => opt
-                    .setName('member_role')
-                    .setDescription('Member role for the kingdom')
-                    .setRequired(true))
-                .addRoleOption(opt => opt
-                    .setName('leader_role')
-                    .setDescription('Leader/Ruler role for the kingdom')
                     .setRequired(true))
                 .addBooleanOption(opt => opt
                     .setName('leader_ping')
@@ -120,8 +112,6 @@ const slashCommands = [
             // CREATE
             if (sub === 'create') {
                 const name = interaction.options.getString('name').trim();
-                const memberRole = interaction.options.getRole('member_role');
-                const leaderRole = interaction.options.getRole('leader_role');
                 const leaderPing = interaction.options.getBoolean('leader_ping');
                 const color = interaction.options.getString('color').trim();
 
@@ -139,6 +129,25 @@ const slashCommands = [
                 await interaction.deferReply({ ephemeral: true });
 
                 try {
+                    // Create the roles automatically
+                    const colorInt = parseInt(color.replace('#', ''), 16);
+                    
+                    // Create leader role
+                    const leaderRole = await interaction.guild.roles.create({
+                        name: `${name} Ruler`,
+                        color: colorInt,
+                        mentionable: leaderPing,
+                        reason: `Kingdom created by ${interaction.user.tag}`
+                    });
+
+                    // Create member role
+                    const memberRole = await interaction.guild.roles.create({
+                        name: `${name} Member`,
+                        color: colorInt,
+                        mentionable: false,
+                        reason: `Kingdom created by ${interaction.user.tag}`
+                    });
+
                     const kingdom = new Kingdom({
                         guildId: interaction.guild.id,
                         name: name,
@@ -185,8 +194,19 @@ const slashCommands = [
                 await interaction.deferReply({ ephemeral: true });
 
                 try {
+                    // Delete the roles
+                    const memberRole = interaction.guild.roles.cache.get(kingdom.memberRoleId);
+                    const leaderRole = interaction.guild.roles.cache.get(kingdom.leaderRoleId);
+                    
+                    if (memberRole) {
+                        await memberRole.delete(`Kingdom ${kingdom.name} deleted by ${interaction.user.tag}`).catch(() => {});
+                    }
+                    if (leaderRole) {
+                        await leaderRole.delete(`Kingdom ${kingdom.name} deleted by ${interaction.user.tag}`).catch(() => {});
+                    }
+                    
                     await Kingdom.deleteOne({ _id: kingdom._id });
-                    return interaction.editReply({ content: `Kingdom **${kingdom.name}** has been deleted.` });
+                    return interaction.editReply({ content: `Kingdom **${kingdom.name}** and its roles have been deleted.` });
                 } catch (error) {
                     console.error('Error deleting kingdom:', error);
                     return interaction.editReply({ content: `Failed to delete kingdom: ${error.message}` });

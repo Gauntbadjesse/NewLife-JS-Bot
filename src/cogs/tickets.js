@@ -29,6 +29,7 @@ const {
 } = require('../utils/permissions');
 const { createErrorEmbed, createSuccessEmbed, getEmbedColor } = require('../utils/embeds');
 const Application = require('../database/models/Application');
+const TimedClose = require('../database/models/TimedClose');
 const { randomUUID } = require('crypto');
 const { getNextCaseNumber } = require('../database/caseCounter');
 
@@ -651,6 +652,25 @@ const slashCommands = [
 
             const closeTime = new Date(Date.now() + ms);
 
+            // Store in database for persistence across restarts
+            try {
+                await TimedClose.findOneAndUpdate(
+                    { channelId: interaction.channel.id },
+                    {
+                        channelId: interaction.channel.id,
+                        guildId: interaction.guild.id,
+                        closeAt: closeTime,
+                        reason: reason,
+                        scheduledBy: interaction.user.id,
+                        scheduledByTag: interaction.user.tag,
+                        createdAt: new Date()
+                    },
+                    { upsert: true, new: true }
+                );
+            } catch (err) {
+                console.error('Failed to save timed close:', err);
+            }
+
             await interaction.reply({
                 embeds: [new EmbedBuilder()
                     .setColor(0xFFA500)
@@ -663,15 +683,6 @@ const slashCommands = [
                     .setTimestamp()
                 ]
             });
-
-            // Schedule close
-            setTimeout(async () => {
-                // Check if channel still exists
-                const channel = await client.channels.fetch(interaction.channel.id).catch(() => null);
-                if (channel) {
-                    await closeTicket(channel, interaction.user, reason, client);
-                }
-            }, ms);
         }
     }
 ];
@@ -784,11 +795,55 @@ async function handleModalSubmit(interaction) {
     }
 }
 
+/**
+ * Process pending timed closes from database
+ * Should be called on bot startup and periodically
+ */
+async function processTimedCloses(client) {
+    try {
+        const now = new Date();
+        const pendingCloses = await TimedClose.find({ closeAt: { $lte: now } });
+        
+        for (const tc of pendingCloses) {
+            try {
+                const channel = await client.channels.fetch(tc.channelId).catch(() => null);
+                if (channel) {
+                    // Get the user who scheduled the close
+                    const user = await client.users.fetch(tc.scheduledBy).catch(() => null);
+                    await closeTicket(channel, user || { id: tc.scheduledBy, tag: tc.scheduledByTag || 'Unknown' }, tc.reason, client);
+                }
+                // Remove from database
+                await TimedClose.deleteOne({ _id: tc._id });
+            } catch (err) {
+                console.error(`Failed to process timed close for channel ${tc.channelId}:`, err);
+                // Remove invalid entries
+                await TimedClose.deleteOne({ _id: tc._id });
+            }
+        }
+    } catch (err) {
+        console.error('Error processing timed closes:', err);
+    }
+}
+
+/**
+ * Initialize timed close processor
+ * Checks every 30 seconds for tickets that need to be closed
+ */
+function initTimedCloseProcessor(client) {
+    // Process immediately on startup
+    processTimedCloses(client);
+    
+    // Then check every 30 seconds
+    setInterval(() => processTimedCloses(client), 30 * 1000);
+    console.log(' Timed close processor initialized');
+}
+
 module.exports = {
     name: 'Tickets',
     description: 'Support ticket system',
     commands,
     slashCommands,
     handleButton,
-    handleModalSubmit
+    handleModalSubmit,
+    initTimedCloseProcessor
 };

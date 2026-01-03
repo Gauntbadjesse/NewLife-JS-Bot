@@ -383,28 +383,6 @@ const commands = {
             await message.channel.send({ content: `Linked ${icon} **${mcName}** (${platform}) to <@${discordId}>.`, allowedMentions: { repliedUser: false } });
             try { await message.delete(); } catch (e) { /* ignore */ }
         }
-    },
-
-    // !unlink <discord> <minecraft> - staff remove a link
-    unlink: {
-        name: 'unlink',
-        description: 'Remove a linked Minecraft account from a Discord user (staff-only)',
-        usage: '!unlink <@user|discordId> <minecraftUsername|uuid>',
-        async execute(message, args, client) {
-            if (!(isAdmin(message.member) || isSupervisor(message.member) || isManagement(message.member) || isOwner(message.member))) return message.reply({ content: 'Permission denied.', allowedMentions: { repliedUser: false } });
-            if (!args[0] || !args[1]) return message.reply({ content: 'Usage: !unlink <@user|discordId> <minecraftUsername|uuid>', allowedMentions: { repliedUser: false } });
-
-            const mentionMatch = args[0].match(/<@!?(\d+)>/);
-            const discordId = mentionMatch ? mentionMatch[1] : args[0];
-            const target = args[1];
-
-            // Try to resolve by username case-insensitive or uuid
-            const res = await LinkedAccount.findOneAndDelete({ discordId: String(discordId), $or: [ { minecraftUsername: { $regex: new RegExp(`^${target}$`, 'i') } }, { uuid: target } ] });
-            if (!res) return message.reply({ content: 'No matching linked account found.', allowedMentions: { repliedUser: false } });
-
-            await message.channel.send({ content: `Removed link for **${res.minecraftUsername}** (uuid: ${res.uuid}) from <@${discordId}>.`, allowedMentions: { repliedUser: false } });
-            try { await message.delete(); } catch (e) { /* ignore */ }
-        }
     }
 };
 
