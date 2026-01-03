@@ -1,0 +1,9 @@
+{
+  "id": "newlife-link",
+  "name": "NewLife Link",
+  "version": "1.0.0",
+  "description": "Account linking verification for NewLife SMP",
+  "authors": ["NewLife SMP"],
+  "main": "com.newlifesmp.link.NewLifeLink",
+  "dependencies": []
+}

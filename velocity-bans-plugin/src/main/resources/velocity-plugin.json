@@ -1,0 +1,9 @@
+{
+  "id": "newlife-bans",
+  "name": "NewLife Bans",
+  "version": "1.0.0",
+  "description": "Ban enforcement for NewLife SMP",
+  "authors": ["NewLife SMP"],
+  "main": "com.newlifesmp.bans.NewLifeBans",
+  "dependencies": []
+}
