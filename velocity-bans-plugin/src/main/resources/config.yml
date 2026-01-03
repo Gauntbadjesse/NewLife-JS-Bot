@@ -1,0 +1,71 @@
+# NewLife Bans Configuration
+
+# API Settings
+api:
+  # The URL of your Discord bot's API
+  url: "http://193.218.34.214:3001"
+  # API key for authentication (must match LINK_API_KEY in bot .env)
+  key: "yhweiughwiufheowinfdoweihfoweih9832597gr8974tg97fg9h3h49f"
+  # Request timeout in milliseconds
+  timeout: 5000
+
+# Messages (supports MiniMessage format)
+# See: https://docs.advntr.dev/minimessage/format.html
+#
+# Placeholders:
+# {reason} - The ban reason
+# {duration} - The ban duration (e.g., "7 days")
+# {expires} - When the ban expires (or "Never (Permanent)")
+# {case} - The case number
+# {staff} - Who issued the ban
+messages:
+  # Kick message shown to banned players
+  banned: |
+    <dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    <gradient:#FF4444:#FF6B6B><bold>YOU ARE BANNED</bold></gradient>
+
+    <gray>You have been banned from
+    <gradient:#10b981:#3b82f6>NewLife SMP</gradient>.
+
+    <white>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    <yellow><bold>BAN DETAILS:</bold>
+
+    <gray>Reason: <white>{reason}
+    <gray>Duration: <white>{duration}
+    <gray>Expires: <white>{expires}
+    <gray>Case: <white>#{case}
+
+    <white>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    <aqua><bold>APPEAL:</bold>
+
+    <gray>If you believe this ban was issued in error,
+    <gray>you may appeal on our Discord server:
+    <click:open_url:'https://discord.gg/YKhHRCgaSv'><aqua><underlined>discord.gg/YKhHRCgaSv</underlined></aqua></click>
+
+    <dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Message shown when API is unavailable
+  api-error: |
+    <dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    <gradient:#FF6B6B:#FFE66D><bold>CONNECTION ERROR</bold></gradient>
+
+    <gray>Unable to verify your ban status.
+    <gray>Please try again in a moment.
+
+    <yellow>If this persists, contact staff on Discord:
+    <click:open_url:'https://discord.gg/YKhHRCgaSv'><aqua><underlined>discord.gg/YKhHRCgaSv</underlined></aqua></click>
+
+    <dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Discord invite URL
+discord-invite: "https://discord.gg/YKhHRCgaSv"
+
+# Bypass permission - players with this permission skip the ban check
+bypass-permission: "newlife.bans.bypass"
+
+# Debug mode - enables verbose logging
+debug: false

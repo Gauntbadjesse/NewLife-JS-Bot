@@ -289,22 +289,62 @@ client.on('guildMemberAdd', async (member) => {
 
         // Add member role to new users
         try {
-            await member.roles.add(memberRoleId, 'Auto member role on join');
+            const role = member.guild.roles.cache.get(memberRoleId);
+            if (role) {
+                await member.roles.add(role, 'Auto member role on join');
+                console.log(`[MemberJoin] Added member role to ${member.user.tag}`);
+            } else {
+                console.error(`[MemberJoin] Member role ${memberRoleId} not found in cache`);
+            }
         } catch (e) {
+            console.error(`[MemberJoin] Failed to add role to ${member.user.tag}:`, e.message);
             await logError('guildMemberAdd: addRole', e, { member: member.user.tag });
         }
 
         // Update member counter channel
         try {
-            const ch = await member.guild.channels.fetch(memberCounterChannel).catch(() => null);
-            if (ch && typeof ch.setName === 'function') {
-                await ch.setName(`Members: ${member.guild.memberCount}`).catch(() => {});
+            const ch = member.guild.channels.cache.get(memberCounterChannel) || 
+                       await member.guild.channels.fetch(memberCounterChannel).catch(() => null);
+            if (ch && ch.type === 2) { // Voice channel
+                const newName = `Members: ${member.guild.memberCount}`;
+                await ch.setName(newName);
+                console.log(`[MemberJoin] Updated counter to ${member.guild.memberCount}`);
+            } else {
+                console.error(`[MemberJoin] Counter channel ${memberCounterChannel} not found or not a voice channel`);
             }
         } catch (e) {
+            console.error(`[MemberJoin] Failed to update counter:`, e.message);
             await logError('guildMemberAdd: counter', e, { member: member.user.tag });
         }
     } catch (e) {
         await logError('guildMemberAdd', e, { member: member?.user?.tag || 'unknown' });
+    }
+});
+
+// Update member counter when someone leaves
+client.on('guildMemberRemove', async (member) => {
+    try {
+        const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
+        const guildId = process.env.GUILD_ID;
+        
+        if (guildId && member.guild && String(member.guild.id) !== String(guildId)) return;
+        if (!member.guild) return;
+
+        // Update member counter channel
+        try {
+            const ch = member.guild.channels.cache.get(memberCounterChannel) || 
+                       await member.guild.channels.fetch(memberCounterChannel).catch(() => null);
+            if (ch && ch.type === 2) { // Voice channel
+                const newName = `Members: ${member.guild.memberCount}`;
+                await ch.setName(newName);
+                console.log(`[MemberLeave] Updated counter to ${member.guild.memberCount}`);
+            }
+        } catch (e) {
+            console.error(`[MemberLeave] Failed to update counter:`, e.message);
+            await logError('guildMemberRemove: counter', e, { member: member.user?.tag || 'unknown' });
+        }
+    } catch (e) {
+        await logError('guildMemberRemove', e, { member: member?.user?.tag || 'unknown' });
     }
 });
 

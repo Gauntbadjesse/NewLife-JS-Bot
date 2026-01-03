@@ -1,11 +1,12 @@
 /**
  * API Server
  * Provides REST endpoints for Velocity proxy plugin communication
- * Used for account linking verification and player authentication
+ * Used for account linking verification, ban checks, and player authentication
  */
 
 const express = require('express');
 const LinkedAccount = require('../database/models/LinkedAccount');
+const ServerBan = require('../database/models/ServerBan');
 
 const app = express();
 app.use(express.json());
@@ -249,6 +250,94 @@ app.get('/api/health', (req, res) => {
         timestamp: new Date().toISOString(),
         service: 'NewLife Link API'
     });
+});
+
+// ==================== BAN API ENDPOINTS ====================
+
+/**
+ * GET /api/ban/:uuid
+ * Check if a player is banned by UUID
+ * Returns ban details if banned, or { banned: false } if not
+ */
+app.get('/api/ban/:uuid', async (req, res) => {
+    try {
+        const { uuid } = req.params;
+        
+        if (!uuid) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'UUID required' 
+            });
+        }
+        
+        const normalizedUuid = uuid.replace(/-/g, '');
+        
+        // Find active ban for this UUID
+        const ban = await ServerBan.findActiveBan(normalizedUuid);
+        
+        if (ban) {
+            return res.json({
+                success: true,
+                banned: true,
+                data: {
+                    caseNumber: ban.caseNumber,
+                    reason: ban.reason,
+                    duration: ban.duration,
+                    isPermanent: ban.isPermanent,
+                    bannedAt: ban.bannedAt,
+                    expiresAt: ban.expiresAt,
+                    staffTag: ban.staffTag,
+                    remaining: ban.getRemainingTime()
+                }
+            });
+        }
+        
+        return res.json({
+            success: true,
+            banned: false
+        });
+        
+    } catch (error) {
+        console.error('API Error (GET /api/ban/:uuid):', error);
+        return res.status(500).json({ 
+            success: false, 
+            error: 'Internal server error' 
+        });
+    }
+});
+
+/**
+ * GET /api/bans/active
+ * Get all active bans (for sync/admin purposes)
+ */
+app.get('/api/bans/active', async (req, res) => {
+    try {
+        const bans = await ServerBan.find({ active: true }).sort({ bannedAt: -1 }).limit(100);
+        
+        return res.json({
+            success: true,
+            count: bans.length,
+            bans: bans.map(b => ({
+                caseNumber: b.caseNumber,
+                primaryUsername: b.primaryUsername,
+                primaryUuid: b.primaryUuid,
+                bannedUuids: b.bannedUuids,
+                reason: b.reason,
+                duration: b.duration,
+                isPermanent: b.isPermanent,
+                bannedAt: b.bannedAt,
+                expiresAt: b.expiresAt,
+                staffTag: b.staffTag
+            }))
+        });
+        
+    } catch (error) {
+        console.error('API Error (GET /api/bans/active):', error);
+        return res.status(500).json({ 
+            success: false, 
+            error: 'Internal server error' 
+        });
+    }
 });
 
 /**

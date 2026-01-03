@@ -132,19 +132,26 @@ const slashCommands = [
                     // Create the roles automatically
                     const colorInt = parseInt(color.replace('#', ''), 16);
                     
-                    // Create leader role
+                    // Get the member role to position kingdom roles below it
+                    const MEMBER_ROLE_ID = process.env.MEMBER_ROLE_ID || '1374421919373328434';
+                    const serverMemberRole = interaction.guild.roles.cache.get(MEMBER_ROLE_ID);
+                    const targetPosition = serverMemberRole ? serverMemberRole.position - 1 : 1;
+                    
+                    // Create leader role (positioned higher than member role)
                     const leaderRole = await interaction.guild.roles.create({
                         name: `${name} Ruler`,
                         color: colorInt,
                         mentionable: leaderPing,
+                        position: targetPosition,
                         reason: `Kingdom created by ${interaction.user.tag}`
                     });
 
-                    // Create member role
+                    // Create member role (positioned below leader role)
                     const memberRole = await interaction.guild.roles.create({
                         name: `${name} Member`,
                         color: colorInt,
                         mentionable: false,
+                        position: targetPosition - 1,
                         reason: `Kingdom created by ${interaction.user.tag}`
                     });
 
