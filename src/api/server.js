@@ -52,20 +52,26 @@ app.get('/api/linked/:uuid', async (req, res) => {
             });
         }
         
-        // Normalize UUID (remove dashes if present)
+        // Normalize UUID - remove dashes and lowercase
         const normalizedUuid = uuid.replace(/-/g, '').toLowerCase();
-        const uuidWithDashes = uuid.toLowerCase();
+        
+        // Also create version with dashes (standard format)
+        const uuidWithDashes = normalizedUuid.replace(
+            /^(.{8})(.{4})(.{4})(.{4})(.{12})$/,
+            '$1-$2-$3-$4-$5'
+        );
         
         console.log(`[API] Checking link for UUID: ${uuid}`);
         console.log(`[API] Normalized: ${normalizedUuid}`);
+        console.log(`[API] With dashes: ${uuidWithDashes}`);
         
         // Check for linked account - try multiple formats
         const linked = await LinkedAccount.findOne({
             $or: [
                 { uuid: normalizedUuid },
                 { uuid: uuidWithDashes },
-                { uuid: uuid },
-                { uuid: { $regex: new RegExp(`^${normalizedUuid}$`, 'i') } }
+                { uuid: uuid.toLowerCase() },
+                { uuid: uuid }
             ]
         });
         
