@@ -22,6 +22,7 @@ public class Config {
     private String discordInvite;
     private String bypassPermission;
     private boolean debug;
+    private boolean failOpen;
 
     public Config(Path configPath, Logger logger) throws IOException {
         this.configPath = configPath;
@@ -50,6 +51,7 @@ public class Config {
             this.discordInvite = (String) data.getOrDefault("discord-invite", "https://discord.gg/YKhHRCgaSv");
             this.bypassPermission = (String) data.getOrDefault("bypass-permission", "newlife.link.bypass");
             this.debug = (Boolean) data.getOrDefault("debug", false);
+            this.failOpen = (Boolean) data.getOrDefault("fail-open", true);
 
             if (debug) {
                 logger.info("[DEBUG] Config loaded:");
@@ -137,5 +139,9 @@ public class Config {
 
     public boolean isDebug() {
         return debug;
+    }
+
+    public boolean isFailOpen() {
+        return failOpen;
     }
 }

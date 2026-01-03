@@ -61,5 +61,9 @@ discord-invite: "https://discord.gg/YKhHRCgaSv"
 # Bypass permission - players with this permission skip the link check
 bypass-permission: "newlife.link.bypass"
 
+# Fail-open mode - if true, allow players through when API is unavailable
+# Set to false to block players when API is down (more secure, but risky)
+fail-open: true
+
 # Debug mode - enables verbose logging
 debug: false

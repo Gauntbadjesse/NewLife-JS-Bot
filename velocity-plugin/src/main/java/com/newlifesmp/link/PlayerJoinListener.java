@@ -82,18 +82,30 @@ public class PlayerJoinListener {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             plugin.getLogger().error("Link check interrupted for {}", username);
-            Component kickComponent = miniMessage.deserialize(config.getApiErrorMessage());
-            event.setResult(ResultedEvent.ComponentResult.denied(kickComponent));
+            if (!config.isFailOpen()) {
+                Component kickComponent = miniMessage.deserialize(config.getApiErrorMessage());
+                event.setResult(ResultedEvent.ComponentResult.denied(kickComponent));
+            } else {
+                plugin.getLogger().warn("Fail-open enabled, allowing {} through", username);
+            }
             
         } catch (ExecutionException e) {
             plugin.getLogger().error("Link check execution failed for {}", username, e.getCause());
-            Component kickComponent = miniMessage.deserialize(config.getApiErrorMessage());
-            event.setResult(ResultedEvent.ComponentResult.denied(kickComponent));
+            if (!config.isFailOpen()) {
+                Component kickComponent = miniMessage.deserialize(config.getApiErrorMessage());
+                event.setResult(ResultedEvent.ComponentResult.denied(kickComponent));
+            } else {
+                plugin.getLogger().warn("Fail-open enabled, allowing {} through", username);
+            }
             
         } catch (TimeoutException e) {
             plugin.getLogger().warn("Link check timed out for {}", username);
-            Component kickComponent = miniMessage.deserialize(config.getApiErrorMessage());
-            event.setResult(ResultedEvent.ComponentResult.denied(kickComponent));
+            if (!config.isFailOpen()) {
+                Component kickComponent = miniMessage.deserialize(config.getApiErrorMessage());
+                event.setResult(ResultedEvent.ComponentResult.denied(kickComponent));
+            } else {
+                plugin.getLogger().warn("Fail-open enabled, allowing {} through", username);
+            }
         }
     }
 }

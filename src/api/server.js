@@ -14,6 +14,9 @@ app.use(express.json());
 // API Key middleware for authentication
 const API_KEY = process.env.LINK_API_KEY || 'your-secure-api-key-here';
 
+// Log the API key on startup (first 8 chars only for security)
+console.log(`[API] Using API key starting with: ${API_KEY.substring(0, 8)}...`);
+
 function authenticate(req, res, next) {
     const authHeader = req.headers['authorization'];
     const apiKey = authHeader && authHeader.startsWith('Bearer ') 
@@ -21,6 +24,7 @@ function authenticate(req, res, next) {
         : req.headers['x-api-key'];
     
     if (!apiKey || apiKey !== API_KEY) {
+        console.log(`[API] Auth failed - received key starting with: ${apiKey ? apiKey.substring(0, 8) + '...' : 'none'}`);
         return res.status(401).json({ 
             success: false, 
             error: 'Unauthorized' 
