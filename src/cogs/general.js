@@ -85,6 +85,15 @@ const commands = {
             ];
             embed.addFields({ name: 'General Commands', value: everyoneCommands.join('\n'), inline: false });
 
+            // Staff+ commands
+            if (isStaff(member)) {
+                const staffCommands = [
+                    `\`${prefix}embed <rules|guru>\` - Send a preset embed`,
+                    `\`${prefix}dm guru @user\` - DM the guru guide to a user`
+                ];
+                embed.addFields({ name: 'Staff Commands', value: staffCommands.join('\n'), inline: false });
+            }
+
             // Moderator+ commands
             if (isModerator(member)) {
                 const modCommands = [
