@@ -69,7 +69,7 @@ const commands = {
                 });
             }
 
-            // Build permission-filtered help
+            // Build permission-filtered help - ONLY prefix commands
             const embed = new EmbedBuilder()
                 .setColor(getEmbedColor())
                 .setTitle('NewLife Management Commands')
@@ -81,6 +81,7 @@ const commands = {
             const everyoneCommands = [
                 `\`${prefix}help [command]\` - Show this help menu`,
                 `\`${prefix}ping\` - Check bot latency`,
+                `\`${prefix}m [role]\` - Show online members or members in a role`,
                 `\`${prefix}kingdom\` - Kingdom management`
             ];
             embed.addFields({ name: 'General Commands', value: everyoneCommands.join('\n'), inline: false });
@@ -89,7 +90,10 @@ const commands = {
             if (isStaff(member)) {
                 const staffCommands = [
                     `\`${prefix}embed <rules|guru>\` - Send a preset embed`,
-                    `\`${prefix}dm guru @user\` - DM the guru guide to a user`
+                    `\`${prefix}dm guru @user\` - DM the guru guide to a user`,
+                    `\`${prefix}rules quiz @user\` - Send the rules quiz to a user`,
+                    `\`${prefix}history <player>\` - Show player's full history`,
+                    `\`${prefix}stats\` - Show database statistics`
                 ];
                 embed.addFields({ name: 'Staff Commands', value: staffCommands.join('\n'), inline: false });
             }
@@ -97,14 +101,11 @@ const commands = {
             // Moderator+ commands
             if (isModerator(member)) {
                 const modCommands = [
-                    `\`${prefix}warn <case_id>\` - Look up a warning by ID`,
-                    `\`${prefix}warnings <player> [page]\` - List player warnings`,
-                    `\`${prefix}activewarnings [page]\` - List all active warnings`,
-                    `\`${prefix}recentwarnings [count]\` - Show recent warnings`,
-                    `\`${prefix}punishwarn <player> <reason>\` - Warn a player via RCON`,
-                    `\`${prefix}history <player>\` - Show player's full history`,
-                    `\`${prefix}lookup <case_id>\` - Look up any case by ID`,
-                    `\`${prefix}checkban <player>\` - Check if player is banned`
+                    `\`${prefix}mute <user> [duration] [reason]\` - Timeout a member`,
+                    `\`${prefix}unmute <user>\` - Remove timeout from a member`,
+                    `\`${prefix}case <id>\` - Look up a case by ID`,
+                    `\`${prefix}pardon <case_id>\` - Pardon (remove) a case`,
+                    `\`${prefix}lookup <user>\` - Show user moderation stats`
                 ];
                 embed.addFields({ name: 'Moderator Commands', value: modCommands.join('\n'), inline: false });
             }
@@ -112,12 +113,15 @@ const commands = {
             // Admin+ commands
             if (isAdmin(member)) {
                 const adminCommands = [
-                    `\`${prefix}ban <case_id>\` - Look up a ban by ID`,
-                    `\`${prefix}bans <player> [page]\` - List player bans`,
-                    `\`${prefix}activebans [page]\` - List all active bans`,
-                    `\`${prefix}recentbans [count]\` - Show recent bans`,
-                    `\`${prefix}punishban <player> <reason>\` - Ban a player via RCON`,
-                    `\`${prefix}stats\` - Show database statistics`
+                    `\`${prefix}ban <user> <reason>\` - Ban a Discord member`,
+                    `\`${prefix}unban <userId>\` - Unban a user`,
+                    `\`${prefix}kick <user> <reason>\` - Kick a Discord member`,
+                    `\`${prefix}lock\` - Lock the current channel`,
+                    `\`${prefix}unlock\` - Unlock the current channel`,
+                    `\`${prefix}linked <@user|mc>\` - Show linked accounts`,
+                    `\`${prefix}link <@user> <java|bedrock> <mc>\` - Manually link an account`,
+                    `\`${prefix}postverify [channel]\` - Post the verification embed`,
+                    `\`${prefix}memberupdate\` - Update the member counter`
                 ];
                 embed.addFields({ name: 'Admin Commands', value: adminCommands.join('\n'), inline: false });
             }
@@ -125,7 +129,10 @@ const commands = {
             // Owner commands
             if (isOwner(member)) {
                 const ownerCommands = [
-                    `\`${prefix}update\` - Pull latest from git and restart`
+                    `\`${prefix}update\` - Pull latest from git and restart`,
+                    `\`${prefix}addkingdoms\` - Add preset kingdoms to database`,
+                    `\`${prefix}temp2\` - Add member role to all users`,
+                    `\`${prefix}test1\` - Deny view access to unverified role`
                 ];
                 embed.addFields({ name: 'Owner Commands', value: ownerCommands.join('\n'), inline: false });
             }
