@@ -10,6 +10,7 @@ const LinkedAccount = require('../database/models/LinkedAccount');
 const { getNextCaseNumber } = require('../database/caseCounter');
 const { isStaff, isAdmin, isModerator } = require('../utils/permissions');
 const { sendDm } = require('../utils/dm');
+const { executeRcon } = require('../utils/rcon');
 
 // Environment config
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || process.env.BAN_LOG_CHANNEL_ID;
@@ -21,6 +22,13 @@ const EMBED_COLOR = process.env.EMBED_COLOR || '#10b981';
 function getEmbedColor() {
     const color = EMBED_COLOR;
     return color.startsWith('#') ? parseInt(color.slice(1), 16) : parseInt(color, 16);
+}
+
+/**
+ * Normalize UUID - remove dashes and lowercase
+ */
+function normalizeUuid(uuid) {
+    return uuid.replace(/-/g, '').toLowerCase();
 }
 
 /**
@@ -152,27 +160,27 @@ async function getAllLinkedAccounts(discordId = null, uuid = null, mcUsername = 
  */
 async function sendBanDm(client, discordId, banData) {
     const embed = new EmbedBuilder()
-        .setTitle('🔨 You Have Been Banned')
+        .setTitle('You Have Been Banned')
         .setColor(0xff4444)
         .setDescription(`You have been banned from **NewLife SMP**.`)
         .addFields(
-            { name: '📋 Reason', value: banData.reason, inline: false },
-            { name: '⏱️ Duration', value: banData.isPermanent ? 'Permanent' : banData.durationDisplay, inline: true },
-            { name: '📅 Banned At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+            { name: 'Reason', value: banData.reason, inline: false },
+            { name: 'Duration', value: banData.isPermanent ? 'Permanent' : banData.durationDisplay, inline: true },
+            { name: 'Banned At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
         )
-        .setFooter({ text: 'NewLife SMP • Ban System' })
+        .setFooter({ text: 'NewLife SMP' })
         .setTimestamp();
     
     if (!banData.isPermanent && banData.expiresAt) {
         embed.addFields({
-            name: '🔓 Expires',
+            name: 'Expires',
             value: `<t:${Math.floor(banData.expiresAt.getTime() / 1000)}:R>`,
             inline: true
         });
     }
     
     embed.addFields({
-        name: '❓ Appeal',
+        name: 'Appeal',
         value: 'If you believe this ban was issued in error, you may appeal in our Discord server.',
         inline: false
     });
@@ -191,34 +199,34 @@ async function logBan(client, ban, linkedAccounts) {
         if (!channel) return;
         
         const accountsList = linkedAccounts.map(acc => {
-            const icon = acc.platform === 'bedrock' ? '📱' : '💻';
-            return `${icon} ${acc.minecraftUsername}`;
+            const platform = acc.platform === 'bedrock' ? 'Bedrock' : 'Java';
+            return `${acc.minecraftUsername} (${platform})`;
         }).join('\n') || 'None linked';
         
         const embed = new EmbedBuilder()
-            .setTitle(`🔨 Player Banned`)
+            .setTitle(`Player Banned`)
             .setColor(0xff4444)
             .addFields(
-                { name: '👤 Player', value: `**${ban.primaryUsername}**\n\`${ban.primaryUuid}\``, inline: true },
-                { name: '🎮 Platform', value: ban.primaryPlatform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
-                { name: '👮 Banned By', value: `<@${ban.staffId}>`, inline: true },
-                { name: '📋 Reason', value: ban.reason, inline: false },
-                { name: '⏱️ Duration', value: ban.isPermanent ? '**Permanent**' : ban.duration, inline: true }
+                { name: 'Player', value: `**${ban.primaryUsername}**\n\`${ban.primaryUuid}\``, inline: true },
+                { name: 'Platform', value: ban.primaryPlatform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                { name: 'Banned By', value: `<@${ban.staffId}>`, inline: true },
+                { name: 'Reason', value: ban.reason, inline: false },
+                { name: 'Duration', value: ban.isPermanent ? '**Permanent**' : ban.duration, inline: true }
             )
             .setFooter({ text: `Case #${ban.caseNumber || 'N/A'}` })
             .setTimestamp();
         
         if (ban.discordId) {
-            embed.addFields({ name: '💬 Discord', value: `<@${ban.discordId}>`, inline: true });
+            embed.addFields({ name: 'Discord', value: `<@${ban.discordId}>`, inline: true });
         }
         
         if (!ban.isPermanent && ban.expiresAt) {
-            embed.addFields({ name: '🔓 Expires', value: `<t:${Math.floor(ban.expiresAt.getTime() / 1000)}:R>`, inline: true });
+            embed.addFields({ name: 'Expires', value: `<t:${Math.floor(ban.expiresAt.getTime() / 1000)}:R>`, inline: true });
         }
         
         if (linkedAccounts.length > 1) {
             embed.addFields({ 
-                name: `🔗 All Banned Accounts (${linkedAccounts.length})`, 
+                name: `All Banned Accounts (${linkedAccounts.length})`, 
                 value: accountsList, 
                 inline: false 
             });
@@ -241,23 +249,36 @@ async function logUnban(client, ban, staffMember) {
         if (!channel) return;
         
         const embed = new EmbedBuilder()
-            .setTitle(`🔓 Player Unbanned`)
+            .setTitle(`Player Unbanned`)
             .setColor(0x57F287)
             .addFields(
-                { name: '👤 Player', value: `**${ban.primaryUsername}**`, inline: true },
-                { name: '👮 Unbanned By', value: `<@${staffMember.id}>`, inline: true },
-                { name: '📋 Original Reason', value: ban.reason, inline: false }
+                { name: 'Player', value: `**${ban.primaryUsername}**`, inline: true },
+                { name: 'Unbanned By', value: `<@${staffMember.id}>`, inline: true },
+                { name: 'Original Reason', value: ban.reason, inline: false }
             )
             .setFooter({ text: `Case #${ban.caseNumber || 'N/A'}` })
             .setTimestamp();
         
         if (ban.unbanReason) {
-            embed.addFields({ name: '📝 Unban Reason', value: ban.unbanReason, inline: false });
+            embed.addFields({ name: 'Unban Reason', value: ban.unbanReason, inline: false });
         }
         
         await channel.send({ embeds: [embed] });
     } catch (e) {
         console.error('Failed to log unban:', e);
+    }
+}
+
+/**
+ * Kick player from server via RCON
+ */
+async function kickPlayer(username, reason) {
+    try {
+        const result = await executeRcon(`kick ${username} ${reason}`);
+        return result.success;
+    } catch (e) {
+        console.error('Failed to kick player via RCON:', e);
+        return false;
     }
 }
 
@@ -295,8 +316,8 @@ const slashCommands = [
             // Permission check - Staff only
             if (!isStaff(interaction.member)) {
                 return interaction.reply({ 
-                    content: '❌ You do not have permission to use this command.', 
-                    ephemeral: true 
+                    content: 'You do not have permission to use this command.', 
+                    flags: 64
                 });
             }
 
@@ -311,7 +332,7 @@ const slashCommands = [
             const durationData = parseDuration(durationInput);
             if (!durationData) {
                 return interaction.editReply({
-                    content: '❌ Invalid duration format. Use formats like `1d`, `7d`, `30d`, `1h`, `30m`, or `perm` for permanent.'
+                    content: 'Invalid duration format. Use formats like `1d`, `7d`, `30d`, `1h`, `30m`, or `perm` for permanent.'
                 });
             }
 
@@ -328,7 +349,7 @@ const slashCommands = [
                 try {
                     discordUser = await client.users.fetch(discordId);
                 } catch (e) {
-                    return interaction.editReply({ content: '❌ Could not find that Discord user.' });
+                    return interaction.editReply({ content: 'Could not find that Discord user.' });
                 }
                 
                 // Get linked accounts for this Discord user
@@ -336,17 +357,27 @@ const slashCommands = [
                 
                 if (linkedAccounts.length === 0) {
                     return interaction.editReply({ 
-                        content: '❌ This Discord user has no linked Minecraft accounts.' 
+                        content: 'This Discord user has no linked Minecraft accounts.' 
                     });
                 }
                 
-                // Use first account as primary
+                // Use first account as primary - also lookup fresh profile to ensure we have correct data
                 const primary = linkedAccounts[0];
-                primaryProfile = {
-                    uuid: primary.uuid,
-                    name: primary.minecraftUsername,
-                    platform: primary.platform
-                };
+                const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
+                
+                if (freshProfile) {
+                    primaryProfile = {
+                        uuid: normalizeUuid(freshProfile.uuid),
+                        name: freshProfile.name,
+                        platform: freshProfile.platform
+                    };
+                } else {
+                    primaryProfile = {
+                        uuid: normalizeUuid(primary.uuid),
+                        name: primary.minecraftUsername,
+                        platform: primary.platform
+                    };
+                }
             } else {
                 // Target is a Minecraft username - lookup profile
                 primaryProfile = await lookupMcProfile(target, platformOption);
@@ -360,9 +391,12 @@ const slashCommands = [
                 
                 if (!primaryProfile) {
                     return interaction.editReply({ 
-                        content: `❌ Could not find Minecraft account: **${target}**\n\nTry specifying the platform with the \`platform\` option.` 
+                        content: `Could not find Minecraft account: **${target}**\n\nTry specifying the platform with the \`platform\` option.` 
                     });
                 }
+                
+                // Normalize the UUID
+                primaryProfile.uuid = normalizeUuid(primaryProfile.uuid);
                 
                 // Find linked accounts from this UUID
                 linkedAccounts = await getAllLinkedAccounts(null, primaryProfile.uuid);
@@ -381,15 +415,16 @@ const slashCommands = [
             const existingBan = await ServerBan.findActiveBan(primaryProfile.uuid);
             if (existingBan) {
                 return interaction.editReply({
-                    content: `❌ **${primaryProfile.name}** is already banned.\n**Reason:** ${existingBan.reason}\n**Expires:** ${existingBan.isPermanent ? 'Never (Permanent)' : `<t:${Math.floor(existingBan.expiresAt.getTime() / 1000)}:R>`}`
+                    content: `**${primaryProfile.name}** is already banned.\n**Reason:** ${existingBan.reason}\n**Expires:** ${existingBan.isPermanent ? 'Never (Permanent)' : `<t:${Math.floor(existingBan.expiresAt.getTime() / 1000)}:R>`}`
                 });
             }
 
-            // Collect all UUIDs to ban
+            // Collect all UUIDs to ban (normalized)
             const bannedUuids = [primaryProfile.uuid];
             for (const account of linkedAccounts) {
-                if (!bannedUuids.includes(account.uuid)) {
-                    bannedUuids.push(account.uuid);
+                const normalizedAccUuid = normalizeUuid(account.uuid);
+                if (!bannedUuids.includes(normalizedAccUuid)) {
+                    bannedUuids.push(normalizedAccUuid);
                 }
             }
 
@@ -421,7 +456,7 @@ const slashCommands = [
 
             await ban.save();
 
-            // Send DM to banned user
+            // Send DM to banned user (works for both Discord mention and MC username if linked)
             if (discordId) {
                 await sendBanDm(client, discordId, {
                     reason,
@@ -431,29 +466,40 @@ const slashCommands = [
                 });
             }
 
+            // Kick all linked players from the server
+            const kickedPlayers = [];
+            for (const account of linkedAccounts) {
+                const kicked = await kickPlayer(account.minecraftUsername, `Banned: ${reason}`);
+                if (kicked) kickedPlayers.push(account.minecraftUsername);
+            }
+            // Also try to kick the primary profile if not in linked accounts
+            if (!linkedAccounts.find(a => a.minecraftUsername.toLowerCase() === primaryProfile.name.toLowerCase())) {
+                await kickPlayer(primaryProfile.name, `Banned: ${reason}`);
+            }
+
             // Log to channel
             await logBan(client, ban, linkedAccounts);
 
             // Build response embed
             const embed = new EmbedBuilder()
-                .setTitle('🔨 Player Banned')
+                .setTitle('Player Banned')
                 .setColor(0xff4444)
                 .addFields(
-                    { name: '👤 Player', value: `**${primaryProfile.name}**`, inline: true },
-                    { name: '🎮 Platform', value: primaryProfile.platform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
-                    { name: '⏱️ Duration', value: durationData.isPermanent ? '**Permanent**' : durationData.display, inline: true },
-                    { name: '📋 Reason', value: reason, inline: false }
+                    { name: 'Player', value: `**${primaryProfile.name}**`, inline: true },
+                    { name: 'Platform', value: primaryProfile.platform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                    { name: 'Duration', value: durationData.isPermanent ? '**Permanent**' : durationData.display, inline: true },
+                    { name: 'Reason', value: reason, inline: false }
                 )
-                .setFooter({ text: `Case #${caseNumber || 'N/A'} • Banned by ${interaction.user.tag}` })
+                .setFooter({ text: `Case #${caseNumber || 'N/A'} | Banned by ${interaction.user.tag}` })
                 .setTimestamp();
 
             if (discordUser) {
-                embed.addFields({ name: '💬 Discord', value: `${discordUser.tag} (<@${discordId}>)`, inline: false });
+                embed.addFields({ name: 'Discord', value: `${discordUser.tag} (<@${discordId}>)`, inline: false });
             }
 
             if (linkedAccounts.length > 1) {
                 embed.addFields({ 
-                    name: `🔗 Linked Accounts Banned (${bannedUuids.length})`, 
+                    name: `Linked Accounts Banned (${bannedUuids.length})`, 
                     value: linkedAccounts.map(a => `• ${a.minecraftUsername} (${a.platform})`).join('\n'), 
                     inline: false 
                 });
@@ -461,7 +507,7 @@ const slashCommands = [
 
             if (!durationData.isPermanent) {
                 embed.addFields({ 
-                    name: '🔓 Expires', 
+                    name: 'Expires', 
                     value: `<t:${Math.floor(durationData.expiresAt.getTime() / 1000)}:F>`, 
                     inline: false 
                 });
@@ -489,8 +535,8 @@ const slashCommands = [
             // Permission check - Staff only
             if (!isStaff(interaction.member)) {
                 return interaction.reply({ 
-                    content: '❌ You do not have permission to use this command.', 
-                    ephemeral: true 
+                    content: 'You do not have permission to use this command.', 
+                    flags: 64
                 });
             }
 
@@ -509,7 +555,7 @@ const slashCommands = [
             let ban = null;
 
             if (profile) {
-                ban = await ServerBan.findActiveBan(profile.uuid);
+                ban = await ServerBan.findActiveBan(normalizeUuid(profile.uuid));
             }
 
             // If not found by UUID, try by username
@@ -521,7 +567,7 @@ const slashCommands = [
             }
 
             if (!ban) {
-                return interaction.editReply({ content: `❌ No active ban found for **${target}**.` });
+                return interaction.editReply({ content: `No active ban found for **${target}**.` });
             }
 
             // Update the ban
@@ -536,14 +582,14 @@ const slashCommands = [
             await logUnban(client, ban, interaction.user);
 
             const embed = new EmbedBuilder()
-                .setTitle('🔓 Player Unbanned')
+                .setTitle('Player Unbanned')
                 .setColor(0x57F287)
                 .addFields(
-                    { name: '👤 Player', value: `**${ban.primaryUsername}**`, inline: true },
-                    { name: '📋 Original Reason', value: ban.reason, inline: false },
-                    { name: '📝 Unban Reason', value: unbanReason, inline: false }
+                    { name: 'Player', value: `**${ban.primaryUsername}**`, inline: true },
+                    { name: 'Original Reason', value: ban.reason, inline: false },
+                    { name: 'Unban Reason', value: unbanReason, inline: false }
                 )
-                .setFooter({ text: `Case #${ban.caseNumber || 'N/A'} • Unbanned by ${interaction.user.tag}` })
+                .setFooter({ text: `Case #${ban.caseNumber || 'N/A'} | Unbanned by ${interaction.user.tag}` })
                 .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
@@ -563,12 +609,12 @@ const slashCommands = [
             // Permission check - Staff only
             if (!isStaff(interaction.member)) {
                 return interaction.reply({ 
-                    content: '❌ You do not have permission to use this command.', 
-                    ephemeral: true 
+                    content: 'You do not have permission to use this command.', 
+                    flags: 64
                 });
             }
 
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: 64 });
 
             const target = interaction.options.getString('target');
 
@@ -582,10 +628,10 @@ const slashCommands = [
                 const accounts = await getAllLinkedAccounts(discordId);
                 
                 if (accounts.length > 0) {
-                    uuid = accounts[0].uuid;
+                    uuid = normalizeUuid(accounts[0].uuid);
                     username = accounts[0].minecraftUsername;
                 } else {
-                    return interaction.editReply({ content: '❌ This Discord user has no linked accounts.' });
+                    return interaction.editReply({ content: 'This Discord user has no linked accounts.' });
                 }
             } else {
                 // Lookup profile
@@ -593,7 +639,7 @@ const slashCommands = [
                 if (!profile) profile = await lookupMcProfile(target, 'bedrock');
                 
                 if (profile) {
-                    uuid = profile.uuid;
+                    uuid = normalizeUuid(profile.uuid);
                     username = profile.name;
                 }
             }
@@ -615,7 +661,7 @@ const slashCommands = [
                 return interaction.editReply({
                     embeds: [
                         new EmbedBuilder()
-                            .setTitle('✅ Not Banned')
+                            .setTitle('Not Banned')
                             .setDescription(`**${username}** is not currently banned.`)
                             .setColor(0x57F287)
                             .setTimestamp()
@@ -624,29 +670,29 @@ const slashCommands = [
             }
 
             const embed = new EmbedBuilder()
-                .setTitle('🔨 Active Ban Found')
+                .setTitle('Active Ban Found')
                 .setColor(0xff4444)
                 .addFields(
-                    { name: '👤 Player', value: `**${ban.primaryUsername}**`, inline: true },
-                    { name: '🎮 Platform', value: ban.primaryPlatform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
-                    { name: '📋 Reason', value: ban.reason, inline: false },
-                    { name: '⏱️ Duration', value: ban.isPermanent ? '**Permanent**' : ban.duration, inline: true },
-                    { name: '👮 Banned By', value: ban.staffTag || `<@${ban.staffId}>`, inline: true },
-                    { name: '📅 Banned At', value: `<t:${Math.floor(new Date(ban.bannedAt).getTime() / 1000)}:F>`, inline: false }
+                    { name: 'Player', value: `**${ban.primaryUsername}**`, inline: true },
+                    { name: 'Platform', value: ban.primaryPlatform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                    { name: 'Reason', value: ban.reason, inline: false },
+                    { name: 'Duration', value: ban.isPermanent ? '**Permanent**' : ban.duration, inline: true },
+                    { name: 'Banned By', value: ban.staffTag || `<@${ban.staffId}>`, inline: true },
+                    { name: 'Banned At', value: `<t:${Math.floor(new Date(ban.bannedAt).getTime() / 1000)}:F>`, inline: false }
                 )
                 .setFooter({ text: `Case #${ban.caseNumber || 'N/A'}` })
                 .setTimestamp();
 
             if (!ban.isPermanent && ban.expiresAt) {
                 embed.addFields({ 
-                    name: '🔓 Expires', 
+                    name: 'Expires', 
                     value: `<t:${Math.floor(ban.expiresAt.getTime() / 1000)}:R>`, 
                     inline: true 
                 });
             }
 
             if (ban.discordId) {
-                embed.addFields({ name: '💬 Discord', value: `<@${ban.discordId}>`, inline: true });
+                embed.addFields({ name: 'Discord', value: `<@${ban.discordId}>`, inline: true });
             }
 
             return interaction.editReply({ embeds: [embed] });
@@ -664,10 +710,10 @@ const slashCommands = [
 
         async execute(interaction, client) {
             if (!isStaff(interaction.member)) {
-                return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
+                return interaction.reply({ content: 'Permission denied.', flags: 64 });
             }
 
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: 64 });
 
             const target = interaction.options.getString('target');
 
@@ -678,7 +724,7 @@ const slashCommands = [
             let bans = [];
 
             if (profile) {
-                bans = await ServerBan.findAllBans(profile.uuid);
+                bans = await ServerBan.findAllBans(normalizeUuid(profile.uuid));
             }
 
             if (bans.length === 0) {
@@ -693,13 +739,13 @@ const slashCommands = [
             }
 
             const embed = new EmbedBuilder()
-                .setTitle(`📜 Ban History: ${profile?.name || target}`)
+                .setTitle(`Ban History: ${profile?.name || target}`)
                 .setColor(getEmbedColor())
                 .setFooter({ text: `${bans.length} ban(s) found` })
                 .setTimestamp();
 
             for (const ban of bans.slice(0, 10)) {
-                const status = ban.active ? '🔴 Active' : '🟢 Expired/Unbanned';
+                const status = ban.active ? 'Active' : 'Expired/Unbanned';
                 const date = `<t:${Math.floor(new Date(ban.bannedAt).getTime() / 1000)}:d>`;
                 
                 embed.addFields({

@@ -85,11 +85,15 @@ serverBanSchema.methods.getRemainingTime = function() {
  * Static: Find active ban for a UUID
  */
 serverBanSchema.statics.findActiveBan = async function(uuid) {
-    const normalizedUuid = uuid.replace(/-/g, '');
+    const normalizedUuid = uuid.replace(/-/g, '').toLowerCase();
+    const uuidWithDashes = normalizedUuid.replace(
+        /^(.{8})(.{4})(.{4})(.{4})(.{12})$/,
+        '$1-$2-$3-$4-$5'
+    );
     
     // Find ban where this UUID is in bannedUuids and ban is active
     const ban = await this.findOne({
-        bannedUuids: { $in: [normalizedUuid, uuid] },
+        bannedUuids: { $in: [normalizedUuid, uuidWithDashes, uuid, uuid.toLowerCase()] },
         active: true
     });
     
@@ -110,10 +114,14 @@ serverBanSchema.statics.findActiveBan = async function(uuid) {
  * Static: Find all bans for a player (active and inactive)
  */
 serverBanSchema.statics.findAllBans = async function(uuid) {
-    const normalizedUuid = uuid.replace(/-/g, '');
+    const normalizedUuid = uuid.replace(/-/g, '').toLowerCase();
+    const uuidWithDashes = normalizedUuid.replace(
+        /^(.{8})(.{4})(.{4})(.{4})(.{12})$/,
+        '$1-$2-$3-$4-$5'
+    );
     
     return this.find({
-        bannedUuids: { $in: [normalizedUuid, uuid] }
+        bannedUuids: { $in: [normalizedUuid, uuidWithDashes, uuid, uuid.toLowerCase()] }
     }).sort({ bannedAt: -1 });
 };
 
