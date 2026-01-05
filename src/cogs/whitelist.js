@@ -14,6 +14,13 @@ const WHITELISTED_ROLE_ID = '1374421917284565046';
 const WHITELIST_GURU_ROLE_ID = '1456563910919454786';
 
 /**
+ * Check if member is a whitelist guru (not staff)
+ */
+function isWhitelistGuru(member) {
+    return member && member.roles && member.roles.cache.has(WHITELIST_GURU_ROLE_ID);
+}
+
+/**
  * Get the start of the current week (Sunday at midnight UTC)
  */
 function getWeekStart() {
@@ -49,6 +56,36 @@ async function trackWhitelistUsage(staffId, staffTag, mcname, platform, discordI
         );
     } catch (err) {
         console.error('Failed to track whitelist usage:', err);
+    }
+}
+
+/**
+ * Track whitelist for guru performance metrics (only for gurus)
+ */
+async function trackGuruWhitelist(interaction, mcname, platform, discordUser) {
+    // Only track for whitelist gurus (not staff)
+    if (!isWhitelistGuru(interaction.member)) return;
+    
+    try {
+        const { trackWhitelistSuccess } = require('./guruTracking');
+        
+        // Try to find the ticket channel ID from the current channel context
+        let ticketId = null;
+        if (interaction.channel && interaction.channel.name?.startsWith('ticket-apply-')) {
+            ticketId = interaction.channel.id;
+        }
+        
+        await trackWhitelistSuccess(
+            interaction.user.id,
+            interaction.user.tag,
+            ticketId,
+            mcname,
+            platform,
+            discordUser.id,
+            interaction.guild.id
+        );
+    } catch (err) {
+        console.error('Failed to track guru whitelist:', err);
     }
 }
 
@@ -207,6 +244,9 @@ const slashCommands = [
 
                     // Track stats for this whitelist action
                     await trackWhitelistUsage(interaction.user.id, interaction.user.tag, mcname, platform, discordUser.id);
+
+                    // Track guru performance metrics (only if user is a guru)
+                    await trackGuruWhitelist(interaction, mcname, platform, discordUser);
 
                     try {
                         const guild = interaction.guild;

@@ -137,6 +137,14 @@ client.once('ready', async () => {
         console.error('Failed to initialize timed close processor:', e);
     }
 
+    // Initialize guru performance scheduler
+    try {
+        const { initGuruScheduler } = require('./cogs/guruTracking');
+        initGuruScheduler(client);
+    } catch (e) {
+        console.error('Failed to initialize guru tracking scheduler:', e);
+    }
+
     // Schedule weekly whitelist stats (every Sunday at midnight UTC)
     scheduleWeeklyWhitelistStats(client);
 });
@@ -163,6 +171,16 @@ function scheduleWeeklyWhitelistStats(client) {
 // Prefix command handler
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
+
+    // Track guru responses in apply tickets
+    try {
+        const { trackGuruMessageInTicket } = require('./cogs/tickets');
+        if (trackGuruMessageInTicket) {
+            await trackGuruMessageInTicket(message, client);
+        }
+    } catch (e) {
+        // Silently ignore if tracking fails
+    }
 
     const prefix = process.env.BOT_PREFIX || '!';
     if (!message.content.startsWith(prefix)) return;

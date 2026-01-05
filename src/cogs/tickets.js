@@ -36,6 +36,12 @@ const { getNextCaseNumber } = require('../database/caseCounter');
 // Whitelist guru role ID - can access apply tickets and use close/tclose
 const WHITELIST_GURU_ROLE_ID = '1456563910919454786';
 
+// Apply ticket category ID
+const APPLY_CATEGORY_ID = '1437529831398047755';
+
+// Store ticket creation times for guru tracking (ticket channel ID -> timestamp)
+const ticketCreationTimes = new Map();
+
 /**
  * Check if member is whitelist guru or staff
  */
@@ -43,6 +49,82 @@ function canAccessApplyTickets(member) {
     if (isStaff(member)) return true;
     if (member && member.roles && member.roles.cache.has(WHITELIST_GURU_ROLE_ID)) return true;
     return false;
+}
+
+/**
+ * Check if a member is a whitelist guru (not just staff)
+ */
+function isWhitelistGuru(member) {
+    return member && member.roles && member.roles.cache.has(WHITELIST_GURU_ROLE_ID);
+}
+
+/**
+ * Track guru message in apply tickets
+ * Called from bot.js on every message
+ */
+async function trackGuruMessageInTicket(message, client) {
+    // Only process messages in guild channels
+    if (!message.guild || message.author.bot) return;
+    
+    // Check if this is an apply ticket channel
+    if (!message.channel.name?.startsWith('ticket-apply-')) return;
+    
+    // Check if this channel is in the apply category
+    if (message.channel.parentId !== APPLY_CATEGORY_ID) return;
+    
+    // Check if the message author is a guru (has guru role)
+    if (!isWhitelistGuru(message.member)) return;
+    
+    try {
+        const { trackGuruResponse } = require('./guruTracking');
+        
+        // Get ticket creation time from cache or channel creation time
+        let ticketCreatedAt = ticketCreationTimes.get(message.channel.id);
+        if (!ticketCreatedAt) {
+            ticketCreatedAt = message.channel.createdAt;
+            ticketCreationTimes.set(message.channel.id, ticketCreatedAt);
+        }
+        
+        // Find the applicant (ticket owner) - extract from channel name or topic
+        // Channel name format: ticket-apply-username
+        const channelNameMatch = message.channel.name.match(/^ticket-apply-(.+)$/);
+        let applicantId = null;
+        let applicantTag = null;
+        
+        // Try to find applicant from the channel's permission overwrites
+        const userOverwrites = message.channel.permissionOverwrites.cache.filter(
+            po => po.type === 1 && po.id !== message.author.id && po.id !== client.user.id
+        );
+        
+        if (userOverwrites.size > 0) {
+            const applicantOverwrite = userOverwrites.first();
+            applicantId = applicantOverwrite.id;
+            try {
+                const applicant = await client.users.fetch(applicantId);
+                applicantTag = applicant.tag;
+            } catch (e) {
+                applicantTag = 'Unknown';
+            }
+        }
+        
+        if (!applicantId) return; // Can't track without knowing the applicant
+        
+        // Track the guru response
+        await trackGuruResponse(
+            message.author.id,
+            message.author.tag,
+            message.channel.id,
+            message.channel.id,
+            applicantId,
+            applicantTag,
+            ticketCreatedAt,
+            message.content,
+            message.guild.id
+        );
+    } catch (err) {
+        // Silently fail - don't break normal ticket operation
+        console.error('[Tickets] Guru tracking error:', err.message);
+    }
 }
 
 /**
@@ -404,6 +486,9 @@ async function createApplicationTicket(guild, user, application, client) {
     // Create channel
     const channelName = `ticket-apply-${user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
     const ticketChannel = await guild.channels.create({ name: channelName, type: ChannelType.GuildText, parent: categoryId, permissionOverwrites });
+
+    // Store ticket creation time for guru tracking
+    ticketCreationTimes.set(ticketChannel.id, new Date());
 
     // Initial embed similar to general tickets
     const initial = new EmbedBuilder()
@@ -845,5 +930,7 @@ module.exports = {
     slashCommands,
     handleButton,
     handleModalSubmit,
-    initTimedCloseProcessor
+    initTimedCloseProcessor,
+    trackGuruMessageInTicket,
+    ticketCreationTimes
 };

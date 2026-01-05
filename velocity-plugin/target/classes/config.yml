@@ -3,9 +3,9 @@
 # API Settings
 api:
   # The URL of your Discord bot's Link API
-  url: "http://193.218.34.214:3001"
+  url: "http://localhost:3001"
   # API key for authentication (must match LINK_API_KEY in bot .env)
-  key: "hweiughwiufheowinfdoweihfoweih9832597gr8974tg97fg9h3h49f"
+  key: "your-secure-api-key-here"
   # Request timeout in milliseconds
   timeout: 5000
 
@@ -60,6 +60,10 @@ discord-invite: "https://discord.gg/YKhHRCgaSv"
 
 # Bypass permission - players with this permission skip the link check
 bypass-permission: "newlife.link.bypass"
+
+# Fail-open mode - if true, allow players through when API is unavailable
+# Set to false to block players when API is down (more secure, but risky)
+fail-open: true
 
 # Debug mode - enables verbose logging
 debug: false
