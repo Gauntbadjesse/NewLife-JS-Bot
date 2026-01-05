@@ -1,6 +1,6 @@
 /**
  * Guru Tracking Cog
- * Tracks whitelist guru performance metrics and sends weekly reports with diamond pay recommendations
+ * Tracks whitelist guru performance metrics and sends weekly reports with diamond pay
  * 
  * Commands:
  * - /guru stats - View current week stats (owner only)
@@ -70,32 +70,31 @@ function formatResponseTime(ms) {
 }
 
 /**
- * Get performance rating emoji based on score
+ * Get performance rating text based on score
  */
-function getPerformanceEmoji(score) {
-    if (score >= 90) return '🌟';      // Excellent
-    if (score >= 80) return '⭐';      // Great
-    if (score >= 70) return '✨';      // Good
-    if (score >= 60) return '👍';      // Satisfactory
-    if (score >= 50) return '📊';      // Average
-    return '📉';                        // Needs improvement
+function getPerformanceRating(score) {
+    if (score >= 90) return 'Excellent';
+    if (score >= 80) return 'Great';
+    if (score >= 70) return 'Good';
+    if (score >= 60) return 'Satisfactory';
+    if (score >= 50) return 'Average';
+    return 'Needs Improvement';
 }
 
 /**
- * Get response time rating
+ * Get response time rating text
  */
 function getResponseTimeRating(avgMs) {
     const minutes = avgMs / 60000;
-    if (minutes <= 5) return '🚀 Excellent';
-    if (minutes <= 15) return '⚡ Great';
-    if (minutes <= 30) return '✅ Good';
-    if (minutes <= 60) return '⏰ Needs Work';
-    return '🐢 Slow';
+    if (minutes <= 5) return 'Excellent';
+    if (minutes <= 15) return 'Great';
+    if (minutes <= 30) return 'Good';
+    if (minutes <= 60) return 'Needs Work';
+    return 'Slow';
 }
 
 /**
  * Track when a guru responds to an apply ticket
- * Called from tickets.js when a message is sent in an apply ticket by a guru
  */
 async function trackGuruResponse(guruId, guruTag, ticketId, ticketChannelId, applicantId, applicantTag, ticketCreatedAt, messageContent, guildId) {
     try {
@@ -103,14 +102,10 @@ async function trackGuruResponse(guruId, guruTag, ticketId, ticketChannelId, app
         const responseTimeMs = responseTime.getTime() - ticketCreatedAt.getTime();
         const didGreet = containsGreeting(messageContent);
         
-        // Get or create performance record for this week
         const record = await GuruPerformance.getOrCreateForGuru(guruId, guruTag, guildId);
-        
-        // Check if we already tracked this ticket
         const existingInteraction = record.interactions.find(i => i.ticketId === ticketId);
         
         if (!existingInteraction) {
-            // Add new interaction
             record.addInteraction({
                 ticketId,
                 ticketChannelId,
@@ -124,7 +119,6 @@ async function trackGuruResponse(guruId, guruTag, ticketId, ticketChannelId, app
                 outcome: 'pending'
             });
         } else if (!existingInteraction.firstResponseAt) {
-            // Update first response if not already set
             record.updateInteraction(ticketId, {
                 firstResponseAt: responseTime,
                 responseTimeMs,
@@ -132,7 +126,6 @@ async function trackGuruResponse(guruId, guruTag, ticketId, ticketChannelId, app
                 greetingMessage: existingInteraction.greetingMessage || (didGreet ? messageContent.substring(0, 200) : null)
             });
         } else if (didGreet && !existingInteraction.didGreet) {
-            // Update greeting detection if found in later message
             record.updateInteraction(ticketId, {
                 didGreet: true,
                 greetingMessage: messageContent.substring(0, 200)
@@ -151,12 +144,10 @@ async function trackGuruResponse(guruId, guruTag, ticketId, ticketChannelId, app
 
 /**
  * Track when a guru successfully whitelists someone
- * Called from whitelist.js after successful whitelist
  */
 async function trackWhitelistSuccess(guruId, guruTag, ticketId, mcUsername, platform, applicantId, guildId) {
     try {
         const record = await GuruPerformance.getOrCreateForGuru(guruId, guruTag, guildId);
-        
         const existingInteraction = record.interactions.find(i => i.ticketId === ticketId);
         
         if (existingInteraction) {
@@ -167,14 +158,13 @@ async function trackWhitelistSuccess(guruId, guruTag, ticketId, mcUsername, plat
                 platform
             });
         } else {
-            // Create new interaction if not tracked yet (whitelist outside of ticket)
             record.addInteraction({
                 ticketId: ticketId || `direct-${Date.now()}`,
                 applicantId,
                 ticketCreatedAt: new Date(),
                 firstResponseAt: new Date(),
                 responseTimeMs: 0,
-                didGreet: true, // Assume greeting for direct whitelists
+                didGreet: true,
                 outcome: 'whitelisted',
                 whitelistedAt: new Date(),
                 mcUsername,
@@ -198,7 +188,6 @@ async function trackWhitelistSuccess(guruId, guruTag, ticketId, mcUsername, plat
 async function trackTicketDenied(guruId, guruTag, ticketId, applicantId, reason, guildId) {
     try {
         const record = await GuruPerformance.getOrCreateForGuru(guruId, guruTag, guildId);
-        
         const existingInteraction = record.interactions.find(i => i.ticketId === ticketId);
         
         if (existingInteraction) {
@@ -217,12 +206,11 @@ async function trackTicketDenied(guruId, guruTag, ticketId, applicantId, reason,
 }
 
 /**
- * Track when a ticket is abandoned (closed without whitelist or denial)
+ * Track when a ticket is abandoned
  */
 async function trackTicketAbandoned(guruId, guruTag, ticketId, guildId) {
     try {
         const record = await GuruPerformance.getOrCreateForGuru(guruId, guruTag, guildId);
-        
         const existingInteraction = record.interactions.find(i => i.ticketId === ticketId);
         
         if (existingInteraction && existingInteraction.outcome === 'pending') {
@@ -247,17 +235,19 @@ function buildWeeklyReportEmbed(records, weekStart, weekEnd) {
     const totalTickets = records.reduce((sum, r) => sum + r.totalTicketsClaimed, 0);
     
     const embed = new EmbedBuilder()
-        .setTitle('💎 Weekly Guru Performance Report')
-        .setDescription(`**Week:** ${weekStart.toISOString().split('T')[0]} to ${weekEnd.toISOString().split('T')[0]}\n\n` +
+        .setTitle('Weekly Guru Performance Report')
+        .setDescription(
+            `**Week:** ${weekStart.toISOString().split('T')[0]} to ${weekEnd.toISOString().split('T')[0]}\n\n` +
             `**Total Whitelists:** ${totalWhitelists}\n` +
             `**Total Tickets Claimed:** ${totalTickets}\n` +
-            `**Active Gurus:** ${records.length}`)
-        .setColor(0x00D4FF)
+            `**Active Gurus:** ${records.length}`
+        )
+        .setColor(0x2B2D31)
         .setTimestamp();
     
     if (records.length === 0) {
         embed.addFields({
-            name: '📊 No Activity',
+            name: 'No Activity',
             value: 'No guru activity recorded this week.',
             inline: false
         });
@@ -267,45 +257,46 @@ function buildWeeklyReportEmbed(records, weekStart, weekEnd) {
     // Sort by performance score
     const sortedRecords = [...records].sort((a, b) => b.performanceScore - a.performanceScore);
     
+    // Build payment summary
+    let paymentSummary = '```\n';
+    paymentSummary += 'GURU                      DIAMONDS\n';
+    paymentSummary += '------------------------------------\n';
+    
+    let totalDiamonds = 0;
+    for (const record of sortedRecords) {
+        const name = (record.guruTag || record.guruId).substring(0, 24).padEnd(24);
+        const diamonds = String(record.recommendedDiamonds).padStart(10);
+        paymentSummary += `${name}  ${diamonds}\n`;
+        totalDiamonds += record.recommendedDiamonds;
+    }
+    
+    paymentSummary += '------------------------------------\n';
+    paymentSummary += `${'TOTAL'.padEnd(24)}  ${String(totalDiamonds).padStart(10)}\n`;
+    paymentSummary += '```';
+    
+    embed.addFields({
+        name: 'Payment Summary',
+        value: paymentSummary,
+        inline: false
+    });
+    
     // Add individual guru stats
     for (const record of sortedRecords.slice(0, 10)) {
-        const emoji = getPerformanceEmoji(record.performanceScore);
+        const rating = getPerformanceRating(record.performanceScore);
         const responseRating = getResponseTimeRating(record.avgResponseTimeMs);
         
         embed.addFields({
-            name: `${emoji} ${record.guruTag || record.guruId}`,
+            name: `${record.guruTag || record.guruId} [${rating}]`,
             value: [
-                `**Score:** ${record.performanceScore}/100`,
-                `**Whitelisted:** ${record.totalWhitelisted} | **Denied:** ${record.totalDenied}`,
-                `**Avg Response:** ${formatResponseTime(record.avgResponseTimeMs)} (${responseRating})`,
-                `**Greeting Rate:** ${record.greetingRate.toFixed(0)}%`,
-                `**💎 Pay Range:** ${record.diamondRangeMin}-${record.diamondRangeMax} diamonds`,
-                `**💎 Recommended:** ${record.recommendedDiamonds} diamonds`
+                `Score: ${record.performanceScore}/100`,
+                `Whitelisted: ${record.totalWhitelisted} | Denied: ${record.totalDenied}`,
+                `Avg Response: ${formatResponseTime(record.avgResponseTimeMs)} (${responseRating})`,
+                `Greeting Rate: ${record.greetingRate.toFixed(0)}%`,
+                `**Payment: ${record.recommendedDiamonds} diamonds**`
             ].join('\n'),
             inline: true
         });
     }
-    
-    // Add summary section
-    let totalDiamondsMin = 0;
-    let totalDiamondsMax = 0;
-    let totalRecommended = 0;
-    
-    for (const record of records) {
-        totalDiamondsMin += record.diamondRangeMin;
-        totalDiamondsMax += record.diamondRangeMax;
-        totalRecommended += record.recommendedDiamonds;
-    }
-    
-    embed.addFields({
-        name: '💰 Total Payment Summary',
-        value: [
-            `**Minimum:** ${totalDiamondsMin} diamonds`,
-            `**Recommended:** ${totalRecommended} diamonds`,
-            `**Maximum:** ${totalDiamondsMax} diamonds`
-        ].join('\n'),
-        inline: false
-    });
     
     embed.setFooter({ text: 'NewLife SMP | Guru Performance Tracking' });
     
@@ -325,7 +316,6 @@ async function sendWeeklyGuruReport(client) {
     const guildId = process.env.GUILD_ID || '1372672239245459498';
     
     try {
-        // Get last week's records
         const records = await GuruPerformance.getLastWeekRecords(guildId);
         
         if (records.length === 0) {
@@ -333,7 +323,6 @@ async function sendWeeklyGuruReport(client) {
             return;
         }
         
-        // Check if already sent
         const alreadySent = records.every(r => r.reportSent);
         if (alreadySent) {
             console.log('[GuruTracking] Weekly report already sent');
@@ -346,15 +335,13 @@ async function sendWeeklyGuruReport(client) {
         const lastWeekEnd = new Date(weekEnd);
         lastWeekEnd.setUTCDate(lastWeekEnd.getUTCDate() - 7);
         
-        // Build and send report
         const embed = buildWeeklyReportEmbed(records, lastWeekStart, lastWeekEnd);
         
         await sendDm(client, ownerId, {
-            content: '📊 **Weekly Guru Performance Report**\nHere\'s how your whitelist gurus performed this week:',
+            content: '**Weekly Guru Performance Report**\nHere is how your whitelist gurus performed this week:',
             embeds: [embed]
         });
         
-        // Mark as sent
         for (const record of records) {
             record.reportSent = true;
             record.reportSentAt = new Date();
@@ -367,16 +354,9 @@ async function sendWeeklyGuruReport(client) {
     }
 }
 
-/**
- * Scheduled task reference
- */
 let scheduledTask = null;
 
-/**
- * Initialize the weekly scheduler
- */
 function initGuruScheduler(client) {
-    // Schedule for every Monday at 9:00 AM EST
     scheduledTask = cron.schedule('0 9 * * 1', async () => {
         console.log('[GuruTracking] Running weekly guru report...');
         await sendWeeklyGuruReport(client);
@@ -387,9 +367,6 @@ function initGuruScheduler(client) {
     console.log('[GuruTracking] Weekly scheduler initialized');
 }
 
-/**
- * Stop scheduler
- */
 function stopGuruScheduler() {
     if (scheduledTask) {
         scheduledTask.stop();
@@ -397,9 +374,6 @@ function stopGuruScheduler() {
     }
 }
 
-/**
- * Slash Commands
- */
 const slashCommands = [
     {
         data: new SlashCommandBuilder()
@@ -437,12 +411,10 @@ const slashCommands = [
         async execute(interaction, client) {
             const sub = interaction.options.getSubcommand();
             
-            // Permission check
             if (!isOwner(interaction.member) && !isManagement(interaction.member)) {
                 return interaction.reply({ content: 'Permission denied. Owner/Management only.', ephemeral: true });
             }
             
-            // STATS - Current week overview
             if (sub === 'stats') {
                 await interaction.deferReply({ ephemeral: true });
                 
@@ -456,7 +428,7 @@ const slashCommands = [
                     }
                     
                     const embed = buildWeeklyReportEmbed(records, weekStart, weekEnd);
-                    embed.setTitle('📊 Current Week Guru Stats');
+                    embed.setTitle('Current Week Guru Stats');
                     
                     return interaction.editReply({ embeds: [embed] });
                 } catch (err) {
@@ -465,7 +437,6 @@ const slashCommands = [
                 }
             }
             
-            // PERFORMANCE - Specific guru
             if (sub === 'performance') {
                 await interaction.deferReply({ ephemeral: true });
                 
@@ -483,11 +454,11 @@ const slashCommands = [
                         return interaction.editReply({ content: `No performance data for ${targetUser.tag} this week.` });
                     }
                     
-                    const emoji = getPerformanceEmoji(record.performanceScore);
+                    const rating = getPerformanceRating(record.performanceScore);
                     
                     const embed = new EmbedBuilder()
-                        .setTitle(`${emoji} ${targetUser.tag}'s Performance`)
-                        .setColor(record.performanceScore >= 70 ? 0x00FF00 : record.performanceScore >= 50 ? 0xFFFF00 : 0xFF0000)
+                        .setTitle(`${targetUser.tag} - ${rating}`)
+                        .setColor(record.performanceScore >= 70 ? 0x57F287 : record.performanceScore >= 50 ? 0xFEE75C : 0xED4245)
                         .setThumbnail(targetUser.displayAvatarURL())
                         .addFields(
                             { name: 'Performance Score', value: `${record.performanceScore}/100`, inline: true },
@@ -500,20 +471,18 @@ const slashCommands = [
                             { name: 'Fastest Response', value: formatResponseTime(record.minResponseTimeMs), inline: true },
                             { name: 'Slowest Response', value: formatResponseTime(record.maxResponseTimeMs), inline: true },
                             { name: 'Greeting Rate', value: `${record.greetingRate.toFixed(1)}%`, inline: true },
-                            { name: '💎 Recommended Pay', value: `${record.recommendedDiamonds} diamonds`, inline: true },
-                            { name: '💎 Pay Range', value: `${record.diamondRangeMin}-${record.diamondRangeMax} diamonds`, inline: true }
+                            { name: 'Payment', value: `${record.recommendedDiamonds} diamonds`, inline: true }
                         )
                         .setFooter({ text: 'NewLife SMP | Guru Performance' })
                         .setTimestamp();
                     
-                    // Add recent interactions
                     const recentInteractions = record.interactions.slice(-5).reverse();
                     if (recentInteractions.length > 0) {
                         let interactionList = '';
                         for (const i of recentInteractions) {
-                            const outcomeEmoji = i.outcome === 'whitelisted' ? '✅' : i.outcome === 'denied' ? '❌' : i.outcome === 'abandoned' ? '⚠️' : '⏳';
-                            const greetEmoji = i.didGreet ? '👋' : '';
-                            interactionList += `${outcomeEmoji} ${i.mcUsername || 'Unknown'} - ${formatResponseTime(i.responseTimeMs)} ${greetEmoji}\n`;
+                            const outcome = i.outcome === 'whitelisted' ? '[Approved]' : i.outcome === 'denied' ? '[Denied]' : i.outcome === 'abandoned' ? '[Abandoned]' : '[Pending]';
+                            const greet = i.didGreet ? '[Greeted]' : '';
+                            interactionList += `${outcome} ${i.mcUsername || 'Unknown'} - ${formatResponseTime(i.responseTimeMs)} ${greet}\n`;
                         }
                         embed.addFields({ name: 'Recent Activity', value: interactionList || 'None', inline: false });
                     }
@@ -525,7 +494,6 @@ const slashCommands = [
                 }
             }
             
-            // REPORT - Manual trigger
             if (sub === 'report') {
                 if (!isOwner(interaction.member)) {
                     return interaction.reply({ content: 'Permission denied. Owner only.', ephemeral: true });
@@ -535,14 +503,13 @@ const slashCommands = [
                 
                 try {
                     await sendWeeklyGuruReport(client);
-                    return interaction.editReply({ content: '✅ Weekly report sent to your DMs.' });
+                    return interaction.editReply({ content: 'Weekly report sent to your DMs.' });
                 } catch (err) {
                     console.error('[GuruTracking] Report command error:', err);
                     return interaction.editReply({ content: 'Failed to send report.' });
                 }
             }
             
-            // HISTORY - Multi-week view
             if (sub === 'history') {
                 if (!isOwner(interaction.member)) {
                     return interaction.reply({ content: 'Permission denied. Owner only.', ephemeral: true });
@@ -555,7 +522,6 @@ const slashCommands = [
                     const weeksBack = interaction.options.getInteger('weeks') || 4;
                     const guildId = interaction.guild.id;
                     
-                    // Get records for past N weeks
                     const now = new Date();
                     const records = await GuruPerformance.find({
                         guruId: targetUser.id,
@@ -570,8 +536,8 @@ const slashCommands = [
                     }
                     
                     const embed = new EmbedBuilder()
-                        .setTitle(`📈 ${targetUser.tag}'s Performance History`)
-                        .setColor(0x00D4FF)
+                        .setTitle(`${targetUser.tag} - Performance History`)
+                        .setColor(0x2B2D31)
                         .setThumbnail(targetUser.displayAvatarURL())
                         .setTimestamp();
                     
@@ -580,14 +546,14 @@ const slashCommands = [
                     
                     for (const record of records) {
                         const weekLabel = record.weekStart.toISOString().split('T')[0];
-                        const emoji = getPerformanceEmoji(record.performanceScore);
+                        const rating = getPerformanceRating(record.performanceScore);
                         
                         embed.addFields({
-                            name: `${emoji} Week of ${weekLabel}`,
+                            name: `Week of ${weekLabel} [${rating}]`,
                             value: [
                                 `Score: ${record.performanceScore}/100`,
                                 `Whitelisted: ${record.totalWhitelisted}`,
-                                `💎 ${record.recommendedDiamonds} diamonds`
+                                `Payment: ${record.recommendedDiamonds} diamonds`
                             ].join(' | '),
                             inline: false
                         });
@@ -597,8 +563,8 @@ const slashCommands = [
                     }
                     
                     embed.addFields({
-                        name: '📊 Totals',
-                        value: `**Whitelists:** ${totalWhitelists} | **💎 Diamonds:** ${totalDiamonds}`,
+                        name: 'Totals',
+                        value: `**Whitelists:** ${totalWhitelists} | **Diamonds:** ${totalDiamonds}`,
                         inline: false
                     });
                     
@@ -618,16 +584,13 @@ module.exports = {
     name: 'GuruTracking',
     description: 'Whitelist guru performance tracking system',
     slashCommands,
-    // Export tracking functions for use in other cogs
     trackGuruResponse,
     trackWhitelistSuccess,
     trackTicketDenied,
     trackTicketAbandoned,
     containsGreeting,
-    // Export scheduler functions
     initGuruScheduler,
     stopGuruScheduler,
     sendWeeklyGuruReport,
-    // Export constants
     WHITELIST_GURU_ROLE_ID
 };

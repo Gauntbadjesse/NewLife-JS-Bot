@@ -17,12 +17,39 @@ const {
 const { randomUUID } = require('crypto');
 const LinkedAccount = require('../database/models/LinkedAccount');
 const WhitelistApplication = require('../database/models/WhitelistApplication');
-const { isAdmin, isSupervisor } = require('../utils/permissions');
+const { isAdmin, isSupervisor, isOwner } = require('../utils/permissions');
 const { getEmbedColor } = require('../utils/embeds');
 
 // Environment configuration
 const APPLICATION_CHANNEL_ID = process.env.APPLICATION_CHANNEL_ID || null;
 const APPLICATION_LOG_CHANNEL_ID = process.env.APPLICATION_LOG_CHANNEL_ID || null;
+
+// Progress bar characters for pie chart visualization
+const BAR_FULL = '█';
+const BAR_EMPTY = '░';
+
+/**
+ * Generate a text-based bar chart for source analytics
+ */
+function generateSourceChart(analytics, barLength = 20) {
+    if (!analytics || analytics.length === 0) {
+        return 'No data available.';
+    }
+    
+    const total = analytics.reduce((sum, a) => sum + a.count, 0);
+    let chart = '';
+    
+    for (const source of analytics) {
+        const percentage = (source.count / total) * 100;
+        const filled = Math.round((percentage / 100) * barLength);
+        const empty = barLength - filled;
+        const bar = BAR_FULL.repeat(filled) + BAR_EMPTY.repeat(empty);
+        
+        chart += `${source.label.padEnd(20)} ${bar} ${source.count} (${percentage.toFixed(1)}%)\n`;
+    }
+    
+    return chart;
+}
 
 /**
  * Lookup Minecraft profile from mcprofile.io
@@ -267,7 +294,7 @@ async function handleModal(interaction) {
         // Get linked accounts
         const linkedAccounts = await LinkedAccount.find({ discordId: interaction.user.id });
 
-        // Create the application
+        // Create the application with normalized source
         const app = new WhitelistApplication({
             _id: randomUUID(),
             discordId: interaction.user.id,
@@ -278,7 +305,8 @@ async function handleModal(interaction) {
                 platform: a.platform
             })),
             age,
-            whereFound,
+            whereFoundRaw: whereFound,
+            whereFoundCategory: WhitelistApplication.normalizeSource(whereFound),
             whyJoin,
             playstyle,
             createdAt: new Date()
@@ -348,10 +376,109 @@ async function handleModal(interaction) {
     }
 }
 
+/**
+ * Prefix Commands
+ */
+const commands = {
+    from: {
+        name: 'from',
+        description: 'View application source analytics (Owner only)',
+        usage: '!from [days]',
+        async execute(message, args, client) {
+            if (!isOwner(message.member)) {
+                return message.reply({ content: 'Permission denied. Owner only.', allowedMentions: { repliedUser: false } });
+            }
+
+            try {
+                // Parse optional days argument
+                const days = parseInt(args[0]) || 0; // 0 = all time
+                let startDate = null;
+                let periodLabel = 'All Time';
+                
+                if (days > 0) {
+                    startDate = new Date();
+                    startDate.setDate(startDate.getDate() - days);
+                    periodLabel = `Last ${days} Days`;
+                }
+
+                // Get analytics from both Application models
+                const [appAnalytics, whitelistAnalytics] = await Promise.all([
+                    require('../database/models/Application').getSourceAnalytics(startDate),
+                    WhitelistApplication.getSourceAnalytics(startDate)
+                ]);
+
+                // Merge results from both models
+                const mergedMap = new Map();
+                
+                for (const item of [...appAnalytics, ...whitelistAnalytics]) {
+                    if (mergedMap.has(item.category)) {
+                        mergedMap.get(item.category).count += item.count;
+                    } else {
+                        mergedMap.set(item.category, { ...item });
+                    }
+                }
+                
+                // Recalculate percentages
+                const merged = Array.from(mergedMap.values());
+                const total = merged.reduce((sum, a) => sum + a.count, 0);
+                
+                merged.forEach(item => {
+                    item.percentage = total > 0 ? ((item.count / total) * 100).toFixed(1) : 0;
+                });
+                
+                // Sort by count
+                merged.sort((a, b) => b.count - a.count);
+
+                if (merged.length === 0 || total === 0) {
+                    return message.reply({ 
+                        content: 'No application data found for the specified period.', 
+                        allowedMentions: { repliedUser: false } 
+                    });
+                }
+
+                // Build the chart
+                const chart = generateSourceChart(merged);
+
+                const embed = new EmbedBuilder()
+                    .setTitle('Application Source Analytics')
+                    .setDescription(`**Period:** ${periodLabel}\n**Total Applications:** ${total}`)
+                    .setColor(getEmbedColor())
+                    .addFields({
+                        name: 'Source Breakdown',
+                        value: '```\n' + chart + '```',
+                        inline: false
+                    })
+                    .setFooter({ text: 'NewLife SMP | Application Analytics' })
+                    .setTimestamp();
+
+                // Add top 3 as separate fields for emphasis
+                if (merged.length >= 1) {
+                    embed.addFields({
+                        name: 'Top Sources',
+                        value: merged.slice(0, 5).map((s, i) => 
+                            `**${i + 1}.** ${s.label}: ${s.count} (${s.percentage}%)`
+                        ).join('\n'),
+                        inline: false
+                    });
+                }
+
+                return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+            } catch (err) {
+                console.error('Error generating source analytics:', err);
+                return message.reply({ 
+                    content: 'Failed to generate analytics.', 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+        }
+    }
+};
+
 module.exports = {
     name: 'Applications',
     description: 'Whitelist application system',
     slashCommands,
+    commands,
     handleButton,
     handleModal
 };
