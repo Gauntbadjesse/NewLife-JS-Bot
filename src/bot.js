@@ -423,6 +423,16 @@ client.on('guildMemberAdd', async (member) => {
             if (logError) await logError('guildMemberAdd: addRole', e, { member: member.user.tag });
         }
 
+        // Restore kingdom roles if member was previously in a kingdom
+        try {
+            const { syncMemberRoles } = require('./cogs/kingdoms');
+            if (syncMemberRoles) {
+                await syncMemberRoles(member);
+            }
+        } catch (e) {
+            console.error(`[MemberJoin] Failed to sync kingdom roles:`, e.message);
+        }
+
         // Update member counter channel (with rate limiting)
         await updateMemberCounter(member.guild, `${member.user.tag} joined`);
     } catch (e) {

@@ -6,6 +6,7 @@
  * - /kingdom create - Create a new kingdom
  * - /kingdom delete - Delete a kingdom
  * - /kingdom list - List all kingdoms
+ * - /kingdom sync - Sync roles from database
  * 
  * Everyone Commands (Prefix):
  * - !kingdom help - Show help
@@ -36,14 +37,15 @@ async function findKingdom(guildId, name) {
 }
 
 /**
- * Get the kingdom a user is a ruler of (has leader role)
+ * Get the kingdom a user is a ruler of (from database)
  */
 async function getUserRuledKingdom(guildId, member) {
     const Kingdom = await getKingdomModel();
     const kingdoms = await Kingdom.find({ guildId });
     
     for (const kingdom of kingdoms) {
-        if (member.roles.cache.has(kingdom.leaderRoleId)) {
+        const dbMember = kingdom.getMember(member.id);
+        if (dbMember && dbMember.isLeader) {
             return kingdom;
         }
     }
@@ -51,18 +53,102 @@ async function getUserRuledKingdom(guildId, member) {
 }
 
 /**
- * Get the kingdom a user is a member of
+ * Get the kingdom a user is a member of (from database)
  */
 async function getUserKingdom(guildId, member) {
     const Kingdom = await getKingdomModel();
     const kingdoms = await Kingdom.find({ guildId });
     
     for (const kingdom of kingdoms) {
-        if (member.roles.cache.has(kingdom.leaderRoleId) || member.roles.cache.has(kingdom.memberRoleId)) {
+        const dbMember = kingdom.getMember(member.id);
+        if (dbMember) {
             return kingdom;
         }
     }
     return null;
+}
+
+/**
+ * Sync a member's kingdom roles from database
+ * Call this when a member joins to restore their kingdom roles
+ */
+async function syncMemberRoles(member) {
+    try {
+        const Kingdom = await getKingdomModel();
+        const kingdoms = await Kingdom.find({ guildId: member.guild.id });
+        
+        for (const kingdom of kingdoms) {
+            const dbMember = kingdom.getMember(member.id);
+            if (dbMember) {
+                // Member is in this kingdom, ensure they have the correct role
+                try {
+                    if (dbMember.isLeader) {
+                        if (!member.roles.cache.has(kingdom.leaderRoleId)) {
+                            await member.roles.add(kingdom.leaderRoleId, 'Kingdom role restored from database');
+                        }
+                        // Leaders shouldn't have member role
+                        if (member.roles.cache.has(kingdom.memberRoleId)) {
+                            await member.roles.remove(kingdom.memberRoleId, 'Leaders use leader role only');
+                        }
+                    } else {
+                        if (!member.roles.cache.has(kingdom.memberRoleId)) {
+                            await member.roles.add(kingdom.memberRoleId, 'Kingdom role restored from database');
+                        }
+                    }
+                    console.log(`[Kingdom] Restored ${kingdom.name} role for ${member.user.tag}`);
+                } catch (e) {
+                    console.error(`[Kingdom] Failed to restore role for ${member.user.tag}:`, e.message);
+                }
+                break; // User can only be in one kingdom
+            }
+        }
+    } catch (e) {
+        console.error('[Kingdom] Error syncing member roles:', e);
+    }
+}
+
+/**
+ * Sync all kingdom roles for a guild from database
+ */
+async function syncAllKingdomRoles(guild) {
+    try {
+        const Kingdom = await getKingdomModel();
+        const kingdoms = await Kingdom.find({ guildId: guild.id });
+        
+        let synced = 0;
+        let failed = 0;
+        
+        for (const kingdom of kingdoms) {
+            for (const dbMember of kingdom.members) {
+                try {
+                    const member = await guild.members.fetch(dbMember.discordId).catch(() => null);
+                    if (!member) continue;
+                    
+                    if (dbMember.isLeader) {
+                        if (!member.roles.cache.has(kingdom.leaderRoleId)) {
+                            await member.roles.add(kingdom.leaderRoleId, 'Kingdom sync');
+                            synced++;
+                        }
+                        if (member.roles.cache.has(kingdom.memberRoleId)) {
+                            await member.roles.remove(kingdom.memberRoleId, 'Leaders use leader role only');
+                        }
+                    } else {
+                        if (!member.roles.cache.has(kingdom.memberRoleId)) {
+                            await member.roles.add(kingdom.memberRoleId, 'Kingdom sync');
+                            synced++;
+                        }
+                    }
+                } catch (e) {
+                    failed++;
+                }
+            }
+        }
+        
+        return { synced, failed, total: kingdoms.reduce((sum, k) => sum + k.members.length, 0) };
+    } catch (e) {
+        console.error('[Kingdom] Error syncing all roles:', e);
+        return { synced: 0, failed: 0, error: e.message };
+    }
 }
 
 /**
@@ -98,7 +184,10 @@ const slashCommands = [
                     .setAutocomplete(true)))
             .addSubcommand(sub => sub
                 .setName('list')
-                .setDescription('List all kingdoms')),
+                .setDescription('List all kingdoms'))
+            .addSubcommand(sub => sub
+                .setName('sync')
+                .setDescription('Sync kingdom roles from database (restore missing roles)')),
 
         async execute(interaction, client) {
             // Staff only check
@@ -108,6 +197,36 @@ const slashCommands = [
 
             const sub = interaction.options.getSubcommand();
             const Kingdom = await getKingdomModel();
+
+            // SYNC
+            if (sub === 'sync') {
+                await interaction.deferReply({ ephemeral: true });
+                
+                try {
+                    const result = await syncAllKingdomRoles(interaction.guild);
+                    
+                    if (result.error) {
+                        return interaction.editReply({ content: `Error syncing roles: ${result.error}` });
+                    }
+                    
+                    const embed = new EmbedBuilder()
+                        .setTitle('Kingdom Roles Synced')
+                        .setColor(getEmbedColor())
+                        .setDescription(`Restored missing kingdom roles from database`)
+                        .addFields(
+                            { name: 'Roles Synced', value: `${result.synced}`, inline: true },
+                            { name: 'Failed', value: `${result.failed}`, inline: true },
+                            { name: 'Total Members', value: `${result.total}`, inline: true }
+                        )
+                        .setFooter({ text: `Synced by ${interaction.user.tag}` })
+                        .setTimestamp();
+                    
+                    return interaction.editReply({ embeds: [embed] });
+                } catch (error) {
+                    console.error('Error syncing kingdom roles:', error);
+                    return interaction.editReply({ content: `Failed to sync roles: ${error.message}` });
+                }
+            }
 
             // CREATE
             if (sub === 'create') {
@@ -320,14 +439,19 @@ const commands = {
                     return message.reply({ content: 'Please mention a user or provide their ID.\nUsage: `!kingdom add @user`', allowedMentions: { repliedUser: false } });
                 }
 
-                // Check if target is already in a kingdom
+                // Check if target is already in a kingdom (from database)
                 const targetKingdom = await getUserKingdom(message.guild.id, targetUser);
                 if (targetKingdom) {
                     return message.reply({ content: `${targetUser.displayName} is already in **${targetKingdom.name}**.`, allowedMentions: { repliedUser: false } });
                 }
 
                 try {
+                    // Add role
                     await targetUser.roles.add(kingdom.memberRoleId, `Added to ${kingdom.name} by ${message.author.tag}`);
+                    
+                    // Save to database for persistence
+                    kingdom.addMember(targetUser.id, targetUser.user.tag, false, message.author.id);
+                    await kingdom.save();
                     
                     const embed = new EmbedBuilder()
                         .setTitle('Member Added')
@@ -359,26 +483,30 @@ const commands = {
                     return message.reply({ content: 'Please mention a user or provide their ID.\nUsage: `!kingdom remove @user`', allowedMentions: { repliedUser: false } });
                 }
 
-                // Check if target is in this kingdom
-                const isMember = targetUser.roles.cache.has(kingdom.memberRoleId);
-                const isLeader = targetUser.roles.cache.has(kingdom.leaderRoleId);
-
-                if (!isMember && !isLeader) {
+                // Check if target is in this kingdom (from database)
+                const dbMember = kingdom.getMember(targetUser.id);
+                if (!dbMember) {
                     return message.reply({ content: `${targetUser.displayName} is not in **${kingdom.name}**.`, allowedMentions: { repliedUser: false } });
                 }
 
-                // Cannot remove yourself if you're the only ruler
-                if (isLeader && targetUser.id === message.author.id) {
+                // Cannot remove yourself if you're a ruler
+                if (dbMember.isLeader && targetUser.id === message.author.id) {
                     return message.reply({ content: 'You cannot remove yourself. Use `!kingdom transfer` to pass leadership first.', allowedMentions: { repliedUser: false } });
                 }
 
                 // Cannot remove another ruler
-                if (isLeader && targetUser.id !== message.author.id) {
+                if (dbMember.isLeader && targetUser.id !== message.author.id) {
                     return message.reply({ content: 'You cannot remove another ruler.', allowedMentions: { repliedUser: false } });
                 }
 
                 try {
-                    await targetUser.roles.remove(kingdom.memberRoleId, `Removed from ${kingdom.name} by ${message.author.tag}`);
+                    // Remove roles
+                    await targetUser.roles.remove(kingdom.memberRoleId, `Removed from ${kingdom.name} by ${message.author.tag}`).catch(() => {});
+                    await targetUser.roles.remove(kingdom.leaderRoleId, `Removed from ${kingdom.name} by ${message.author.tag}`).catch(() => {});
+                    
+                    // Remove from database
+                    kingdom.removeMember(targetUser.id);
+                    await kingdom.save();
                     
                     const embed = new EmbedBuilder()
                         .setTitle('Member Removed')
@@ -432,29 +560,43 @@ const commands = {
                     return message.reply({ content: `Kingdom **${kingdomName}** not found.`, allowedMentions: { repliedUser: false } });
                 }
 
-                // Get all members
-                const leaders = message.guild.members.cache.filter(m => m.roles.cache.has(kingdom.leaderRoleId));
-                const members = message.guild.members.cache.filter(m => 
-                    m.roles.cache.has(kingdom.memberRoleId) && !m.roles.cache.has(kingdom.leaderRoleId)
-                );
+                // Get members from database (source of truth)
+                const dbLeaders = kingdom.getLeaders();
+                const dbMembers = kingdom.getMembers();
 
                 const embed = new EmbedBuilder()
                     .setTitle(kingdom.name)
                     .setColor(kingdom.color)
                     .setTimestamp();
 
-                // Leaders
-                const leaderList = leaders.map(m => m.displayName).join('\n') || 'None';
-                embed.addFields({ name: `Rulers (${leaders.size})`, value: leaderList.substring(0, 1024), inline: false });
+                // Leaders - fetch display names
+                let leaderList = 'None';
+                if (dbLeaders.length > 0) {
+                    const leaderNames = [];
+                    for (const dbL of dbLeaders) {
+                        const member = await message.guild.members.fetch(dbL.discordId).catch(() => null);
+                        leaderNames.push(member ? member.displayName : dbL.discordTag);
+                    }
+                    leaderList = leaderNames.join('\n');
+                }
+                embed.addFields({ name: `Rulers (${dbLeaders.length})`, value: leaderList.substring(0, 1024), inline: false });
 
-                // Members (max 20 shown)
-                const memberList = members.first(20).map(m => m.displayName).join('\n') || 'None';
-                const memberValue = members.size > 20 
-                    ? `${memberList}\n... and ${members.size - 20} more`
-                    : memberList;
-                embed.addFields({ name: `Members (${members.size})`, value: memberValue.substring(0, 1024), inline: false });
+                // Members - fetch display names (max 20 shown)
+                let memberList = 'None';
+                if (dbMembers.length > 0) {
+                    const memberNames = [];
+                    for (const dbM of dbMembers.slice(0, 20)) {
+                        const member = await message.guild.members.fetch(dbM.discordId).catch(() => null);
+                        memberNames.push(member ? member.displayName : dbM.discordTag);
+                    }
+                    memberList = memberNames.join('\n');
+                    if (dbMembers.length > 20) {
+                        memberList += `\n... and ${dbMembers.length - 20} more`;
+                    }
+                }
+                embed.addFields({ name: `Members (${dbMembers.length})`, value: memberList.substring(0, 1024), inline: false });
 
-                embed.setFooter({ text: `Total: ${leaders.size + members.size} member(s)` });
+                embed.setFooter({ text: `Total: ${dbLeaders.length + dbMembers.length} member(s)` });
 
                 return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
             }
@@ -480,15 +622,13 @@ const commands = {
                     return message.reply({ content: 'You cannot transfer leadership to yourself.', allowedMentions: { repliedUser: false } });
                 }
 
-                // Check if target is in this kingdom (member or leader)
-                const isMember = targetUser.roles.cache.has(kingdom.memberRoleId);
-                const isLeader = targetUser.roles.cache.has(kingdom.leaderRoleId);
-
-                if (!isMember && !isLeader) {
+                // Check if target is in this kingdom (from database)
+                const targetDbMember = kingdom.getMember(targetUser.id);
+                if (!targetDbMember) {
                     return message.reply({ content: `${targetUser.displayName} must be a member of **${kingdom.name}** first.`, allowedMentions: { repliedUser: false } });
                 }
 
-                if (isLeader) {
+                if (targetDbMember.isLeader) {
                     return message.reply({ content: `${targetUser.displayName} is already a ruler of **${kingdom.name}**.`, allowedMentions: { repliedUser: false } });
                 }
 
@@ -502,6 +642,12 @@ const commands = {
                     await message.member.roles.remove(kingdom.leaderRoleId, `Transferred leadership to ${targetUser.user.tag}`);
                     // Add member role to current user
                     await message.member.roles.add(kingdom.memberRoleId, 'Demoted to member after transfer').catch(() => {});
+
+                    // Update database - promote target to leader
+                    kingdom.setLeader(targetUser.id, true);
+                    // Demote current user to member
+                    kingdom.setLeader(message.author.id, false);
+                    await kingdom.save();
 
                     const embed = new EmbedBuilder()
                         .setTitle('Leadership Transferred')
@@ -531,5 +677,8 @@ module.exports = {
     name: 'Kingdoms',
     description: 'Kingdom management system',
     slashCommands,
-    commands
+    commands,
+    // Export functions for use by bot.js
+    syncMemberRoles,
+    syncAllKingdomRoles
 };
