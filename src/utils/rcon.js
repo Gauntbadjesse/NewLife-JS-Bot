@@ -35,7 +35,12 @@ async function executeRcon(command) {
         const response = await rcon.send(command);
         
         await rcon.end();
-        
+        // Log success (trim response for logs)
+        try {
+            console.log(`[ProxyRCON] Executed "${command}" on ${host}:${port} - response: ${String(response).slice(0, 300)}`);
+        } catch (e) {
+            console.log('[ProxyRCON] Executed command (response logging failed)');
+        }        
         return {
             success: true,
             response: response || 'Command executed successfully'

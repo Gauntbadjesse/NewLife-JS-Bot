@@ -17,6 +17,7 @@ const {
     createHistoryEmbed
 } = require('../utils/embeds');
 const { isAdmin, isModerator } = require('../utils/permissions');
+const { testProxyConnection } = require('../utils/rcon');
 
 // Duration parser: accepts formats like 10m, 1h, 2d or minutes as number
 function parseDuration(str) {
@@ -121,6 +122,56 @@ const commands = {
                 return message.reply({ embeds: [createErrorEmbed('Error', 'Failed to ban the user.')], allowedMentions: { repliedUser: false } });
             } finally {
                 // Attempt to delete invoking message
+                try { await message.delete(); } catch (e) { /* ignore */ }
+            }
+        }
+    },
+
+    // !rcon - test proxy RCON connection (Admin+)
+    rcon: {
+        name: 'rcon',
+        description: 'Test Velocity proxy RCON connection (Admin+)',
+        usage: '!rcon',
+        async execute(message, args, client) {
+            if (!isAdmin(message.member)) {
+                return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'You do not have permission to use this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            try {
+                await message.channel.send('Testing proxy RCON connection...');
+                const result = await testProxyConnection();
+
+                if (result.success) {
+                    await message.channel.send({ embeds: [createSuccessEmbed('Proxy RCON OK', `${result.response}`)] });
+                } else {
+                    await message.channel.send({ embeds: [createErrorEmbed('Proxy RCON Failed', `${result.response}`)] });
+                }
+
+                // Log to configured log channel
+                const logChannelId = process.env.LOG_CHANNEL_ID;
+                if (logChannelId) {
+                    try {
+                        const ch = await client.channels.fetch(logChannelId).catch(() => null);
+                        if (ch) {
+                            const embed = new (require('discord.js').EmbedBuilder)()
+                                .setTitle('Proxy RCON Test')
+                                .setColor(result.success ? 0x57F287 : 0xff4444)
+                                .addFields(
+                                    { name: 'Initiated By', value: `${message.author.tag} (<@${message.author.id}>)`, inline: false },
+                                    { name: 'Result', value: result.success ? 'Success' : 'Failure', inline: true },
+                                    { name: 'Response', value: `${result.response}`.substring(0, 1000), inline: false }
+                                )
+                                .setTimestamp();
+
+                            await ch.send({ embeds: [embed] }).catch(() => {});
+                        }
+                    } catch (e) { console.error('Failed to log proxy rcon test:', e); }
+                }
+
+            } catch (e) {
+                console.error('Error testing proxy rcon:', e);
+                return message.reply({ embeds: [createErrorEmbed('Error', 'Failed to test proxy RCON.')], allowedMentions: { repliedUser: false } });
+            } finally {
                 try { await message.delete(); } catch (e) { /* ignore */ }
             }
         }

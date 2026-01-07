@@ -517,15 +517,78 @@ const slashCommands = [
                 });
             }
 
-            // Kick all linked players from the proxy with "Ban loading..." message
+            // Kick all linked players from the proxy with "Ban loading..." message and create Kick records
             const kickedPlayers = [];
             for (const account of linkedAccounts) {
                 const kicked = await kickFromProxy(account.minecraftUsername, 'Ban loading...');
+
+                // Create Kick record
+                try {
+                    const { randomUUID } = require('crypto');
+                    let kickCaseNumber = null;
+                    try { kickCaseNumber = await getNextCaseNumber('kick'); } catch (e) { kickCaseNumber = null; }
+
+                    const kickDoc = new Kick({
+                        _id: randomUUID(),
+                        caseNumber: kickCaseNumber,
+                        primaryUuid: normalizeUuid(account.uuid || primaryProfile.uuid),
+                        primaryUsername: account.minecraftUsername,
+                        primaryPlatform: account.platform || primaryProfile.platform,
+                        discordId: discordId || null,
+                        discordTag: discordUser?.tag || null,
+                        reason: 'Ban loading...',
+                        staffId: interaction.user.id,
+                        staffTag: interaction.user.tag,
+                        kickedAt: new Date(),
+                        rconExecuted: Boolean(kicked.success)
+                    });
+
+                    await kickDoc.save();
+
+                    // Log the kick to the log channel
+                    await logKick(client, kickDoc, [account]).catch(() => {});
+
+                    console.log(`[ServerBan] Recorded kick for ${account.minecraftUsername} (rcon: ${kicked.success})`);
+                } catch (e) {
+                    console.error('[ServerBan] Failed to record kick:', e);
+                }
+
                 if (kicked.success) kickedPlayers.push(account.minecraftUsername);
             }
+
             // Also try to kick the primary profile if not in linked accounts
             if (!linkedAccounts.find(a => a.minecraftUsername.toLowerCase() === primaryProfile.name.toLowerCase())) {
-                await kickFromProxy(primaryProfile.name, 'Ban loading...');
+                const kicked = await kickFromProxy(primaryProfile.name, 'Ban loading...');
+
+                try {
+                    const { randomUUID } = require('crypto');
+                    let kickCaseNumber = null;
+                    try { kickCaseNumber = await getNextCaseNumber('kick'); } catch (e) { kickCaseNumber = null; }
+
+                    const kickDoc = new Kick({
+                        _id: randomUUID(),
+                        caseNumber: kickCaseNumber,
+                        primaryUuid: normalizeUuid(primaryProfile.uuid),
+                        primaryUsername: primaryProfile.name,
+                        primaryPlatform: primaryProfile.platform,
+                        discordId: discordId || null,
+                        discordTag: discordUser?.tag || null,
+                        reason: 'Ban loading...',
+                        staffId: interaction.user.id,
+                        staffTag: interaction.user.tag,
+                        kickedAt: new Date(),
+                        rconExecuted: Boolean(kicked.success)
+                    });
+
+                    await kickDoc.save();
+                    await logKick(client, kickDoc, []).catch(() => {});
+
+                    console.log(`[ServerBan] Recorded kick for ${primaryProfile.name} (rcon: ${kicked.success})`);
+                } catch (e) {
+                    console.error('[ServerBan] Failed to record kick for primary profile:', e);
+                }
+
+                if (kicked.success) kickedPlayers.push(primaryProfile.name);
             }
 
             // Log to channel
