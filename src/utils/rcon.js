@@ -101,10 +101,84 @@ async function testConnection() {
     return executeRcon('list');
 }
 
+/**
+ * Execute an RCON command on the Velocity proxy
+ * @param {string} command - The command to execute
+ * @returns {Promise<{success: boolean, response: string}>}
+ */
+async function executeProxyRcon(command) {
+    const host = process.env.PROXY_RCON_HOST;
+    const port = parseInt(process.env.PROXY_RCON_PORT) || 27242;
+    const password = process.env.PROXY_RCON_PASSWORD;
+
+    if (!host || !password) {
+        return {
+            success: false,
+            response: 'Proxy RCON is not configured. Please set PROXY_RCON_HOST and PROXY_RCON_PASSWORD in .env'
+        };
+    }
+
+    let rcon = null;
+
+    try {
+        rcon = await Rcon.connect({
+            host: host,
+            port: port,
+            password: password,
+            timeout: 5000
+        });
+
+        const response = await rcon.send(command);
+        
+        await rcon.end();
+        
+        return {
+            success: true,
+            response: response || 'Command executed successfully'
+        };
+    } catch (error) {
+        console.error('Proxy RCON Error:', error.message);
+        
+        if (rcon) {
+            try {
+                await rcon.end();
+            } catch (e) {
+                // Ignore close errors
+            }
+        }
+
+        return {
+            success: false,
+            response: `Proxy RCON connection failed: ${error.message}`
+        };
+    }
+}
+
+/**
+ * Kick a player from the proxy
+ * @param {string} playerName - The player to kick
+ * @param {string} reason - The kick reason
+ * @returns {Promise<{success: boolean, response: string}>}
+ */
+async function kickFromProxy(playerName, reason) {
+    return executeProxyRcon(`kick ${playerName} ${reason}`);
+}
+
+/**
+ * Test Proxy RCON connection
+ * @returns {Promise<{success: boolean, response: string}>}
+ */
+async function testProxyConnection() {
+    return executeProxyRcon('glist');
+}
+
 module.exports = {
     executeRcon,
     warnPlayer,
     banPlayer,
     unbanPlayer,
-    testConnection
+    testConnection,
+    executeProxyRcon,
+    kickFromProxy,
+    testProxyConnection
 };

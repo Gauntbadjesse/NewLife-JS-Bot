@@ -7,14 +7,421 @@
 const express = require('express');
 const LinkedAccount = require('../database/models/LinkedAccount');
 const ServerBan = require('../database/models/ServerBan');
+const Kick = require('../database/models/Kick');
 
 const app = express();
 app.use(express.json());
+
+// =====================================================
+// PUBLIC WEB VIEWER ROUTES (No Authentication)
+// =====================================================
+
+const viewerStyles = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        color: #eee;
+        min-height: 100vh;
+        padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { 
+        text-align: center; 
+        margin-bottom: 30px; 
+        color: #10b981;
+        font-size: 2.5em;
+    }
+    .nav { 
+        display: flex; 
+        justify-content: center; 
+        gap: 20px; 
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+    }
+    .nav a { 
+        color: #10b981; 
+        text-decoration: none; 
+        padding: 12px 24px; 
+        border: 2px solid #10b981;
+        border-radius: 8px;
+        transition: all 0.3s;
+        font-weight: 600;
+    }
+    .nav a:hover, .nav a.active { 
+        background: #10b981; 
+        color: #1a1a2e; 
+    }
+    .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .stat-card {
+        background: rgba(255,255,255,0.05);
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .stat-card h3 { color: #10b981; font-size: 2em; }
+    .stat-card p { color: #aaa; margin-top: 5px; }
+    table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        background: rgba(255,255,255,0.05);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    th, td { 
+        padding: 15px; 
+        text-align: left; 
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    th { 
+        background: rgba(16, 185, 129, 0.2); 
+        color: #10b981;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85em;
+    }
+    tr:hover { background: rgba(255,255,255,0.03); }
+    .badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.8em;
+        font-weight: 600;
+    }
+    .badge-active { background: #ef4444; color: white; }
+    .badge-expired { background: #6b7280; color: white; }
+    .badge-perm { background: #8b0000; color: white; }
+    .search-box {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .search-box input {
+        flex: 1;
+        min-width: 200px;
+        padding: 12px 16px;
+        border: 2px solid rgba(255,255,255,0.1);
+        border-radius: 8px;
+        background: rgba(255,255,255,0.05);
+        color: #eee;
+        font-size: 1em;
+    }
+    .search-box input:focus {
+        outline: none;
+        border-color: #10b981;
+    }
+    .search-box button {
+        padding: 12px 24px;
+        background: #10b981;
+        color: #1a1a2e;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 20px;
+    }
+    .pagination a {
+        color: #10b981;
+        text-decoration: none;
+        padding: 8px 16px;
+        border: 1px solid #10b981;
+        border-radius: 6px;
+    }
+    .pagination a:hover { background: #10b981; color: #1a1a2e; }
+    .empty { text-align: center; padding: 40px; color: #888; }
+    @media (max-width: 768px) {
+        th, td { padding: 10px; font-size: 0.9em; }
+        .hide-mobile { display: none; }
+    }
+`;
+
+// Bans viewer page
+app.get('/viewer/bans', async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = 50;
+        const skip = (page - 1) * limit;
+        const search = req.query.search || '';
+        
+        let query = {};
+        if (search) {
+            query = {
+                $or: [
+                    { primaryUsername: { $regex: search, $options: 'i' } },
+                    { reason: { $regex: search, $options: 'i' } },
+                    { staffTag: { $regex: search, $options: 'i' } }
+                ]
+            };
+        }
+        
+        const total = await ServerBan.countDocuments(query);
+        const activeBans = await ServerBan.countDocuments({ active: true });
+        const bans = await ServerBan.find(query)
+            .sort({ bannedAt: -1 })
+            .skip(skip)
+            .limit(limit);
+        
+        const totalPages = Math.ceil(total / limit);
+        
+        let rows = '';
+        for (const ban of bans) {
+            const status = ban.active 
+                ? '<span class="badge badge-active">Active</span>' 
+                : '<span class="badge badge-expired">Expired</span>';
+            const duration = ban.isPermanent 
+                ? '<span class="badge badge-perm">Permanent</span>' 
+                : (ban.duration || 'N/A');
+            const date = new Date(ban.bannedAt).toLocaleDateString();
+            
+            rows += `
+                <tr>
+                    <td>#${ban.caseNumber || 'N/A'}</td>
+                    <td>${ban.primaryUsername}</td>
+                    <td>${ban.reason.substring(0, 50)}${ban.reason.length > 50 ? '...' : ''}</td>
+                    <td>${duration}</td>
+                    <td>${status}</td>
+                    <td class="hide-mobile">${ban.staffTag || 'Unknown'}</td>
+                    <td class="hide-mobile">${date}</td>
+                </tr>
+            `;
+        }
+        
+        if (!rows) {
+            rows = '<tr><td colspan="7" class="empty">No bans found</td></tr>';
+        }
+        
+        let pagination = '';
+        if (totalPages > 1) {
+            if (page > 1) {
+                pagination += `<a href="/viewer/bans?page=${page-1}&search=${encodeURIComponent(search)}">Previous</a>`;
+            }
+            pagination += `<span style="padding: 8px 16px; color: #888;">Page ${page} of ${totalPages}</span>`;
+            if (page < totalPages) {
+                pagination += `<a href="/viewer/bans?page=${page+1}&search=${encodeURIComponent(search)}">Next</a>`;
+            }
+        }
+        
+        const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ban Viewer - NewLife SMP</title>
+    <style>${viewerStyles}</style>
+</head>
+<body>
+    <div class="container">
+        <h1>NewLife SMP - Ban Viewer</h1>
+        <nav class="nav">
+            <a href="/viewer/bans" class="active">Bans</a>
+            <a href="/viewer/kicks">Kicks</a>
+        </nav>
+        <div class="stats">
+            <div class="stat-card">
+                <h3>${total}</h3>
+                <p>Total Bans</p>
+            </div>
+            <div class="stat-card">
+                <h3>${activeBans}</h3>
+                <p>Active Bans</p>
+            </div>
+            <div class="stat-card">
+                <h3>${total - activeBans}</h3>
+                <p>Expired/Unbanned</p>
+            </div>
+        </div>
+        <form class="search-box" method="GET" action="/viewer/bans">
+            <input type="text" name="search" placeholder="Search by player, reason, or staff..." value="${search}">
+            <button type="submit">Search</button>
+        </form>
+        <table>
+            <thead>
+                <tr>
+                    <th>Case</th>
+                    <th>Player</th>
+                    <th>Reason</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                    <th class="hide-mobile">Staff</th>
+                    <th class="hide-mobile">Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows}
+            </tbody>
+        </table>
+        <div class="pagination">${pagination}</div>
+    </div>
+</body>
+</html>
+        `;
+        
+        res.setHeader('Content-Type', 'text/html');
+        res.send(html);
+    } catch (error) {
+        console.error('Viewer error:', error);
+        res.status(500).send('Error loading bans');
+    }
+});
+
+// Kicks viewer page
+app.get('/viewer/kicks', async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = 50;
+        const skip = (page - 1) * limit;
+        const search = req.query.search || '';
+        
+        let query = {};
+        if (search) {
+            query = {
+                $or: [
+                    { primaryUsername: { $regex: search, $options: 'i' } },
+                    { reason: { $regex: search, $options: 'i' } },
+                    { staffTag: { $regex: search, $options: 'i' } }
+                ]
+            };
+        }
+        
+        const total = await Kick.countDocuments(query);
+        const kicks = await Kick.find(query)
+            .sort({ kickedAt: -1 })
+            .skip(skip)
+            .limit(limit);
+        
+        const totalPages = Math.ceil(total / limit);
+        
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const kicks24h = await Kick.countDocuments({ kickedAt: { $gte: oneDayAgo } });
+        const kicks7d = await Kick.countDocuments({ kickedAt: { $gte: sevenDaysAgo } });
+        
+        let rows = '';
+        for (const kick of kicks) {
+            const date = new Date(kick.kickedAt).toLocaleDateString();
+            const time = new Date(kick.kickedAt).toLocaleTimeString();
+            
+            rows += `
+                <tr>
+                    <td>#${kick.caseNumber || 'N/A'}</td>
+                    <td>${kick.primaryUsername}</td>
+                    <td>${kick.reason.substring(0, 50)}${kick.reason.length > 50 ? '...' : ''}</td>
+                    <td class="hide-mobile">${kick.staffTag || 'Unknown'}</td>
+                    <td>${date}</td>
+                    <td class="hide-mobile">${time}</td>
+                </tr>
+            `;
+        }
+        
+        if (!rows) {
+            rows = '<tr><td colspan="6" class="empty">No kicks found</td></tr>';
+        }
+        
+        let pagination = '';
+        if (totalPages > 1) {
+            if (page > 1) {
+                pagination += `<a href="/viewer/kicks?page=${page-1}&search=${encodeURIComponent(search)}">Previous</a>`;
+            }
+            pagination += `<span style="padding: 8px 16px; color: #888;">Page ${page} of ${totalPages}</span>`;
+            if (page < totalPages) {
+                pagination += `<a href="/viewer/kicks?page=${page+1}&search=${encodeURIComponent(search)}">Next</a>`;
+            }
+        }
+        
+        const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kick Viewer - NewLife SMP</title>
+    <style>${viewerStyles}</style>
+</head>
+<body>
+    <div class="container">
+        <h1>NewLife SMP - Kick Viewer</h1>
+        <nav class="nav">
+            <a href="/viewer/bans">Bans</a>
+            <a href="/viewer/kicks" class="active">Kicks</a>
+        </nav>
+        <div class="stats">
+            <div class="stat-card">
+                <h3>${total}</h3>
+                <p>Total Kicks</p>
+            </div>
+            <div class="stat-card">
+                <h3>${kicks24h}</h3>
+                <p>Last 24 Hours</p>
+            </div>
+            <div class="stat-card">
+                <h3>${kicks7d}</h3>
+                <p>Last 7 Days</p>
+            </div>
+        </div>
+        <form class="search-box" method="GET" action="/viewer/kicks">
+            <input type="text" name="search" placeholder="Search by player, reason, or staff..." value="${search}">
+            <button type="submit">Search</button>
+        </form>
+        <table>
+            <thead>
+                <tr>
+                    <th>Case</th>
+                    <th>Player</th>
+                    <th>Reason</th>
+                    <th class="hide-mobile">Staff</th>
+                    <th>Date</th>
+                    <th class="hide-mobile">Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows}
+            </tbody>
+        </table>
+        <div class="pagination">${pagination}</div>
+    </div>
+</body>
+</html>
+        `;
+        
+        res.setHeader('Content-Type', 'text/html');
+        res.send(html);
+    } catch (error) {
+        console.error('Viewer error:', error);
+        res.status(500).send('Error loading kicks');
+    }
+});
+
+// Redirect /viewer to /viewer/bans
+app.get('/viewer', (req, res) => {
+    res.redirect('/viewer/bans');
+});
+
+// =====================================================
+// AUTHENTICATED API ROUTES
+// =====================================================
 
 // API Key middleware for authentication
 const API_KEY = process.env.LINK_API_KEY || 'your-secure-api-key-here';
 
 function authenticate(req, res, next) {
+    // Skip authentication for viewer routes (already handled above)
+    if (req.path.startsWith('/viewer')) {
+        return next();
+    }
+    
     const authHeader = req.headers['authorization'];
     const apiKey = authHeader && authHeader.startsWith('Bearer ') 
         ? authHeader.slice(7) 
@@ -29,8 +436,8 @@ function authenticate(req, res, next) {
     next();
 }
 
-// Apply authentication to all routes
-app.use(authenticate);
+// Apply authentication to API routes only
+app.use('/api', authenticate);
 
 /**
  * GET /api/linked/:uuid
@@ -356,6 +763,7 @@ function startApiServer(port = null) {
     return new Promise((resolve, reject) => {
         const server = app.listen(serverPort, '0.0.0.0', () => {
             console.log(` Link API server running on port ${serverPort}`);
+            console.log(` Web viewer available at http://localhost:${serverPort}/viewer`);
             resolve(server);
         });
         

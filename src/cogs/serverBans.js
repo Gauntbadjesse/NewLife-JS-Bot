@@ -7,10 +7,11 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const ServerBan = require('../database/models/ServerBan');
 const LinkedAccount = require('../database/models/LinkedAccount');
+const Kick = require('../database/models/Kick');
 const { getNextCaseNumber } = require('../database/caseCounter');
 const { isStaff, isAdmin, isModerator } = require('../utils/permissions');
 const { sendDm } = require('../utils/dm');
-const { executeRcon } = require('../utils/rcon');
+const { executeRcon, kickFromProxy } = require('../utils/rcon');
 
 // Environment config
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || process.env.BAN_LOG_CHANNEL_ID;
@@ -282,6 +283,56 @@ async function kickPlayer(username, reason) {
     }
 }
 
+/**
+ * Send kick DM to user
+ */
+async function sendKickDm(client, discordId, kickData) {
+    const embed = new EmbedBuilder()
+        .setTitle('You Have Been Kicked')
+        .setColor(0xFFA500)
+        .setDescription(`You have been kicked from **NewLife SMP**.`)
+        .addFields(
+            { name: 'Reason', value: kickData.reason, inline: false },
+            { name: 'Kicked At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+        )
+        .setFooter({ text: 'NewLife SMP | You may rejoin the server' })
+        .setTimestamp();
+    
+    return sendDm(client, discordId, { embeds: [embed] });
+}
+
+/**
+ * Log kick to channel
+ */
+async function logKick(client, kick, linkedAccounts) {
+    if (!LOG_CHANNEL_ID) return;
+    
+    try {
+        const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+        if (!channel) return;
+        
+        const embed = new EmbedBuilder()
+            .setTitle(`Player Kicked`)
+            .setColor(0xFFA500)
+            .addFields(
+                { name: 'Player', value: `**${kick.primaryUsername}**\n\`${kick.primaryUuid}\``, inline: true },
+                { name: 'Platform', value: kick.primaryPlatform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                { name: 'Kicked By', value: `<@${kick.staffId}>`, inline: true },
+                { name: 'Reason', value: kick.reason, inline: false }
+            )
+            .setFooter({ text: `Case #${kick.caseNumber || 'N/A'}` })
+            .setTimestamp();
+        
+        if (kick.discordId) {
+            embed.addFields({ name: 'Discord', value: `<@${kick.discordId}>`, inline: true });
+        }
+        
+        await channel.send({ embeds: [embed] });
+    } catch (e) {
+        console.error('Failed to log kick:', e);
+    }
+}
+
 const slashCommands = [
     {
         data: new SlashCommandBuilder()
@@ -466,15 +517,15 @@ const slashCommands = [
                 });
             }
 
-            // Kick all linked players from the server
+            // Kick all linked players from the proxy with "Ban loading..." message
             const kickedPlayers = [];
             for (const account of linkedAccounts) {
-                const kicked = await kickPlayer(account.minecraftUsername, `Banned: ${reason}`);
-                if (kicked) kickedPlayers.push(account.minecraftUsername);
+                const kicked = await kickFromProxy(account.minecraftUsername, 'Ban loading...');
+                if (kicked.success) kickedPlayers.push(account.minecraftUsername);
             }
             // Also try to kick the primary profile if not in linked accounts
             if (!linkedAccounts.find(a => a.minecraftUsername.toLowerCase() === primaryProfile.name.toLowerCase())) {
-                await kickPlayer(primaryProfile.name, `Banned: ${reason}`);
+                await kickFromProxy(primaryProfile.name, 'Ban loading...');
             }
 
             // Log to channel
@@ -755,6 +806,338 @@ const slashCommands = [
                         `**Duration:** ${ban.isPermanent ? 'Permanent' : ban.duration}`,
                         `**Date:** ${date}`,
                         `**By:** ${ban.staffTag || 'Unknown'}`
+                    ].join('\n'),
+                    inline: false
+                });
+            }
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('kick')
+            .setDescription('Kick a player from the server')
+            .addStringOption(opt => opt
+                .setName('target')
+                .setDescription('Minecraft username or @Discord user')
+                .setRequired(true)
+            )
+            .addStringOption(opt => opt
+                .setName('reason')
+                .setDescription('Reason for the kick')
+                .setRequired(true)
+            )
+            .addStringOption(opt => opt
+                .setName('platform')
+                .setDescription('Platform (if kicking by username)')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'Java', value: 'java' },
+                    { name: 'Bedrock', value: 'bedrock' }
+                )
+            ),
+
+        async execute(interaction, client) {
+            // Permission check - Staff only
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({ 
+                    content: 'You do not have permission to use this command.', 
+                    flags: 64
+                });
+            }
+
+            await interaction.deferReply();
+
+            const target = interaction.options.getString('target');
+            const reason = interaction.options.getString('reason');
+            const platformOption = interaction.options.getString('platform') || 'java';
+
+            let primaryProfile = null;
+            let discordId = null;
+            let discordUser = null;
+            let linkedAccounts = [];
+
+            // Check if target is a Discord mention
+            const mentionMatch = target.match(/<@!?(\d+)>/);
+            if (mentionMatch) {
+                discordId = mentionMatch[1];
+                
+                try {
+                    discordUser = await client.users.fetch(discordId);
+                } catch (e) {
+                    return interaction.editReply({ content: 'Could not find that Discord user.' });
+                }
+                
+                // Get linked accounts for this Discord user
+                linkedAccounts = await getAllLinkedAccounts(discordId);
+                
+                if (linkedAccounts.length === 0) {
+                    return interaction.editReply({ 
+                        content: 'This Discord user has no linked Minecraft accounts.' 
+                    });
+                }
+                
+                const primary = linkedAccounts[0];
+                const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
+                
+                if (freshProfile) {
+                    primaryProfile = {
+                        uuid: normalizeUuid(freshProfile.uuid),
+                        name: freshProfile.name,
+                        platform: freshProfile.platform
+                    };
+                } else {
+                    primaryProfile = {
+                        uuid: normalizeUuid(primary.uuid),
+                        name: primary.minecraftUsername,
+                        platform: primary.platform
+                    };
+                }
+            } else {
+                // Target is a Minecraft username - lookup profile
+                primaryProfile = await lookupMcProfile(target, platformOption);
+                
+                if (!primaryProfile) {
+                    if (platformOption === 'java') {
+                        primaryProfile = await lookupMcProfile(target, 'bedrock');
+                    }
+                }
+                
+                if (!primaryProfile) {
+                    return interaction.editReply({ 
+                        content: `Could not find Minecraft account: **${target}**\n\nTry specifying the platform with the \`platform\` option.` 
+                    });
+                }
+                
+                primaryProfile.uuid = normalizeUuid(primaryProfile.uuid);
+                
+                linkedAccounts = await getAllLinkedAccounts(null, primaryProfile.uuid);
+                
+                if (linkedAccounts.length > 0) {
+                    discordId = linkedAccounts[0].discordId;
+                    try {
+                        discordUser = await client.users.fetch(discordId);
+                    } catch (e) {
+                        // Discord user not found, continue without
+                    }
+                }
+            }
+
+            // Get case number
+            let caseNumber;
+            try {
+                caseNumber = await getNextCaseNumber('kick');
+            } catch (e) {
+                caseNumber = null;
+            }
+
+            // Create the kick record
+            const { randomUUID } = require('crypto');
+            const kick = new Kick({
+                _id: randomUUID(),
+                caseNumber,
+                primaryUuid: primaryProfile.uuid,
+                primaryUsername: primaryProfile.name,
+                primaryPlatform: primaryProfile.platform,
+                discordId: discordId || null,
+                discordTag: discordUser?.tag || null,
+                reason,
+                staffId: interaction.user.id,
+                staffTag: interaction.user.tag,
+                kickedAt: new Date(),
+                rconExecuted: false
+            });
+
+            // Execute the kick via proxy RCON
+            const kickResult = await kickFromProxy(primaryProfile.name, reason);
+            kick.rconExecuted = kickResult.success;
+
+            // Also kick all linked accounts
+            for (const account of linkedAccounts) {
+                if (account.minecraftUsername.toLowerCase() !== primaryProfile.name.toLowerCase()) {
+                    await kickFromProxy(account.minecraftUsername, reason);
+                }
+            }
+
+            await kick.save();
+
+            // Send DM to kicked user
+            if (discordId) {
+                await sendKickDm(client, discordId, { reason });
+            }
+
+            // Log to channel
+            await logKick(client, kick, linkedAccounts);
+
+            // Build response embed
+            const embed = new EmbedBuilder()
+                .setTitle('Player Kicked')
+                .setColor(0xFFA500)
+                .addFields(
+                    { name: 'Player', value: `**${primaryProfile.name}**`, inline: true },
+                    { name: 'Platform', value: primaryProfile.platform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                    { name: 'RCON', value: kickResult.success ? 'Success' : 'Failed', inline: true },
+                    { name: 'Reason', value: reason, inline: false }
+                )
+                .setFooter({ text: `Case #${caseNumber || 'N/A'} | Kicked by ${interaction.user.tag}` })
+                .setTimestamp();
+
+            if (discordUser) {
+                embed.addFields({ name: 'Discord', value: `${discordUser.tag} (<@${discordId}>)`, inline: false });
+            }
+
+            if (linkedAccounts.length > 1) {
+                embed.addFields({ 
+                    name: `Linked Accounts Kicked (${linkedAccounts.length})`, 
+                    value: linkedAccounts.map(a => `- ${a.minecraftUsername} (${a.platform})`).join('\n'), 
+                    inline: false 
+                });
+            }
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('recentbans')
+            .setDescription('View recent bans')
+            .addIntegerOption(opt => opt
+                .setName('count')
+                .setDescription('Number of bans to show (default 10, max 25)')
+                .setRequired(false)
+            ),
+
+        async execute(interaction, client) {
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({ content: 'Permission denied.', flags: 64 });
+            }
+
+            await interaction.deferReply({ flags: 64 });
+
+            const count = Math.min(interaction.options.getInteger('count') || 10, 25);
+
+            const bans = await ServerBan.find().sort({ bannedAt: -1 }).limit(count);
+
+            if (bans.length === 0) {
+                return interaction.editReply({ content: 'No bans found.' });
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle(`Recent Bans (${bans.length})`)
+                .setColor(0xff4444)
+                .setFooter({ text: 'NewLife SMP' })
+                .setTimestamp();
+
+            const lines = bans.map(ban => {
+                const status = ban.active ? 'Active' : 'Expired';
+                const date = `<t:${Math.floor(new Date(ban.bannedAt).getTime() / 1000)}:R>`;
+                return `**#${ban.caseNumber || 'N/A'}** - ${ban.primaryUsername} [${status}]\n${ban.reason.substring(0, 50)}${ban.reason.length > 50 ? '...' : ''} | ${date}`;
+            });
+
+            embed.setDescription(lines.join('\n\n'));
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('recentkicks')
+            .setDescription('View recent kicks')
+            .addIntegerOption(opt => opt
+                .setName('count')
+                .setDescription('Number of kicks to show (default 10, max 25)')
+                .setRequired(false)
+            ),
+
+        async execute(interaction, client) {
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({ content: 'Permission denied.', flags: 64 });
+            }
+
+            await interaction.deferReply({ flags: 64 });
+
+            const count = Math.min(interaction.options.getInteger('count') || 10, 25);
+
+            const kicks = await Kick.find().sort({ kickedAt: -1 }).limit(count);
+
+            if (kicks.length === 0) {
+                return interaction.editReply({ content: 'No kicks found.' });
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle(`Recent Kicks (${kicks.length})`)
+                .setColor(0xFFA500)
+                .setFooter({ text: 'NewLife SMP' })
+                .setTimestamp();
+
+            const lines = kicks.map(kick => {
+                const date = `<t:${Math.floor(new Date(kick.kickedAt).getTime() / 1000)}:R>`;
+                return `**#${kick.caseNumber || 'N/A'}** - ${kick.primaryUsername}\n${kick.reason.substring(0, 50)}${kick.reason.length > 50 ? '...' : ''} | ${date}`;
+            });
+
+            embed.setDescription(lines.join('\n\n'));
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('kickhistory')
+            .setDescription('View kick history for a player')
+            .addStringOption(opt => opt
+                .setName('target')
+                .setDescription('Minecraft username')
+                .setRequired(true)
+            ),
+
+        async execute(interaction, client) {
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({ content: 'Permission denied.', flags: 64 });
+            }
+
+            await interaction.deferReply({ flags: 64 });
+
+            const target = interaction.options.getString('target');
+
+            // Lookup profile
+            let profile = await lookupMcProfile(target, 'java');
+            if (!profile) profile = await lookupMcProfile(target, 'bedrock');
+
+            let kicks = [];
+
+            if (profile) {
+                kicks = await Kick.find({
+                    primaryUuid: normalizeUuid(profile.uuid)
+                }).sort({ kickedAt: -1 });
+            }
+
+            if (kicks.length === 0) {
+                // Try by username
+                kicks = await Kick.find({
+                    primaryUsername: { $regex: new RegExp(`^${target}$`, 'i') }
+                }).sort({ kickedAt: -1 });
+            }
+
+            if (kicks.length === 0) {
+                return interaction.editReply({ content: `No kick history found for **${target}**.` });
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle(`Kick History: ${profile?.name || target}`)
+                .setColor(0xFFA500)
+                .setFooter({ text: `${kicks.length} kick(s) found` })
+                .setTimestamp();
+
+            for (const kick of kicks.slice(0, 10)) {
+                const date = `<t:${Math.floor(new Date(kick.kickedAt).getTime() / 1000)}:d>`;
+                
+                embed.addFields({
+                    name: `Case #${kick.caseNumber || 'N/A'}`,
+                    value: [
+                        `**Reason:** ${kick.reason.substring(0, 100)}`,
+                        `**Date:** ${date}`,
+                        `**By:** ${kick.staffTag || 'Unknown'}`
                     ].join('\n'),
                     inline: false
                 });
