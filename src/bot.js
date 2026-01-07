@@ -113,22 +113,6 @@ client.once('ready', async () => {
 
     client.user.setActivity('NewLife SMP | !help', { type: 3 });
 
-    // Refresh member counter on startup
-    try {
-        const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
-        const guildId = process.env.GUILD_ID || '1372672239245459498';
-        const guild = await client.guilds.fetch(guildId).catch(() => null);
-        if (guild) {
-            const ch = await guild.channels.fetch(memberCounterChannel).catch(() => null);
-            if (ch && typeof ch.setName === 'function') {
-                await ch.setName(`Members: ${guild.memberCount}`).catch(() => {});
-                console.log(` Member counter refreshed: ${guild.memberCount} members`);
-            }
-        }
-    } catch (e) {
-        console.error('Failed to refresh member counter on startup:', e);
-    }
-
     // Initialize timed close processor for tickets
     try {
         const { initTimedCloseProcessor } = require('./cogs/tickets');
@@ -147,25 +131,102 @@ client.once('ready', async () => {
 
     // Schedule weekly whitelist stats (every Sunday at midnight UTC)
     scheduleWeeklyWhitelistStats(client);
+
+    // Initialize member system - refresh counter and ensure roles work
+    await initMemberSystem(client);
 });
 
 /**
- * Schedule weekly whitelist stats to be sent to owner
+ * Initialize member counter and role system
+ * Runs on bot startup to ensure everything is working
  */
-function scheduleWeeklyWhitelistStats(client) {
-    const { sendWeeklyStatsToOwner, getWeekStart } = require('./cogs/whitelist');
+async function initMemberSystem(client) {
+    const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
+    const memberRoleId = process.env.MEMBER_ROLE_ID || '1374421919373328434';
+    const guildId = process.env.GUILD_ID || '1372672239245459498';
     
-    const checkAndSend = () => {
-        const now = new Date();
-        // Check if it's Sunday and between 00:00-00:05 UTC
-        if (now.getUTCDay() === 0 && now.getUTCHours() === 0 && now.getUTCMinutes() < 5) {
-            sendWeeklyStatsToOwner(client);
+    try {
+        // Fetch guild with members
+        const guild = await client.guilds.fetch(guildId).catch(() => null);
+        if (!guild) {
+            console.error('[MemberSystem] Could not find guild');
+            return;
         }
-    };
+        
+        // Force fetch all members to ensure accurate count
+        console.log('[MemberSystem] Fetching all guild members...');
+        await guild.members.fetch();
+        console.log(`[MemberSystem] Fetched ${guild.memberCount} members`);
+        
+        // Update the member counter channel
+        try {
+            let ch = guild.channels.cache.get(memberCounterChannel);
+            if (!ch) {
+                ch = await guild.channels.fetch(memberCounterChannel).catch(() => null);
+            }
+            
+            if (ch && (ch.type === 2 || ch.type === 13)) { // Voice channel or Stage channel
+                const currentName = ch.name;
+                const newName = `Members: ${guild.memberCount}`;
+                
+                if (currentName !== newName) {
+                    await ch.setName(newName);
+                    console.log(`[MemberSystem] Counter updated: ${currentName} -> ${newName}`);
+                } else {
+                    console.log(`[MemberSystem] Counter already up to date: ${newName}`);
+                }
+            } else if (ch) {
+                console.error(`[MemberSystem] Counter channel is type ${ch.type}, needs to be voice (2) or stage (13)`);
+            } else {
+                console.error(`[MemberSystem] Counter channel ${memberCounterChannel} not found`);
+            }
+        } catch (e) {
+            console.error('[MemberSystem] Failed to update counter:', e.message);
+        }
+        
+        // Verify the member role exists and bot can assign it
+        try {
+            const role = await guild.roles.fetch(memberRoleId).catch(() => null);
+            if (role) {
+                console.log(`[MemberSystem] Member role verified: ${role.name}`);
+                
+                // Check if bot can assign this role
+                const botMember = guild.members.me;
+                if (botMember && botMember.roles.highest.position <= role.position) {
+                    console.warn(`[MemberSystem] WARNING: Bot role is not high enough to assign ${role.name}`);
+                }
+            } else {
+                console.error(`[MemberSystem] Member role ${memberRoleId} not found`);
+            }
+        } catch (e) {
+            console.error('[MemberSystem] Failed to verify member role:', e.message);
+        }
+        
+        console.log('[MemberSystem] Member system initialized successfully');
+    } catch (e) {
+        console.error('[MemberSystem] Failed to initialize:', e);
+    }
+}
+
+/**
+ * Schedule weekly whitelist stats to be sent to owner
+ * Uses node-cron for reliable scheduling
+ */
+const cron = require('node-cron');
+let weeklyStatsTask = null;
+
+function scheduleWeeklyWhitelistStats(client) {
+    const { sendWeeklyStatsToOwner } = require('./cogs/whitelist');
     
-    // Check every 5 minutes
-    setInterval(checkAndSend, 5 * 60 * 1000);
-    console.log(' Weekly whitelist stats scheduler initialized');
+    // Schedule for Sunday at midnight UTC using cron
+    weeklyStatsTask = cron.schedule('0 0 * * 0', async () => {
+        console.log('[WeeklyStats] Running weekly whitelist stats report...');
+        await sendWeeklyStatsToOwner(client);
+    }, {
+        timezone: 'UTC'
+    });
+    
+    console.log('[WeeklyStats] Weekly whitelist stats scheduler initialized (Sundays 00:00 UTC)');
 }
 
 // Prefix command handler
@@ -296,19 +357,47 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // Update member counter when someone joins
+// Rate limit protection - only update counter once per 5 minutes max
+let lastCounterUpdate = 0;
+const COUNTER_UPDATE_COOLDOWN = 5 * 60 * 1000; // 5 minutes
+
+async function updateMemberCounter(guild, reason) {
+    const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
+    
+    // Check cooldown (Discord rate limits channel renames to 2 per 10 minutes)
+    const now = Date.now();
+    if (now - lastCounterUpdate < COUNTER_UPDATE_COOLDOWN) {
+        console.log(`[MemberCounter] Skipping update (cooldown) - ${reason}`);
+        return;
+    }
+    
+    try {
+        let ch = guild.channels.cache.get(memberCounterChannel);
+        if (!ch) {
+            ch = await guild.channels.fetch(memberCounterChannel).catch(() => null);
+        }
+        
+        if (ch && (ch.type === 2 || ch.type === 13)) { // Voice channel or Stage channel
+            const newName = `Members: ${guild.memberCount}`;
+            await ch.setName(newName);
+            lastCounterUpdate = now;
+            console.log(`[MemberCounter] Updated to ${guild.memberCount} - ${reason}`);
+        } else if (ch) {
+            console.error(`[MemberCounter] Channel is type ${ch.type}, not voice (2) or stage (13)`);
+        } else {
+            console.error(`[MemberCounter] Channel ${memberCounterChannel} not found`);
+        }
+    } catch (e) {
+        console.error(`[MemberCounter] Failed to update:`, e.message);
+    }
+}
+
 client.on('guildMemberAdd', async (member) => {
     console.log(`[MemberJoin] Event fired for ${member.user?.tag || 'unknown'}`);
     
     try {
-        const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
         const memberRoleId = process.env.MEMBER_ROLE_ID || '1374421919373328434';
-        const guildId = process.env.GUILD_ID;
         
-        // Skip if wrong guild
-        if (guildId && member.guild && String(member.guild.id) !== String(guildId)) {
-            console.log(`[MemberJoin] Skipping - wrong guild`);
-            return;
-        }
         if (!member.guild) {
             console.log(`[MemberJoin] Skipping - no guild`);
             return;
@@ -334,27 +423,8 @@ client.on('guildMemberAdd', async (member) => {
             if (logError) await logError('guildMemberAdd: addRole', e, { member: member.user.tag });
         }
 
-        // Update member counter channel
-        try {
-            let ch = member.guild.channels.cache.get(memberCounterChannel);
-            if (!ch) {
-                console.log(`[MemberJoin] Channel not in cache, fetching...`);
-                ch = await member.guild.channels.fetch(memberCounterChannel).catch(() => null);
-            }
-            
-            if (ch && (ch.type === 2 || ch.type === 13)) { // Voice channel or Stage channel
-                const newName = `Members: ${member.guild.memberCount}`;
-                await ch.setName(newName);
-                console.log(`[MemberJoin] Updated counter to ${member.guild.memberCount}`);
-            } else if (ch) {
-                console.error(`[MemberJoin] Channel ${memberCounterChannel} is type ${ch.type}, not a voice channel`);
-            } else {
-                console.error(`[MemberJoin] Counter channel ${memberCounterChannel} not found`);
-            }
-        } catch (e) {
-            console.error(`[MemberJoin] Failed to update counter:`, e.message);
-            if (logError) await logError('guildMemberAdd: counter', e, { member: member.user.tag });
-        }
+        // Update member counter channel (with rate limiting)
+        await updateMemberCounter(member.guild, `${member.user.tag} joined`);
     } catch (e) {
         console.error(`[MemberJoin] Error:`, e);
         if (logError) await logError('guildMemberAdd', e, { member: member?.user?.tag || 'unknown' });
@@ -366,28 +436,10 @@ client.on('guildMemberRemove', async (member) => {
     console.log(`[MemberLeave] Event fired for ${member.user?.tag || 'unknown'}`);
     
     try {
-        const memberCounterChannel = process.env.MEMBER_COUNTER_CHANNEL || '1437529792755794123';
-        const guildId = process.env.GUILD_ID;
-        
-        if (guildId && member.guild && String(member.guild.id) !== String(guildId)) return;
         if (!member.guild) return;
 
-        // Update member counter channel
-        try {
-            let ch = member.guild.channels.cache.get(memberCounterChannel);
-            if (!ch) {
-                ch = await member.guild.channels.fetch(memberCounterChannel).catch(() => null);
-            }
-            
-            if (ch && (ch.type === 2 || ch.type === 13)) { // Voice channel or Stage channel
-                const newName = `Members: ${member.guild.memberCount}`;
-                await ch.setName(newName);
-                console.log(`[MemberLeave] Updated counter to ${member.guild.memberCount}`);
-            }
-        } catch (e) {
-            console.error(`[MemberLeave] Failed to update counter:`, e.message);
-            if (logError) await logError('guildMemberRemove: counter', e, { member: member.user?.tag || 'unknown' });
-        }
+        // Update member counter channel (with rate limiting)
+        await updateMemberCounter(member.guild, `${member.user?.tag || 'unknown'} left`);
     } catch (e) {
         if (logError) await logError('guildMemberRemove', e, { member: member?.user?.tag || 'unknown' });
     }

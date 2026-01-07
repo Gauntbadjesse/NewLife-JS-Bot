@@ -10,8 +10,8 @@ const WhitelistStats = require('../database/models/WhitelistStats');
 const { isStaff, isOwner } = require('../utils/permissions');
 
 const WHITELIST_ROLE_ID = process.env.WHITELIST_ROLE_ID || null;
-const WHITELISTED_ROLE_ID = '1374421917284565046';
-const WHITELIST_GURU_ROLE_ID = '1456563910919454786';
+const WHITELISTED_ROLE_ID = process.env.WHITELISTED_ROLE_ID || '1374421917284565046';
+const WHITELIST_GURU_ROLE_ID = process.env.WHITELIST_GURU_ROLE_ID || '1456563910919454786';
 
 /**
  * Check if member is a whitelist guru (not staff)
@@ -356,7 +356,7 @@ async function sendWeeklyStatsToOwner(client) {
         embed.addFields({ name: 'Staff Stats', value: staffList || 'None', inline: false });
         
         const { sendDm } = require('../utils/dm');
-        await sendDm(client, ownerId, { content: '📊 **Weekly Whitelist Report**', embeds: [embed] });
+        await sendDm(client, ownerId, { content: '**Weekly Whitelist Report**', embeds: [embed] });
         console.log('Weekly whitelist stats sent to owner');
     } catch (err) {
         console.error('Failed to send weekly whitelist stats:', err);

@@ -34,13 +34,27 @@ const { randomUUID } = require('crypto');
 const { getNextCaseNumber } = require('../database/caseCounter');
 
 // Whitelist guru role ID - can access apply tickets and use close/tclose
-const WHITELIST_GURU_ROLE_ID = '1456563910919454786';
+const WHITELIST_GURU_ROLE_ID = process.env.WHITELIST_GURU_ROLE_ID || '1456563910919454786';
 
 // Apply ticket category ID
-const APPLY_CATEGORY_ID = '1437529831398047755';
+const APPLY_CATEGORY_ID = process.env.APPLY_CATEGORY_ID || '1437529831398047755';
 
 // Store ticket creation times for guru tracking (ticket channel ID -> timestamp)
 const ticketCreationTimes = new Map();
+
+// Clean up old entries from ticketCreationTimes (older than 24 hours)
+function cleanupTicketCreationTimes() {
+    const now = Date.now();
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+    for (const [channelId, timestamp] of ticketCreationTimes) {
+        if (now - timestamp.getTime() > maxAge) {
+            ticketCreationTimes.delete(channelId);
+        }
+    }
+}
+
+// Run cleanup every hour
+setInterval(cleanupTicketCreationTimes, 60 * 60 * 1000);
 
 /**
  * Check if member is whitelist guru or staff
@@ -631,21 +645,6 @@ const slashCommands = [
                 embeds: [createSuccessEmbed('Panel Sent', 'The support panel has been sent to this channel.')],
                 ephemeral: true
             });
-        }
-    },
-    // Whitelist apply panel
-    {
-        data: new SlashCommandBuilder()
-            .setName('apanel')
-            .setDescription('Send the whitelist application panel'),
-        async execute(interaction, client) {
-            if (!isSupervisor(interaction.member)) {
-                return interaction.reply({ embeds: [createErrorEmbed('Permission Denied', 'Only Supervisors and above can use this command.')], ephemeral: true });
-            }
-
-            const { embed, components } = createApplyPanelEmbed();
-            await interaction.channel.send({ embeds: [embed], components });
-            return interaction.reply({ embeds: [createSuccessEmbed('Apply Panel Sent', 'Whitelist application panel sent.')], ephemeral: true });
         }
     },
     // Close ticket command

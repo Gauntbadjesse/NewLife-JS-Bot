@@ -20,8 +20,8 @@ const { isOwner, isManagement } = require('../utils/permissions');
 const { sendDm } = require('../utils/dm');
 const cron = require('node-cron');
 
-// Whitelist guru role ID
-const WHITELIST_GURU_ROLE_ID = '1456563910919454786';
+// Whitelist guru role ID - from environment or default
+const WHITELIST_GURU_ROLE_ID = process.env.WHITELIST_GURU_ROLE_ID || '1456563910919454786';
 
 // Common greeting patterns to detect
 const GREETING_PATTERNS = [

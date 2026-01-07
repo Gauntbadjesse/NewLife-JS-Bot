@@ -60,6 +60,15 @@ const banSchema = new mongoose.Schema({
     expiresAt: {
         type: Date,
         default: null
+    },
+    // Automated ban tracking
+    automated: {
+        type: Boolean,
+        default: false
+    },
+    automatedReason: {
+        type: String,
+        default: null
     }
 }, {
     collection: process.env.BANS_COLLECTION || 'bans',

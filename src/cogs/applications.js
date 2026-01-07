@@ -17,16 +17,119 @@ const {
 const { randomUUID } = require('crypto');
 const LinkedAccount = require('../database/models/LinkedAccount');
 const WhitelistApplication = require('../database/models/WhitelistApplication');
+const Ban = require('../database/models/Ban');
+const { getNextCaseNumber } = require('../database/caseCounter');
 const { isAdmin, isSupervisor, isOwner } = require('../utils/permissions');
 const { getEmbedColor } = require('../utils/embeds');
 
 // Environment configuration
 const APPLICATION_CHANNEL_ID = process.env.APPLICATION_CHANNEL_ID || null;
 const APPLICATION_LOG_CHANNEL_ID = process.env.APPLICATION_LOG_CHANNEL_ID || null;
+const BAN_LOG_CHANNEL_ID = process.env.BAN_LOG_CHANNEL_ID || process.env.LOG_CHANNEL_ID || null;
+const MINIMUM_AGE = 13; // Discord ToS minimum age
 
 // Progress bar characters for pie chart visualization
 const BAR_FULL = '█';
 const BAR_EMPTY = '░';
+
+/**
+ * Ban underage user for Discord ToS violation
+ * @param {Interaction} interaction - The modal interaction
+ * @param {number} age - The age entered by the user
+ * @param {Client} client - Discord client
+ */
+async function banUnderageUser(interaction, age, client) {
+    const reason = `Underage user (${age} years old) - Discord Terms of Service violation (must be 13+)`;
+    const caseId = randomUUID();
+    const caseNumber = await getNextCaseNumber();
+    
+    try {
+        // Try to DM the user before banning
+        try {
+            const dmEmbed = new EmbedBuilder()
+                .setTitle('You Have Been Banned')
+                .setDescription(
+                    'You have been automatically banned from **NewLife SMP** for violating Discord\'s Terms of Service.\n\n' +
+                    '**Reason:** You must be at least 13 years old to use Discord.\n\n' +
+                    'If you believe this was a mistake, you may appeal when you meet the age requirement.'
+                )
+                .setColor(0xED4245)
+                .setFooter({ text: 'NewLife SMP' })
+                .setTimestamp();
+            
+            await interaction.user.send({ embeds: [dmEmbed] }).catch(() => {});
+        } catch (e) {
+            // Ignore DM failures
+        }
+        
+        // Get the member and ban them
+        const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        
+        if (member) {
+            await interaction.guild.members.ban(member, { 
+                reason,
+                deleteMessageSeconds: 0 // Don't delete their messages
+            });
+        } else {
+            // If member not found, try banning by ID
+            await interaction.guild.bans.create(interaction.user.id, {
+                reason,
+                deleteMessageSeconds: 0
+            });
+        }
+        
+        // Create ban record in database
+        const ban = new Ban({
+            _id: caseId,
+            caseNumber,
+            uuid: interaction.user.id,
+            playerName: interaction.user.tag,
+            staffUuid: client.user.id,
+            staffName: client.user.tag,
+            reason: reason,
+            createdAt: new Date(),
+            active: true,
+            automated: true,
+            automatedReason: 'underage_application'
+        });
+        
+        await ban.save();
+        
+        // Log the ban to the log channel
+        if (BAN_LOG_CHANNEL_ID) {
+            try {
+                const logChannel = await client.channels.fetch(BAN_LOG_CHANNEL_ID).catch(() => null);
+                if (logChannel) {
+                    const logEmbed = new EmbedBuilder()
+                        .setTitle('Automatic Ban - Underage User')
+                        .setColor(0xED4245)
+                        .addFields(
+                            { name: 'User', value: `${interaction.user.tag} (<@${interaction.user.id}>)`, inline: true },
+                            { name: 'User ID', value: interaction.user.id, inline: true },
+                            { name: 'Age Entered', value: String(age), inline: true },
+                            { name: 'Reason', value: reason, inline: false },
+                            { name: 'Case Number', value: `#${caseNumber}`, inline: true },
+                            { name: 'Case ID', value: caseId, inline: true }
+                        )
+                        .setThumbnail(interaction.user.displayAvatarURL({ size: 128 }))
+                        .setFooter({ text: 'Automated ToS Enforcement' })
+                        .setTimestamp();
+                    
+                    await logChannel.send({ embeds: [logEmbed] });
+                }
+            } catch (e) {
+                console.error('[Applications] Failed to log underage ban:', e);
+            }
+        }
+        
+        console.log(`[Applications] Banned underage user ${interaction.user.tag} (age: ${age}) - Case #${caseNumber}`);
+        
+        return { success: true, caseNumber, caseId };
+    } catch (error) {
+        console.error('[Applications] Failed to ban underage user:', error);
+        return { success: false, error: error.message };
+    }
+}
 
 /**
  * Generate a text-based bar chart for source analytics
@@ -289,6 +392,25 @@ async function handleModal(interaction) {
 
         if (isNaN(age) || age < 1 || age > 120) {
             return interaction.editReply({ content: 'Please enter a valid age.' });
+        }
+
+        // Check if user is underage (Discord ToS requires 13+)
+        if (age < MINIMUM_AGE) {
+            // Ban the user for ToS violation
+            const banResult = await banUnderageUser(interaction, age, interaction.client);
+            
+            if (banResult.success) {
+                // Reply will likely fail since user is banned, but try anyway
+                return interaction.editReply({ 
+                    content: 'Your application could not be processed due to a Terms of Service violation.' 
+                }).catch(() => {});
+            } else {
+                // If ban failed, still reject the application
+                console.error('[Applications] Failed to ban underage user:', banResult.error);
+                return interaction.editReply({ 
+                    content: 'Your application could not be processed. Please contact server staff if you believe this is an error.' 
+                });
+            }
         }
 
         // Get linked accounts

@@ -14,9 +14,6 @@ app.use(express.json());
 // API Key middleware for authentication
 const API_KEY = process.env.LINK_API_KEY || 'your-secure-api-key-here';
 
-// Log the API key on startup (first 8 chars only for security)
-console.log(`[API] Using API key starting with: ${API_KEY.substring(0, 8)}...`);
-
 function authenticate(req, res, next) {
     const authHeader = req.headers['authorization'];
     const apiKey = authHeader && authHeader.startsWith('Bearer ') 
@@ -24,7 +21,6 @@ function authenticate(req, res, next) {
         : req.headers['x-api-key'];
     
     if (!apiKey || apiKey !== API_KEY) {
-        console.log(`[API] Auth failed - received key starting with: ${apiKey ? apiKey.substring(0, 8) + '...' : 'none'}`);
         return res.status(401).json({ 
             success: false, 
             error: 'Unauthorized' 
@@ -61,10 +57,6 @@ app.get('/api/linked/:uuid', async (req, res) => {
             '$1-$2-$3-$4-$5'
         );
         
-        console.log(`[API] Checking link for UUID: ${uuid}`);
-        console.log(`[API] Normalized: ${normalizedUuid}`);
-        console.log(`[API] With dashes: ${uuidWithDashes}`);
-        
         // Check for linked account - try multiple formats
         const linked = await LinkedAccount.findOne({
             $or: [
@@ -74,11 +66,6 @@ app.get('/api/linked/:uuid', async (req, res) => {
                 { uuid: uuid }
             ]
         });
-        
-        console.log(`[API] Found linked account: ${linked ? 'yes' : 'no'}`);
-        if (linked) {
-            console.log(`[API] Stored UUID: ${linked.uuid}, Username: ${linked.minecraftUsername}`);
-        }
         
         if (linked) {
             return res.json({

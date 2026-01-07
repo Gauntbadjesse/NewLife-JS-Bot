@@ -3,44 +3,7 @@
  * Stores whitelist applications submitted through the /apanel
  */
 const mongoose = require('mongoose');
-
-// Standardized source categories for analytics
-const SOURCE_CATEGORIES = {
-    'youtube': 'YouTube',
-    'tiktok': 'TikTok',
-    'reddit': 'Reddit',
-    'twitter': 'Twitter/X',
-    'discord': 'Discord',
-    'friend': 'Friend/Word of Mouth',
-    'search': 'Search Engine',
-    'minecraft_server_list': 'Server List',
-    'twitch': 'Twitch',
-    'other': 'Other'
-};
-
-/**
- * Normalize user input to a standard category
- */
-function normalizeSource(input) {
-    if (!input) return 'other';
-    
-    const lower = input.toLowerCase().trim();
-    
-    if (lower.includes('youtube') || lower.includes('yt') || lower.includes('video')) return 'youtube';
-    if (lower.includes('tiktok') || lower.includes('tik tok') || lower.includes('tt')) return 'tiktok';
-    if (lower.includes('reddit') || lower.includes('r/')) return 'reddit';
-    if (lower.includes('twitter') || lower === 'x' || lower.includes('tweet')) return 'twitter';
-    if (lower.includes('discord') || lower.includes('disboard')) return 'discord';
-    if (lower.includes('friend') || lower.includes('word of mouth') || lower.includes('someone told') || 
-        lower.includes('brother') || lower.includes('sister') || lower.includes('family') ||
-        lower.includes('referred') || lower.includes('recommendation')) return 'friend';
-    if (lower.includes('google') || lower.includes('search') || lower.includes('bing')) return 'search';
-    if (lower.includes('server list') || lower.includes('minecraft-server') || lower.includes('topg') ||
-        lower.includes('planet minecraft')) return 'minecraft_server_list';
-    if (lower.includes('twitch') || lower.includes('stream')) return 'twitch';
-    
-    return 'other';
-}
+const { SOURCE_CATEGORIES, normalizeSource } = require('../../utils/sourceNormalizer');
 
 const whitelistApplicationSchema = new mongoose.Schema({
     _id: { type: String, required: true },
