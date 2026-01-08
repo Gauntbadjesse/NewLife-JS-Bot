@@ -112,16 +112,30 @@ async function testConnection() {
  * @returns {Promise<{success: boolean, response: string}>}
  */
 async function executeProxyRcon(command) {
-    const host = process.env.PROXY_RCON_HOST;
-    const port = parseInt(process.env.PROXY_RCON_PORT) || 27242;
+    let host = process.env.PROXY_RCON_HOST;
+    let port = parseInt(process.env.PROXY_RCON_PORT) || 27242;
     const password = process.env.PROXY_RCON_PASSWORD;
 
+    // Strip port from host if someone accidentally included it (e.g. "193.218.34.145:27242")
+    if (host && host.includes(':')) {
+        const parts = host.split(':');
+        host = parts[0];
+        // Use the port from the host string if PROXY_RCON_PORT wasn't set
+        if (!process.env.PROXY_RCON_PORT && parts[1]) {
+            port = parseInt(parts[1]) || 27242;
+        }
+        console.log(`[ProxyRCON] Warning: Host contained port, extracted host="${host}" port=${port}`);
+    }
+
     if (!host || !password) {
+        console.log(`[ProxyRCON] Not configured. host=${host ? 'set' : 'missing'}, password=${password ? 'set' : 'missing'}`);
         return {
             success: false,
             response: 'Proxy RCON is not configured. Please set PROXY_RCON_HOST and PROXY_RCON_PASSWORD in .env'
         };
     }
+
+    console.log(`[ProxyRCON] Connecting to ${host}:${port} (command: ${command})`);
 
     let rcon = null;
 
