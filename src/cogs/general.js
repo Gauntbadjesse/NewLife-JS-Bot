@@ -15,6 +15,8 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const Warning = require('../database/models/Warning');
 const Ban = require('../database/models/Ban');
 const Infraction = require('../database/models/Infraction');
+const ServerBan = require('../database/models/ServerBan');
+const Kick = require('../database/models/Kick');
 const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
@@ -130,6 +132,7 @@ const commands = {
             if (isOwner(member)) {
                 const ownerCommands = [
                     `\`${prefix}update\` - Pull latest from git and restart`,
+                    `\`${prefix}remove <case_id>\` - Permanently delete a record`,
                     `\`${prefix}addkingdoms\` - Add preset kingdoms to database`,
                     `\`${prefix}temp2\` - Add member role to all users`,
                     `\`${prefix}test1\` - Deny view access to unverified role`
@@ -522,6 +525,80 @@ const commands = {
                 await statusMsg.edit({ content: 'Failed to apply permission overwrites to all channels.' }).catch(() => {});
             } finally {
                 try { await message.delete(); } catch (e) { /* ignore */ }
+            }
+        }
+    },
+
+    // !remove - Permanently delete a ban, kick, or warning record (Owner only)
+    remove: {
+        name: 'remove',
+        description: 'Permanently delete a ban, kick, or warning record by case ID (Owner only)',
+        usage: '!remove <case_id>',
+        async execute(message, args, client) {
+            if (!isOwner(message.member)) {
+                return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'Only the owner can run this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            if (!args[0]) {
+                return message.reply({ embeds: [createErrorEmbed('Missing Argument', 'Usage: `!remove <case_id>`')], allowedMentions: { repliedUser: false } });
+            }
+
+            const caseId = parseInt(args[0]);
+            if (isNaN(caseId)) {
+                return message.reply({ embeds: [createErrorEmbed('Invalid Case ID', 'Please provide a valid numeric case ID.')], allowedMentions: { repliedUser: false } });
+            }
+
+            try {
+                // Try to find and delete from each collection
+                const ban = await ServerBan.findOneAndDelete({ caseNumber: caseId });
+                if (ban) {
+                    const embed = new EmbedBuilder()
+                        .setColor(0x10b981)
+                        .setTitle('Record Deleted')
+                        .setDescription(`Successfully deleted **Ban** record.`)
+                        .addFields(
+                            { name: 'Case ID', value: `#${caseId}`, inline: true },
+                            { name: 'Player', value: ban.primaryUsername || 'Unknown', inline: true },
+                            { name: 'Reason', value: ban.reason || 'No reason', inline: false }
+                        )
+                        .setTimestamp();
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                }
+
+                const kick = await Kick.findOneAndDelete({ caseNumber: caseId });
+                if (kick) {
+                    const embed = new EmbedBuilder()
+                        .setColor(0x10b981)
+                        .setTitle('Record Deleted')
+                        .setDescription(`Successfully deleted **Kick** record.`)
+                        .addFields(
+                            { name: 'Case ID', value: `#${caseId}`, inline: true },
+                            { name: 'Player', value: kick.primaryUsername || 'Unknown', inline: true },
+                            { name: 'Reason', value: kick.reason || 'No reason', inline: false }
+                        )
+                        .setTimestamp();
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                }
+
+                const warning = await Warning.findOneAndDelete({ caseNumber: caseId });
+                if (warning) {
+                    const embed = new EmbedBuilder()
+                        .setColor(0x10b981)
+                        .setTitle('Record Deleted')
+                        .setDescription(`Successfully deleted **Warning** record.`)
+                        .addFields(
+                            { name: 'Case ID', value: `#${caseId}`, inline: true },
+                            { name: 'User', value: warning.discordTag || 'Unknown', inline: true },
+                            { name: 'Reason', value: warning.reason || 'No reason', inline: false }
+                        )
+                        .setTimestamp();
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                }
+
+                return message.reply({ embeds: [createErrorEmbed('Not Found', `No ban, kick, or warning found with case ID #${caseId}.`)], allowedMentions: { repliedUser: false } });
+            } catch (error) {
+                console.error('Error in remove command:', error);
+                return message.reply({ embeds: [createErrorEmbed('Error', 'An error occurred while deleting the record.')], allowedMentions: { repliedUser: false } });
             }
         }
     },
