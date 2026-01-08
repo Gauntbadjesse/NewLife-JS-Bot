@@ -8,6 +8,7 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('disc
 const ServerBan = require('../database/models/ServerBan');
 const LinkedAccount = require('../database/models/LinkedAccount');
 const Kick = require('../database/models/Kick');
+const Warning = require('../database/models/Warning');
 const { getNextCaseNumber } = require('../database/caseCounter');
 const { isStaff, isAdmin, isModerator } = require('../utils/permissions');
 const { sendDm } = require('../utils/dm');
@@ -333,6 +334,86 @@ async function logKick(client, kick, linkedAccounts) {
     }
 }
 
+/**
+ * Send warning DM to user
+ */
+async function sendWarningDm(client, discordId, warningData) {
+    const severityColors = {
+        minor: 0xFFFF00,
+        moderate: 0xFFA500,
+        severe: 0xFF4444
+    };
+    
+    const embed = new EmbedBuilder()
+        .setTitle('⚠️ You Have Been Warned')
+        .setColor(severityColors[warningData.severity] || 0xFFA500)
+        .setDescription(`You have received a warning on **NewLife SMP**.`)
+        .addFields(
+            { name: 'Reason', value: warningData.reason, inline: false },
+            { name: 'Severity', value: warningData.severity.charAt(0).toUpperCase() + warningData.severity.slice(1), inline: true },
+            { name: 'Category', value: warningData.category.charAt(0).toUpperCase() + warningData.category.slice(1), inline: true },
+            { name: 'Warned At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
+        )
+        .setFooter({ text: `Case #${warningData.caseNumber} | NewLife SMP` })
+        .setTimestamp();
+    
+    embed.addFields({
+        name: '⚠️ Notice',
+        value: 'Continued violations may result in further action including kicks or bans.',
+        inline: false
+    });
+    
+    return sendDm(client, discordId, { embeds: [embed] });
+}
+
+/**
+ * Log warning to channel
+ */
+async function logWarning(client, warning, linkedAccounts = []) {
+    if (!LOG_CHANNEL_ID) return;
+    
+    try {
+        const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+        if (!channel) return;
+        
+        const severityColors = {
+            minor: 0xFFFF00,
+            moderate: 0xFFA500,
+            severe: 0xFF4444
+        };
+        
+        const embed = new EmbedBuilder()
+            .setTitle(`⚠️ Player Warned`)
+            .setColor(severityColors[warning.severity] || 0xFFA500)
+            .addFields(
+                { name: 'Discord User', value: `<@${warning.discordId}> (${warning.discordTag})`, inline: true },
+                { name: 'Warned By', value: `<@${warning.staffId}>`, inline: true },
+                { name: 'Severity', value: warning.severity.charAt(0).toUpperCase() + warning.severity.slice(1), inline: true },
+                { name: 'Category', value: warning.category.charAt(0).toUpperCase() + warning.category.slice(1), inline: true },
+                { name: 'Reason', value: warning.reason, inline: false }
+            )
+            .setFooter({ text: `Case #${warning.caseNumber || 'N/A'}` })
+            .setTimestamp();
+        
+        if (warning.playerName) {
+            embed.addFields({ name: 'Minecraft', value: `**${warning.playerName}** (${warning.platform || 'java'})`, inline: true });
+        }
+        
+        if (linkedAccounts.length > 1) {
+            const accountsList = linkedAccounts.map(a => `• ${a.minecraftUsername} (${a.platform})`).join('\n');
+            embed.addFields({ 
+                name: `Linked Accounts (${linkedAccounts.length})`, 
+                value: accountsList, 
+                inline: false 
+            });
+        }
+        
+        await channel.send({ embeds: [embed] });
+    } catch (e) {
+        console.error('Failed to log warning:', e);
+    }
+}
+
 const slashCommands = [
     {
         data: new SlashCommandBuilder()
@@ -636,13 +717,22 @@ const slashCommands = [
             .setDescription('Unban a player from the server')
             .addStringOption(opt => opt
                 .setName('target')
-                .setDescription('Minecraft username')
+                .setDescription('Minecraft username or @Discord user')
                 .setRequired(true)
             )
             .addStringOption(opt => opt
                 .setName('reason')
                 .setDescription('Reason for unbanning')
                 .setRequired(false)
+            )
+            .addStringOption(opt => opt
+                .setName('platform')
+                .setDescription('Platform (if unbanning by username)')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'Java', value: 'java' },
+                    { name: 'Bedrock', value: 'bedrock' }
+                )
             ),
 
         async execute(interaction, client) {
@@ -658,53 +748,175 @@ const slashCommands = [
 
             const target = interaction.options.getString('target');
             const unbanReason = interaction.options.getString('reason') || 'No reason provided';
+            const platformOption = interaction.options.getString('platform') || 'java';
 
-            // Try to find the ban
-            // First, lookup the profile to get UUID
-            let profile = await lookupMcProfile(target, 'java');
-            if (!profile) {
-                profile = await lookupMcProfile(target, 'bedrock');
+            let primaryProfile = null;
+            let discordId = null;
+            let discordUser = null;
+            let linkedAccounts = [];
+
+            // Check if target is a Discord mention
+            const mentionMatch = target.match(/<@!?(\d+)>/);
+            if (mentionMatch) {
+                discordId = mentionMatch[1];
+                
+                try {
+                    discordUser = await client.users.fetch(discordId);
+                } catch (e) {
+                    return interaction.editReply({ content: 'Could not find that Discord user.' });
+                }
+                
+                // Get linked accounts for this Discord user
+                linkedAccounts = await getAllLinkedAccounts(discordId);
+                
+                if (linkedAccounts.length === 0) {
+                    return interaction.editReply({ 
+                        content: 'This Discord user has no linked Minecraft accounts.' 
+                    });
+                }
+                
+                // Use first account as primary
+                const primary = linkedAccounts[0];
+                const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
+                
+                if (freshProfile) {
+                    primaryProfile = {
+                        uuid: normalizeUuid(freshProfile.uuid),
+                        name: freshProfile.name,
+                        platform: freshProfile.platform
+                    };
+                } else {
+                    primaryProfile = {
+                        uuid: normalizeUuid(primary.uuid),
+                        name: primary.minecraftUsername,
+                        platform: primary.platform
+                    };
+                }
+            } else {
+                // Target is a Minecraft username - lookup profile
+                primaryProfile = await lookupMcProfile(target, platformOption);
+                
+                if (!primaryProfile) {
+                    // Try bedrock if java failed
+                    if (platformOption === 'java') {
+                        primaryProfile = await lookupMcProfile(target, 'bedrock');
+                    }
+                }
+                
+                if (!primaryProfile) {
+                    // Try to find by username in existing bans
+                    const existingBan = await ServerBan.findOne({
+                        primaryUsername: { $regex: new RegExp(`^${target}$`, 'i') },
+                        active: true
+                    });
+                    
+                    if (existingBan) {
+                        primaryProfile = {
+                            uuid: existingBan.primaryUuid,
+                            name: existingBan.primaryUsername,
+                            platform: existingBan.primaryPlatform || 'java'
+                        };
+                        discordId = existingBan.discordId;
+                    } else {
+                        return interaction.editReply({ 
+                            content: `Could not find Minecraft account or active ban for: **${target}**` 
+                        });
+                    }
+                }
+                
+                if (primaryProfile) {
+                    // Normalize the UUID
+                    primaryProfile.uuid = normalizeUuid(primaryProfile.uuid);
+                    
+                    // Find linked accounts from this UUID
+                    linkedAccounts = await getAllLinkedAccounts(null, primaryProfile.uuid);
+                    
+                    if (linkedAccounts.length > 0 && !discordId) {
+                        discordId = linkedAccounts[0].discordId;
+                        try {
+                            discordUser = await client.users.fetch(discordId);
+                        } catch (e) {
+                            // Discord user not found, continue without
+                        }
+                    }
+                }
             }
 
-            let ban = null;
-
-            if (profile) {
-                ban = await ServerBan.findActiveBan(normalizeUuid(profile.uuid));
+            // Collect all UUIDs to unban
+            const uuidsToUnban = [primaryProfile.uuid];
+            for (const account of linkedAccounts) {
+                const normalizedAccUuid = normalizeUuid(account.uuid);
+                if (!uuidsToUnban.includes(normalizedAccUuid)) {
+                    uuidsToUnban.push(normalizedAccUuid);
+                }
             }
 
-            // If not found by UUID, try by username
-            if (!ban) {
-                ban = await ServerBan.findOne({
-                    primaryUsername: { $regex: new RegExp(`^${target}$`, 'i') },
-                    active: true
+            // Find and unban ALL active bans for these UUIDs
+            const unbannedBans = [];
+            for (const uuid of uuidsToUnban) {
+                const bans = await ServerBan.find({
+                    $or: [
+                        { primaryUuid: uuid, active: true },
+                        { bannedUuids: uuid, active: true }
+                    ]
+                });
+                
+                for (const ban of bans) {
+                    if (!unbannedBans.find(b => b._id.toString() === ban._id.toString())) {
+                        ban.active = false;
+                        ban.unbannedAt = new Date();
+                        ban.unbannedBy = interaction.user.id;
+                        ban.unbannedByTag = interaction.user.tag;
+                        ban.unbanReason = unbanReason;
+                        await ban.save();
+                        unbannedBans.push(ban);
+                        
+                        // Log each unban
+                        await logUnban(client, ban, interaction.user);
+                    }
+                }
+            }
+
+            if (unbannedBans.length === 0) {
+                return interaction.editReply({ 
+                    content: `No active bans found for **${primaryProfile.name}**${discordUser ? ` (<@${discordId}>)` : ''}.` 
                 });
             }
 
-            if (!ban) {
-                return interaction.editReply({ content: `No active ban found for **${target}**.` });
-            }
-
-            // Update the ban
-            ban.active = false;
-            ban.unbannedAt = new Date();
-            ban.unbannedBy = interaction.user.id;
-            ban.unbannedByTag = interaction.user.tag;
-            ban.unbanReason = unbanReason;
-            await ban.save();
-
-            // Log unban
-            await logUnban(client, ban, interaction.user);
-
+            // Build response embed
             const embed = new EmbedBuilder()
                 .setTitle('Player Unbanned')
                 .setColor(0x57F287)
                 .addFields(
-                    { name: 'Player', value: `**${ban.primaryUsername}**`, inline: true },
-                    { name: 'Original Reason', value: ban.reason, inline: false },
+                    { name: 'Player', value: `**${primaryProfile.name}**`, inline: true },
+                    { name: 'Platform', value: primaryProfile.platform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                    { name: 'Bans Removed', value: `${unbannedBans.length}`, inline: true },
                     { name: 'Unban Reason', value: unbanReason, inline: false }
                 )
-                .setFooter({ text: `Case #${ban.caseNumber || 'N/A'} | Unbanned by ${interaction.user.tag}` })
+                .setFooter({ text: `Unbanned by ${interaction.user.tag}` })
                 .setTimestamp();
+
+            if (discordUser) {
+                embed.addFields({ name: 'Discord', value: `${discordUser.tag} (<@${discordId}>)`, inline: false });
+            }
+
+            if (linkedAccounts.length > 1) {
+                embed.addFields({ 
+                    name: `Linked Accounts Unbanned (${linkedAccounts.length})`, 
+                    value: linkedAccounts.map(a => `• ${a.minecraftUsername} (${a.platform})`).join('\n'), 
+                    inline: false 
+                });
+            }
+
+            // Show original ban reasons
+            const reasons = [...new Set(unbannedBans.map(b => b.reason))];
+            if (reasons.length > 0) {
+                embed.addFields({ 
+                    name: 'Original Ban Reason(s)', 
+                    value: reasons.slice(0, 3).join('\n').substring(0, 1000), 
+                    inline: false 
+                });
+            }
 
             return interaction.editReply({ embeds: [embed] });
         }
@@ -1057,6 +1269,295 @@ const slashCommands = [
                     inline: false 
                 });
             }
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('warn')
+            .setDescription('Warn a Discord user')
+            .addUserOption(opt => opt
+                .setName('target')
+                .setDescription('Discord user to warn')
+                .setRequired(true)
+            )
+            .addStringOption(opt => opt
+                .setName('reason')
+                .setDescription('Reason for the warning')
+                .setRequired(true)
+            )
+            .addStringOption(opt => opt
+                .setName('severity')
+                .setDescription('Severity of the warning')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'Minor', value: 'minor' },
+                    { name: 'Moderate', value: 'moderate' },
+                    { name: 'Severe', value: 'severe' }
+                )
+            )
+            .addStringOption(opt => opt
+                .setName('category')
+                .setDescription('Category of the warning')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'Behavior', value: 'behavior' },
+                    { name: 'Chat', value: 'chat' },
+                    { name: 'Cheating', value: 'cheating' },
+                    { name: 'Griefing', value: 'griefing' },
+                    { name: 'Other', value: 'other' }
+                )
+            ),
+
+        async execute(interaction, client) {
+            // Permission check - Staff only
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({ 
+                    content: 'You do not have permission to use this command.', 
+                    flags: 64
+                });
+            }
+
+            await interaction.deferReply();
+
+            const targetUser = interaction.options.getUser('target');
+            const reason = interaction.options.getString('reason');
+            const severity = interaction.options.getString('severity') || 'moderate';
+            const category = interaction.options.getString('category') || 'other';
+
+            const discordId = targetUser.id;
+            const discordTag = targetUser.tag;
+
+            // Get linked accounts for this user
+            const linkedAccounts = await getAllLinkedAccounts(discordId);
+
+            let primaryProfile = null;
+            if (linkedAccounts.length > 0) {
+                const primary = linkedAccounts[0];
+                const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
+                
+                if (freshProfile) {
+                    primaryProfile = {
+                        uuid: normalizeUuid(freshProfile.uuid),
+                        name: freshProfile.name,
+                        platform: freshProfile.platform
+                    };
+                } else {
+                    primaryProfile = {
+                        uuid: normalizeUuid(primary.uuid),
+                        name: primary.minecraftUsername,
+                        platform: primary.platform
+                    };
+                }
+            }
+
+            // Get case number
+            let caseNumber;
+            try {
+                caseNumber = await getNextCaseNumber('warning');
+            } catch (e) {
+                caseNumber = Date.now();
+            }
+
+            // Collect all linked UUIDs
+            const warnedUuids = linkedAccounts.map(a => normalizeUuid(a.uuid));
+
+            // Create the warning record
+            const { randomUUID } = require('crypto');
+            const warning = new Warning({
+                _id: randomUUID(),
+                caseNumber,
+                uuid: primaryProfile?.uuid || null,
+                playerName: primaryProfile?.name || null,
+                platform: primaryProfile?.platform || null,
+                warnedUuids,
+                discordId,
+                discordTag,
+                reason,
+                severity,
+                category,
+                staffUuid: null,
+                staffName: interaction.user.tag,
+                staffId: interaction.user.id,
+                createdAt: new Date(),
+                active: true,
+                dmSent: false
+            });
+
+            await warning.save();
+
+            // Send DM to warned user
+            let dmSent = false;
+            try {
+                const dmResult = await sendWarningDm(client, discordId, {
+                    reason,
+                    severity,
+                    category,
+                    caseNumber
+                });
+                dmSent = dmResult;
+                warning.dmSent = dmSent;
+                await warning.save();
+            } catch (e) {
+                console.error('Failed to send warning DM:', e);
+            }
+
+            // Log to channel
+            await logWarning(client, warning, linkedAccounts);
+
+            // Get total active warnings for this user
+            const totalWarnings = await Warning.countActiveWarnings(discordId);
+
+            // Build response embed
+            const severityColors = {
+                minor: 0xFFFF00,
+                moderate: 0xFFA500,
+                severe: 0xFF4444
+            };
+
+            const embed = new EmbedBuilder()
+                .setTitle('⚠️ Warning Issued')
+                .setColor(severityColors[severity] || 0xFFA500)
+                .addFields(
+                    { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
+                    { name: 'Severity', value: severity.charAt(0).toUpperCase() + severity.slice(1), inline: true },
+                    { name: 'Category', value: category.charAt(0).toUpperCase() + category.slice(1), inline: true },
+                    { name: 'Reason', value: reason, inline: false },
+                    { name: 'Total Warnings', value: `${totalWarnings}`, inline: true },
+                    { name: 'DM Sent', value: dmSent ? 'Yes' : 'No', inline: true }
+                )
+                .setFooter({ text: `Case #${caseNumber} | Warned by ${interaction.user.tag}` })
+                .setTimestamp();
+
+            if (primaryProfile) {
+                embed.addFields({ 
+                    name: 'Minecraft Account', 
+                    value: `**${primaryProfile.name}** (${primaryProfile.platform})`, 
+                    inline: false 
+                });
+            }
+
+            if (linkedAccounts.length > 1) {
+                embed.addFields({ 
+                    name: `All Linked Accounts (${linkedAccounts.length})`, 
+                    value: linkedAccounts.map(a => `• ${a.minecraftUsername} (${a.platform})`).join('\n'), 
+                    inline: false 
+                });
+            }
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('warnings')
+            .setDescription('View warnings for a user')
+            .addUserOption(opt => opt
+                .setName('target')
+                .setDescription('Discord user to check')
+                .setRequired(true)
+            )
+            .addBooleanOption(opt => opt
+                .setName('include_removed')
+                .setDescription('Include removed warnings')
+                .setRequired(false)
+            ),
+
+        async execute(interaction, client) {
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({ content: 'Permission denied.', flags: 64 });
+            }
+
+            await interaction.deferReply({ flags: 64 });
+
+            const targetUser = interaction.options.getUser('target');
+            const includeRemoved = interaction.options.getBoolean('include_removed') || false;
+
+            const warnings = await Warning.getUserWarnings(targetUser.id, includeRemoved);
+
+            if (warnings.length === 0) {
+                return interaction.editReply({ 
+                    content: `**${targetUser.tag}** has no${includeRemoved ? '' : ' active'} warnings.` 
+                });
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle(`Warnings: ${targetUser.tag}`)
+                .setColor(0xFFA500)
+                .setFooter({ text: `${warnings.length} warning(s) found` })
+                .setTimestamp();
+
+            const lines = warnings.slice(0, 10).map(w => {
+                const status = w.active ? '' : '[REMOVED]';
+                const date = `<t:${Math.floor(new Date(w.createdAt).getTime() / 1000)}:R>`;
+                const sev = w.severity.charAt(0).toUpperCase() + w.severity.slice(1);
+                const cat = w.category.charAt(0).toUpperCase() + w.category.slice(1);
+                return `**#${w.caseNumber}** ${status} - ${sev} (${cat})\n${w.reason.substring(0, 80)}${w.reason.length > 80 ? '...' : ''}\n${date} by ${w.staffName}`;
+            });
+
+            embed.setDescription(lines.join('\n\n'));
+
+            if (warnings.length > 10) {
+                embed.addFields({ 
+                    name: 'Note', 
+                    value: `Showing 10 of ${warnings.length} warnings. View all at the web viewer.`, 
+                    inline: false 
+                });
+            }
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('removewarn')
+            .setDescription('Remove a warning from a user')
+            .addIntegerOption(opt => opt
+                .setName('case')
+                .setDescription('Case number of the warning')
+                .setRequired(true)
+            )
+            .addStringOption(opt => opt
+                .setName('reason')
+                .setDescription('Reason for removing the warning')
+                .setRequired(false)
+            ),
+
+        async execute(interaction, client) {
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({ content: 'Permission denied.', flags: 64 });
+            }
+
+            await interaction.deferReply();
+
+            const caseNumber = interaction.options.getInteger('case');
+            const removeReason = interaction.options.getString('reason') || 'No reason provided';
+
+            const warning = await Warning.findOne({ caseNumber, active: true });
+
+            if (!warning) {
+                return interaction.editReply({ content: `No active warning found with case #${caseNumber}.` });
+            }
+
+            warning.active = false;
+            warning.removedBy = interaction.user.id;
+            warning.removedByTag = interaction.user.tag;
+            warning.removedAt = new Date();
+            warning.removeReason = removeReason;
+            await warning.save();
+
+            const embed = new EmbedBuilder()
+                .setTitle('Warning Removed')
+                .setColor(0x57F287)
+                .addFields(
+                    { name: 'Case', value: `#${caseNumber}`, inline: true },
+                    { name: 'User', value: `<@${warning.discordId}>`, inline: true },
+                    { name: 'Original Reason', value: warning.reason, inline: false },
+                    { name: 'Removal Reason', value: removeReason, inline: false }
+                )
+                .setFooter({ text: `Removed by ${interaction.user.tag}` })
+                .setTimestamp();
 
             return interaction.editReply({ embeds: [embed] });
         }
