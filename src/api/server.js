@@ -356,6 +356,7 @@ ${getHeader('warnings')}
 });
 
 app.get('/viewer', (req, res) => res.redirect('/viewer/bans'));
+app.get('/', (req, res) => res.redirect('/viewer/login'));
 
 // =====================================================
 // AUTHENTICATED API ROUTES
