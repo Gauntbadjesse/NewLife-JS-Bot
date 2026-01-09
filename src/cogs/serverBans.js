@@ -13,6 +13,7 @@ const { getNextCaseNumber } = require('../database/caseCounter');
 const { isStaff, isAdmin, isModerator } = require('../utils/permissions');
 const { sendDm } = require('../utils/dm');
 const { executeRcon, kickFromProxy } = require('../utils/rcon');
+const { resolveDiscordFromMinecraft } = require('../utils/playerResolver');
 
 // Environment config
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || process.env.BAN_LOG_CHANNEL_ID;
@@ -1280,7 +1281,12 @@ const slashCommands = [
             .addUserOption(opt => opt
                 .setName('target')
                 .setDescription('Discord user to warn')
-                .setRequired(true)
+                .setRequired(false)
+            )
+            .addStringOption(opt => opt
+                .setName('mcname')
+                .setDescription('Or enter a Minecraft username to lookup')
+                .setRequired(false)
             )
             .addStringOption(opt => opt
                 .setName('reason')
@@ -1321,10 +1327,24 @@ const slashCommands = [
 
             await interaction.deferReply();
 
-            const targetUser = interaction.options.getUser('target');
+            let targetUser = interaction.options.getUser('target');
+            const mcname = interaction.options.getString('mcname');
             const reason = interaction.options.getString('reason');
             const severity = interaction.options.getString('severity') || 'moderate';
             const category = interaction.options.getString('category') || 'other';
+
+            // Resolve target from mcname if no user provided
+            if (!targetUser && mcname) {
+                const resolved = await resolveDiscordFromMinecraft(mcname, interaction.client);
+                if (!resolved) {
+                    return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
+                }
+                targetUser = resolved;
+            }
+
+            if (!targetUser) {
+                return interaction.editReply({ content: 'You must provide either a Discord user or a Minecraft username.' });
+            }
 
             const discordId = targetUser.id;
             const discordTag = targetUser.tag;
@@ -1456,7 +1476,12 @@ const slashCommands = [
             .addUserOption(opt => opt
                 .setName('target')
                 .setDescription('Discord user to check')
-                .setRequired(true)
+                .setRequired(false)
+            )
+            .addStringOption(opt => opt
+                .setName('mcname')
+                .setDescription('Or enter a Minecraft username to lookup')
+                .setRequired(false)
             )
             .addBooleanOption(opt => opt
                 .setName('include_removed')
@@ -1471,8 +1496,22 @@ const slashCommands = [
 
             await interaction.deferReply({ flags: 64 });
 
-            const targetUser = interaction.options.getUser('target');
+            let targetUser = interaction.options.getUser('target');
+            const mcname = interaction.options.getString('mcname');
             const includeRemoved = interaction.options.getBoolean('include_removed') || false;
+
+            // Resolve target from mcname if no user provided
+            if (!targetUser && mcname) {
+                const resolved = await resolveDiscordFromMinecraft(mcname, interaction.client);
+                if (!resolved) {
+                    return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
+                }
+                targetUser = resolved;
+            }
+
+            if (!targetUser) {
+                return interaction.editReply({ content: 'You must provide either a Discord user or a Minecraft username.' });
+            }
 
             const warnings = await Warning.getUserWarnings(targetUser.id, includeRemoved);
 

@@ -114,16 +114,16 @@ async function createTempChannel(member, hub, client) {
         // Send control panel message
         try {
             const controlEmbed = new EmbedBuilder()
-                .setTitle('🎙️ Your Temporary Voice Channel')
+                .setTitle('Your Temporary Voice Channel')
                 .setDescription(`Welcome to your temporary channel, ${member}!\n\nYou have full control over this channel. Use the buttons below or these commands:`)
                 .setColor(0x5865F2)
                 .addFields(
-                    { name: '📝 Rename', value: '`/tempvc rename <name>`', inline: true },
-                    { name: '👥 Set Limit', value: '`/tempvc limit <number>`', inline: true },
-                    { name: '🔒 Lock/Unlock', value: '`/tempvc lock` / `unlock`', inline: true },
-                    { name: '👤 Kick User', value: '`/tempvc kick <user>`', inline: true },
-                    { name: '🚫 Ban/Unban', value: '`/tempvc ban/unban <user>`', inline: true },
-                    { name: '👑 Transfer', value: '`/tempvc transfer <user>`', inline: true }
+                    { name: 'Rename', value: '`/tempvc rename <name>`', inline: true },
+                    { name: 'Set Limit', value: '`/tempvc limit <number>`', inline: true },
+                    { name: 'Lock/Unlock', value: '`/tempvc lock` / `unlock`', inline: true },
+                    { name: 'Kick User', value: '`/tempvc kick <user>`', inline: true },
+                    { name: 'Ban/Unban', value: '`/tempvc ban/unban <user>`', inline: true },
+                    { name: 'Transfer', value: '`/tempvc transfer <user>`', inline: true }
                 )
                 .setFooter({ text: 'Channel will be deleted when empty' });
 
@@ -131,22 +131,18 @@ async function createTempChannel(member, hub, client) {
                 new ButtonBuilder()
                     .setCustomId(`tempvc_lock_${tempChannel.id}`)
                     .setLabel('Lock')
-                    .setEmoji('🔒')
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tempvc_unlock_${tempChannel.id}`)
                     .setLabel('Unlock')
-                    .setEmoji('🔓')
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tempvc_hide_${tempChannel.id}`)
                     .setLabel('Hide')
-                    .setEmoji('👻')
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tempvc_reveal_${tempChannel.id}`)
                     .setLabel('Reveal')
-                    .setEmoji('👁️')
                     .setStyle(ButtonStyle.Secondary)
             );
 
@@ -342,7 +338,7 @@ const slashCommands = [
             // Admin commands
             if (['setup', 'remove', 'list'].includes(sub)) {
                 if (!isAdmin(interaction.member)) {
-                    return interaction.reply({ content: '❌ Admin only command.', ephemeral: true });
+                    return interaction.reply({ content: 'Admin only command.', ephemeral: true });
                 }
 
                 if (sub === 'setup') {
@@ -358,7 +354,7 @@ const slashCommands = [
                     });
 
                     if (existing) {
-                        return interaction.reply({ content: '❌ This channel is already a temp VC hub.', ephemeral: true });
+                        return interaction.reply({ content: 'This channel is already a temp VC hub.', ephemeral: true });
                     }
 
                     await TempVCHub.create({
@@ -370,7 +366,7 @@ const slashCommands = [
                     });
 
                     const embed = new EmbedBuilder()
-                        .setTitle('✅ Temp VC Hub Created')
+                        .setTitle('Temp VC Hub Created')
                         .setColor(0x6BCB77)
                         .addFields(
                             { name: 'Hub Channel', value: `<#${hub.id}>`, inline: true },
@@ -392,10 +388,10 @@ const slashCommands = [
                     });
 
                     if (result.deletedCount === 0) {
-                        return interaction.reply({ content: '❌ This channel is not a temp VC hub.', ephemeral: true });
+                        return interaction.reply({ content: 'This channel is not a temp VC hub.', ephemeral: true });
                     }
 
-                    return interaction.reply({ content: '✅ Temp VC hub removed.', ephemeral: true });
+                    return interaction.reply({ content: 'Temp VC hub removed.', ephemeral: true });
                 }
 
                 if (sub === 'list') {
@@ -406,7 +402,7 @@ const slashCommands = [
                     }
 
                     const embed = new EmbedBuilder()
-                        .setTitle('🎙️ Temp VC Hubs')
+                        .setTitle('Temp VC Hubs')
                         .setColor(0x5865F2);
 
                     for (const hub of hubs) {
@@ -426,13 +422,13 @@ const slashCommands = [
             const voiceChannel = member.voice.channel;
 
             if (!voiceChannel) {
-                return interaction.reply({ content: '❌ You must be in a voice channel.', ephemeral: true });
+                return interaction.reply({ content: 'You must be in a voice channel.', ephemeral: true });
             }
 
             const tempChannel = await TempChannel.findOne({ channelId: voiceChannel.id });
 
             if (!tempChannel) {
-                return interaction.reply({ content: '❌ You\'re not in a temp channel.', ephemeral: true });
+                return interaction.reply({ content: 'You\'re not in a temp channel.', ephemeral: true });
             }
 
             const isChannelOwner = tempChannel.ownerId === interaction.user.id;
@@ -442,7 +438,7 @@ const slashCommands = [
                 // Check if owner is still in the channel
                 const owner = voiceChannel.members.get(tempChannel.ownerId);
                 if (owner) {
-                    return interaction.reply({ content: '❌ The channel owner is still in the channel.', ephemeral: true });
+                    return interaction.reply({ content: 'The channel owner is still in the channel.', ephemeral: true });
                 }
 
                 // Transfer ownership
@@ -459,25 +455,25 @@ const slashCommands = [
                     MoveMembers: true
                 });
 
-                return interaction.reply({ content: '👑 You are now the owner of this channel!', ephemeral: true });
+                return interaction.reply({ content: 'You are now the owner of this channel!', ephemeral: true });
             }
 
             // All other commands require ownership
             if (!isChannelOwner) {
-                return interaction.reply({ content: '❌ You don\'t own this channel. Use `/tempvc claim` if the owner left.', ephemeral: true });
+                return interaction.reply({ content: 'You don\'t own this channel. Use `/tempvc claim` if the owner left.', ephemeral: true });
             }
 
             if (sub === 'rename') {
                 const name = interaction.options.getString('name');
                 await voiceChannel.setName(name);
-                return interaction.reply({ content: `✅ Channel renamed to **${name}**`, ephemeral: true });
+                return interaction.reply({ content: `Channel renamed to **${name}**`, ephemeral: true });
             }
 
             if (sub === 'limit') {
                 const limit = interaction.options.getInteger('users');
                 await voiceChannel.setUserLimit(limit);
                 return interaction.reply({ 
-                    content: `✅ User limit set to **${limit === 0 ? 'unlimited' : limit}**`, 
+                    content: `User limit set to **${limit === 0 ? 'unlimited' : limit}**`, 
                     ephemeral: true 
                 });
             }
@@ -486,28 +482,28 @@ const slashCommands = [
                 await voiceChannel.permissionOverwrites.edit(interaction.guild.id, {
                     Connect: false
                 });
-                return interaction.reply({ content: '🔒 Channel locked. No one else can join.', ephemeral: true });
+                return interaction.reply({ content: 'Channel locked. No one else can join.', ephemeral: true });
             }
 
             if (sub === 'unlock') {
                 await voiceChannel.permissionOverwrites.edit(interaction.guild.id, {
                     Connect: true
                 });
-                return interaction.reply({ content: '🔓 Channel unlocked. Anyone can join.', ephemeral: true });
+                return interaction.reply({ content: 'Channel unlocked. Anyone can join.', ephemeral: true });
             }
 
             if (sub === 'hide') {
                 await voiceChannel.permissionOverwrites.edit(interaction.guild.id, {
                     ViewChannel: false
                 });
-                return interaction.reply({ content: '👻 Channel hidden from channel list.', ephemeral: true });
+                return interaction.reply({ content: 'Channel hidden from channel list.', ephemeral: true });
             }
 
             if (sub === 'reveal') {
                 await voiceChannel.permissionOverwrites.edit(interaction.guild.id, {
                     ViewChannel: true
                 });
-                return interaction.reply({ content: '👁️ Channel is now visible.', ephemeral: true });
+                return interaction.reply({ content: 'Channel is now visible.', ephemeral: true });
             }
 
             if (sub === 'kick') {
@@ -515,22 +511,22 @@ const slashCommands = [
                 const targetMember = voiceChannel.members.get(user.id);
 
                 if (!targetMember) {
-                    return interaction.reply({ content: '❌ User is not in your channel.', ephemeral: true });
+                    return interaction.reply({ content: 'User is not in your channel.', ephemeral: true });
                 }
 
                 if (user.id === interaction.user.id) {
-                    return interaction.reply({ content: '❌ You can\'t kick yourself.', ephemeral: true });
+                    return interaction.reply({ content: 'You can\'t kick yourself.', ephemeral: true });
                 }
 
                 await targetMember.voice.disconnect('Kicked from temp VC');
-                return interaction.reply({ content: `👢 Kicked ${user} from the channel.`, ephemeral: true });
+                return interaction.reply({ content: `Kicked ${user} from the channel.`, ephemeral: true });
             }
 
             if (sub === 'ban') {
                 const user = interaction.options.getUser('user');
 
                 if (user.id === interaction.user.id) {
-                    return interaction.reply({ content: '❌ You can\'t ban yourself.', ephemeral: true });
+                    return interaction.reply({ content: 'You can\'t ban yourself.', ephemeral: true });
                 }
 
                 await voiceChannel.permissionOverwrites.edit(user.id, {
@@ -544,14 +540,14 @@ const slashCommands = [
                     await targetMember.voice.disconnect('Banned from temp VC');
                 }
 
-                return interaction.reply({ content: `🚫 Banned ${user} from your channel.`, ephemeral: true });
+                return interaction.reply({ content: `Banned ${user} from your channel.`, ephemeral: true });
             }
 
             if (sub === 'unban') {
                 const user = interaction.options.getUser('user');
 
                 await voiceChannel.permissionOverwrites.delete(user.id);
-                return interaction.reply({ content: `✅ Unbanned ${user} from your channel.`, ephemeral: true });
+                return interaction.reply({ content: `Unbanned ${user} from your channel.`, ephemeral: true });
             }
 
             if (sub === 'transfer') {
@@ -559,11 +555,11 @@ const slashCommands = [
                 const newOwner = voiceChannel.members.get(user.id);
 
                 if (!newOwner) {
-                    return interaction.reply({ content: '❌ User must be in your channel.', ephemeral: true });
+                    return interaction.reply({ content: 'User must be in your channel.', ephemeral: true });
                 }
 
                 if (user.id === interaction.user.id) {
-                    return interaction.reply({ content: '❌ You already own this channel.', ephemeral: true });
+                    return interaction.reply({ content: 'You already own this channel.', ephemeral: true });
                 }
 
                 // Update database
@@ -588,7 +584,7 @@ const slashCommands = [
                     MoveMembers: true
                 });
 
-                return interaction.reply({ content: `👑 Transferred ownership to ${user}.` });
+                return interaction.reply({ content: `Transferred ownership to ${user}.` });
             }
         }
     }
@@ -604,34 +600,34 @@ async function handleTempVCButton(interaction, client) {
     
     const tempChannel = await TempChannel.findOne({ channelId });
     if (!tempChannel) {
-        return interaction.reply({ content: '❌ This channel no longer exists.', ephemeral: true });
+        return interaction.reply({ content: 'This channel no longer exists.', ephemeral: true });
     }
 
     if (tempChannel.ownerId !== interaction.user.id) {
-        return interaction.reply({ content: '❌ Only the channel owner can use these controls.', ephemeral: true });
+        return interaction.reply({ content: 'Only the channel owner can use these controls.', ephemeral: true });
     }
 
     const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
     if (!channel) {
-        return interaction.reply({ content: '❌ Channel not found.', ephemeral: true });
+        return interaction.reply({ content: 'Channel not found.', ephemeral: true });
     }
 
     switch (action) {
         case 'lock':
             await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: false });
-            return interaction.reply({ content: '🔒 Channel locked.', ephemeral: true });
+            return interaction.reply({ content: 'Channel locked.', ephemeral: true });
         
         case 'unlock':
             await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: true });
-            return interaction.reply({ content: '🔓 Channel unlocked.', ephemeral: true });
+            return interaction.reply({ content: 'Channel unlocked.', ephemeral: true });
         
         case 'hide':
             await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false });
-            return interaction.reply({ content: '👻 Channel hidden.', ephemeral: true });
+            return interaction.reply({ content: 'Channel hidden.', ephemeral: true });
         
         case 'reveal':
             await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: true });
-            return interaction.reply({ content: '👁️ Channel revealed.', ephemeral: true });
+            return interaction.reply({ content: 'Channel revealed.', ephemeral: true });
     }
 }
 

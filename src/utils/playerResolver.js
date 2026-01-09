@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const LinkedAccount = require('../database/models/LinkedAccount');
 
 // Normalize UUID (remove dashes)
 function normalizeUuid(id) {
@@ -51,4 +52,94 @@ async function resolvePlayer(input) {
     }
 }
 
-module.exports = { resolvePlayer };
+/**
+ * Resolve a Discord user from a Minecraft username
+ * Looks up the LinkedAccount database to find the Discord ID
+ * @param {string} mcUsername - Minecraft username to look up
+ * @param {Client} client - Discord client to fetch user
+ * @returns {Promise<{discordUser: User|null, discordId: string|null, linkedAccount: Object|null}>}
+ */
+async function resolveDiscordFromMinecraft(mcUsername, client) {
+    if (!mcUsername || typeof mcUsername !== 'string') {
+        return { discordUser: null, discordId: null, linkedAccount: null };
+    }
+
+    try {
+        // Look up in LinkedAccount database (case-insensitive)
+        const linkedAccount = await LinkedAccount.findOne({
+            minecraftUsername: { $regex: new RegExp(`^${mcUsername}$`, 'i') }
+        });
+
+        if (!linkedAccount) {
+            return { discordUser: null, discordId: null, linkedAccount: null };
+        }
+
+        const discordId = linkedAccount.discordId;
+        let discordUser = null;
+
+        // Try to fetch the Discord user
+        if (client) {
+            try {
+                discordUser = await client.users.fetch(discordId);
+            } catch (e) {
+                // User might not exist or bot can't access
+            }
+        }
+
+        return {
+            discordUser,
+            discordId,
+            linkedAccount
+        };
+    } catch (e) {
+        console.error('[PlayerResolver] Error resolving Discord from MC:', e);
+        return { discordUser: null, discordId: null, linkedAccount: null };
+    }
+}
+
+/**
+ * Resolve a target user - accepts either Discord user mention/ID or Minecraft username
+ * If a Minecraft username is provided, looks up the linked Discord account
+ * @param {Interaction} interaction - Discord interaction
+ * @param {string} optionName - Name of the user option
+ * @param {string} mcOptionName - Name of the optional MC username option (if separate)
+ * @param {Client} client - Discord client
+ * @returns {Promise<{user: User|null, discordId: string|null, resolvedFrom: 'discord'|'minecraft'|null, mcUsername: string|null}>}
+ */
+async function resolveTargetUser(interaction, optionName, mcOptionName, client) {
+    // First try to get Discord user directly
+    const discordUser = interaction.options.getUser(optionName);
+    
+    if (discordUser) {
+        return {
+            user: discordUser,
+            discordId: discordUser.id,
+            resolvedFrom: 'discord',
+            mcUsername: null
+        };
+    }
+
+    // If no Discord user, try Minecraft name option
+    const mcUsername = mcOptionName ? interaction.options.getString(mcOptionName) : null;
+    
+    if (mcUsername) {
+        const result = await resolveDiscordFromMinecraft(mcUsername, client);
+        return {
+            user: result.discordUser,
+            discordId: result.discordId,
+            resolvedFrom: result.discordId ? 'minecraft' : null,
+            mcUsername
+        };
+    }
+
+    return { user: null, discordId: null, resolvedFrom: null, mcUsername: null };
+}
+
+module.exports = { 
+    resolvePlayer, 
+    resolveDiscordFromMinecraft, 
+    resolveTargetUser,
+    looksLikeName,
+    looksLikeUuid,
+    normalizeUuid
+};

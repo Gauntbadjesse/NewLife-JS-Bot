@@ -51,11 +51,14 @@ function getStaffRoleLevel(member) {
     return null;
 }
 
+// LuckPerms command prefix - use 'lp' for main server
+// Set via environment variable LP_COMMAND_PREFIX, defaults to 'lp'
+const LP_PREFIX = process.env.LP_COMMAND_PREFIX || 'lp';
+
 /**
  * Execute LuckPerms commands via RCON for a user
  */
 async function executePermissionCommands(username, roleLevel, isEnabling) {
-    const action = isEnabling ? 'add' : 'remove';
     const results = [];
 
     // For streaming mode ON (removing perms) or OFF (adding perms back)
@@ -65,8 +68,8 @@ async function executePermissionCommands(username, roleLevel, isEnabling) {
 
     if (roleLevel === 'admin') {
         // Admin gets both administration and moderation removed/added
-        const cmd1 = `lp user ${username} parent ${lpAction} administration`;
-        const cmd2 = `lp user ${username} parent ${lpAction} moderation`;
+        const cmd1 = `${LP_PREFIX} user ${username} parent ${lpAction} administration`;
+        const cmd2 = `${LP_PREFIX} user ${username} parent ${lpAction} moderation`;
         
         const result1 = await executeRcon(cmd1);
         results.push({ command: cmd1, ...result1 });
@@ -75,7 +78,7 @@ async function executePermissionCommands(username, roleLevel, isEnabling) {
         results.push({ command: cmd2, ...result2 });
     } else if (roleLevel === 'moderator') {
         // Moderator only gets moderation removed/added
-        const cmd = `lp user ${username} parent ${lpAction} moderation`;
+        const cmd = `${LP_PREFIX} user ${username} parent ${lpAction} moderation`;
         const result = await executeRcon(cmd);
         results.push({ command: cmd, ...result });
     }
@@ -106,7 +109,7 @@ const slashCommands = [
             const roleLevel = getStaffRoleLevel(member);
             if (!roleLevel) {
                 return interaction.reply({
-                    content: '❌ You must be a staff member (Moderator or higher) to use streaming mode.',
+                    content: 'You must be a staff member (Moderator or higher) to use streaming mode.',
                     ephemeral: true
                 });
             }
@@ -118,8 +121,8 @@ const slashCommands = [
                     return interaction.reply({
                         embeds: [
                             new EmbedBuilder()
-                                .setTitle('📺 Streaming Mode Status')
-                                .setDescription('**Status:** 🟢 OFF (Normal permissions)')
+                                .setTitle('Streaming Mode Status')
+                                .setDescription('**Status:** OFF (Normal permissions)')
                                 .setColor(0x6BCB77)
                                 .setFooter({ text: 'Use /stream toggle to enable streaming mode' })
                         ],
@@ -130,8 +133,8 @@ const slashCommands = [
                 return interaction.reply({
                     embeds: [
                         new EmbedBuilder()
-                            .setTitle('📺 Streaming Mode Status')
-                            .setDescription('**Status:** 🔴 ON (Permissions hidden)')
+                            .setTitle('Streaming Mode Status')
+                            .setDescription('**Status:** ON (Permissions hidden)')
                             .setColor(0xFF6B6B)
                             .addFields(
                                 { name: 'Role Level', value: streamingStatus.roleLevel, inline: true },
@@ -152,7 +155,7 @@ const slashCommands = [
                 
                 if (linkedAccounts.length === 0) {
                     return interaction.editReply({
-                        content: '❌ You don\'t have any linked Minecraft accounts. Link your account first with `/whitelist add` or contact staff.'
+                        content: 'You don\'t have any linked Minecraft accounts. Link your account first with `/whitelist add` or contact staff.'
                     });
                 }
 
@@ -195,11 +198,11 @@ const slashCommands = [
 
                 // Build response embed
                 const embed = new EmbedBuilder()
-                    .setTitle(`📺 Streaming Mode ${newState ? 'Enabled' : 'Disabled'}`)
+                    .setTitle(`Streaming Mode ${newState ? 'Enabled' : 'Disabled'}`)
                     .setColor(newState ? 0xFF6B6B : 0x6BCB77)
                     .setDescription(newState 
-                        ? '🔴 **Your in-game staff permissions have been temporarily removed.**\n\nYou can now stream safely without revealing staff commands.'
-                        : '🟢 **Your in-game staff permissions have been restored.**\n\nYou\'re back to normal staff mode.'
+                        ? '**Your in-game staff permissions have been temporarily removed.**\n\nYou can now stream safely without revealing staff commands.'
+                        : '**Your in-game staff permissions have been restored.**\n\nYou\'re back to normal staff mode.'
                     )
                     .addFields(
                         { name: 'Role Level', value: roleLevel.charAt(0).toUpperCase() + roleLevel.slice(1), inline: true },
@@ -209,7 +212,7 @@ const slashCommands = [
 
                 // Add command results
                 const commandSummary = allResults.map(({ username, results }) => {
-                    const status = results.every(r => r.success) ? '✅' : '⚠️';
+                    const status = results.every(r => r.success) ? '[OK]' : '[WARN]';
                     return `${status} **${username}**: ${results.length} command(s)`;
                 }).join('\n');
 
@@ -217,7 +220,7 @@ const slashCommands = [
 
                 if (hasErrors) {
                     embed.addFields({
-                        name: '⚠️ Warning',
+                        name: 'Warning',
                         value: 'Some commands may have failed. Check if the server is online and RCON is configured.',
                         inline: false
                     });

@@ -88,7 +88,7 @@ async function handleMemberLeave(member, client) {
 
         const embed = new EmbedBuilder()
             .setColor(leaveReason === 'Banned' ? 0xFF0000 : leaveReason === 'Kicked' ? 0xFFA500 : 0x808080)
-            .setTitle('👋 Member Left')
+            .setTitle('Member Left')
             .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
             .addFields(
                 { name: 'User', value: `${member.user.tag}\n<@${member.id}>`, inline: true },
@@ -142,7 +142,7 @@ async function handleMessageDelete(message, client) {
 
         const embed = new EmbedBuilder()
             .setColor(0xFF6B6B)
-            .setTitle('🗑️ Message Deleted')
+            .setTitle('Message Deleted')
             .addFields(
                 { name: 'Author', value: message.author ? `${message.author.tag}\n<@${message.author.id}>` : 'Unknown', inline: true },
                 { name: 'Channel', value: `<#${message.channel.id}>`, inline: true },
@@ -187,7 +187,7 @@ async function handleMessageEdit(oldMessage, newMessage, client) {
 
         const embed = new EmbedBuilder()
             .setColor(0xFFD93D)
-            .setTitle('✏️ Message Edited')
+            .setTitle('Message Edited')
             .addFields(
                 { name: 'Author', value: newMessage.author ? `${newMessage.author.tag}\n<@${newMessage.author.id}>` : 'Unknown', inline: true },
                 { name: 'Channel', value: `<#${newMessage.channel.id}>`, inline: true },
@@ -244,7 +244,7 @@ async function handleChannelCreate(channel, client) {
 
         const embed = new EmbedBuilder()
             .setColor(0x6BCB77)
-            .setTitle('📁 Channel Created')
+            .setTitle('Channel Created')
             .addFields(
                 { name: 'Channel', value: `${channel.name}\n<#${channel.id}>`, inline: true },
                 { name: 'Type', value: channelTypes[channel.type] || 'Unknown', inline: true },
@@ -307,7 +307,7 @@ async function handleChannelDelete(channel, client) {
 
         const embed = new EmbedBuilder()
             .setColor(0xFF6B6B)
-            .setTitle('📁 Channel Deleted')
+            .setTitle('Channel Deleted')
             .addFields(
                 { name: 'Channel', value: channel.name, inline: true },
                 { name: 'Type', value: channelTypes[channel.type] || 'Unknown', inline: true },
@@ -355,7 +355,7 @@ async function handleRoleCreate(role, client) {
 
         const embed = new EmbedBuilder()
             .setColor(role.color || 0x6BCB77)
-            .setTitle('🏷️ Role Created')
+            .setTitle('Role Created')
             .addFields(
                 { name: 'Role', value: `${role.name}\n<@&${role.id}>`, inline: true },
                 { name: 'Role ID', value: role.id, inline: true },
@@ -401,7 +401,7 @@ async function handleRoleDelete(role, client) {
 
         const embed = new EmbedBuilder()
             .setColor(0xFF6B6B)
-            .setTitle('🏷️ Role Deleted')
+            .setTitle('Role Deleted')
             .addFields(
                 { name: 'Role', value: role.name, inline: true },
                 { name: 'Role ID', value: role.id, inline: true },
@@ -448,7 +448,7 @@ async function handleMemberBan(ban, client) {
 
         const embed = new EmbedBuilder()
             .setColor(0xFF0000)
-            .setTitle('🔨 Member Banned')
+            .setTitle('Member Banned')
             .setThumbnail(ban.user.displayAvatarURL({ dynamic: true }))
             .addFields(
                 { name: 'User', value: `${ban.user.tag}\n<@${ban.user.id}>`, inline: true },
@@ -494,7 +494,7 @@ async function handleMemberUnban(ban, client) {
 
         const embed = new EmbedBuilder()
             .setColor(0x6BCB77)
-            .setTitle('🔓 Member Unbanned')
+            .setTitle('Member Unbanned')
             .setThumbnail(ban.user.displayAvatarURL({ dynamic: true }))
             .addFields(
                 { name: 'User', value: `${ban.user.tag}\n<@${ban.user.id}>`, inline: true },
@@ -526,19 +526,19 @@ async function handleMemberJoin(member, client) {
 
         const embed = new EmbedBuilder()
             .setColor(isNewAccount ? 0xFFA500 : 0x6BCB77)
-            .setTitle('📥 Member Joined')
+            .setTitle('Member Joined')
             .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
             .addFields(
                 { name: 'User', value: `${member.user.tag}\n<@${member.id}>`, inline: true },
                 { name: 'User ID', value: member.id, inline: true },
                 { name: 'Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true },
-                { name: 'Account Age', value: `${accountAge} days${isNewAccount ? ' ⚠️' : ''}`, inline: true }
+                { name: 'Account Age', value: `${accountAge} days${isNewAccount ? ' (NEW)' : ''}`, inline: true }
             )
             .setFooter({ text: `Member count: ${member.guild.memberCount}` })
             .setTimestamp();
 
         if (isNewAccount) {
-            embed.addFields({ name: '⚠️ Warning', value: 'New account (less than 7 days old)', inline: false });
+            embed.addFields({ name: 'Warning', value: 'New account (less than 7 days old)', inline: false });
         }
 
         await logChannel.send({ embeds: [embed] });
@@ -559,7 +559,7 @@ async function handleBulkMessageDelete(messages, channel, client) {
     try {
         const embed = new EmbedBuilder()
             .setColor(0xFF6B6B)
-            .setTitle('🗑️ Bulk Messages Deleted')
+            .setTitle('Bulk Messages Deleted')
             .addFields(
                 { name: 'Channel', value: `<#${channel.id}>`, inline: true },
                 { name: 'Count', value: `${messages.size} messages`, inline: true }
@@ -600,7 +600,7 @@ async function handleVoiceStateUpdate(oldState, newState, client) {
         if (!oldState.channel && newState.channel) {
             embed = new EmbedBuilder()
                 .setColor(0x6BCB77)
-                .setTitle('🔊 Voice Channel Joined')
+                .setTitle('Voice Channel Joined')
                 .addFields(
                     { name: 'User', value: `${member.user.tag}\n<@${member.id}>`, inline: true },
                     { name: 'Channel', value: `<#${newState.channel.id}>`, inline: true }
@@ -611,7 +611,7 @@ async function handleVoiceStateUpdate(oldState, newState, client) {
         else if (oldState.channel && !newState.channel) {
             embed = new EmbedBuilder()
                 .setColor(0xFF6B6B)
-                .setTitle('🔇 Voice Channel Left')
+                .setTitle('Voice Channel Left')
                 .addFields(
                     { name: 'User', value: `${member.user.tag}\n<@${member.id}>`, inline: true },
                     { name: 'Channel', value: `<#${oldState.channel.id}>`, inline: true }
@@ -622,7 +622,7 @@ async function handleVoiceStateUpdate(oldState, newState, client) {
         else if (oldState.channel && newState.channel && oldState.channel.id !== newState.channel.id) {
             embed = new EmbedBuilder()
                 .setColor(0xFFD93D)
-                .setTitle('🔀 Voice Channel Moved')
+                .setTitle('Voice Channel Moved')
                 .addFields(
                     { name: 'User', value: `${member.user.tag}\n<@${member.id}>`, inline: true },
                     { name: 'From', value: `<#${oldState.channel.id}>`, inline: true },

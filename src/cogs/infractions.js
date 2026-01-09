@@ -9,6 +9,7 @@ const { getNextCaseNumber } = require('../database/caseCounter');
 const { isAdmin, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
 const { sendDm } = require('../utils/dm');
 const { logError } = require('../utils/errorLogger');
+const { resolveDiscordFromMinecraft } = require('../utils/playerResolver');
 
 // Channel to post infractions
 const INFRACTION_CHANNEL_ID = '1450253088693686313';
@@ -92,8 +93,12 @@ const slashCommands = [
             .setDescription('Issue a staff infraction')
             .addUserOption(opt => opt
                 .setName('user')
-                .setDescription('The staff member to infract')
-                .setRequired(true))
+                .setDescription('The staff member to infract (Discord user)')
+                .setRequired(false))
+            .addStringOption(opt => opt
+                .setName('mcname')
+                .setDescription('Or enter a Minecraft username to lookup')
+                .setRequired(false))
             .addStringOption(opt => opt
                 .setName('type')
                 .setDescription('Type of infraction')
@@ -120,9 +125,27 @@ const slashCommands = [
             
             await interaction.deferReply({ ephemeral: true });
             
-            const targetUser = interaction.options.getUser('user');
+            let targetUser = interaction.options.getUser('user');
+            const mcname = interaction.options.getString('mcname');
             const type = interaction.options.getString('type');
             const reason = interaction.options.getString('reason');
+            
+            // If no Discord user provided, try to resolve from Minecraft name
+            if (!targetUser && mcname) {
+                const resolved = await resolveDiscordFromMinecraft(mcname, client);
+                if (resolved.discordUser) {
+                    targetUser = resolved.discordUser;
+                } else if (resolved.discordId) {
+                    targetUser = await client.users.fetch(resolved.discordId).catch(() => null);
+                }
+                if (!targetUser) {
+                    return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
+                }
+            }
+            
+            if (!targetUser) {
+                return interaction.editReply({ content: 'Please provide either a Discord user or a Minecraft username.' });
+            }
             
             // Get issuer nickname
             const issuerMember = interaction.member;
@@ -204,7 +227,11 @@ const slashCommands = [
             .setDescription('View staff infractions')
             .addUserOption(opt => opt
                 .setName('user')
-                .setDescription('View infractions for a specific user')
+                .setDescription('View infractions for a specific Discord user')
+                .setRequired(false))
+            .addStringOption(opt => opt
+                .setName('mcname')
+                .setDescription('Or enter a Minecraft username to lookup')
                 .setRequired(false))
             .addStringOption(opt => opt
                 .setName('type')
@@ -228,8 +255,22 @@ const slashCommands = [
             
             await interaction.deferReply({ ephemeral: true });
             
-            const targetUser = interaction.options.getUser('user');
+            let targetUser = interaction.options.getUser('user');
+            const mcname = interaction.options.getString('mcname');
             const type = interaction.options.getString('type');
+            
+            // If no Discord user provided but mcname is, try to resolve
+            if (!targetUser && mcname) {
+                const resolved = await resolveDiscordFromMinecraft(mcname, client);
+                if (resolved.discordUser) {
+                    targetUser = resolved.discordUser;
+                } else if (resolved.discordId) {
+                    targetUser = await client.users.fetch(resolved.discordId).catch(() => null);
+                }
+                if (!targetUser && mcname) {
+                    return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
+                }
+            }
             
             try {
                 // Build query

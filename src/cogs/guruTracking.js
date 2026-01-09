@@ -374,6 +374,8 @@ function stopGuruScheduler() {
     }
 }
 
+const { resolveDiscordFromMinecraft } = require('../utils/playerResolver');
+
 const slashCommands = [
     {
         data: new SlashCommandBuilder()
@@ -388,8 +390,12 @@ const slashCommands = [
                 .setDescription('View specific guru performance (Owner/Management only)')
                 .addUserOption(opt => opt
                     .setName('user')
-                    .setDescription('The guru to check')
-                    .setRequired(true))
+                    .setDescription('The guru to check (Discord user)')
+                    .setRequired(false))
+                .addStringOption(opt => opt
+                    .setName('mcname')
+                    .setDescription('Or enter a Minecraft username to lookup')
+                    .setRequired(false))
             )
             .addSubcommand(sub => sub
                 .setName('report')
@@ -400,8 +406,12 @@ const slashCommands = [
                 .setDescription('View guru history across weeks (Owner only)')
                 .addUserOption(opt => opt
                     .setName('user')
-                    .setDescription('The guru to check')
-                    .setRequired(true))
+                    .setDescription('The guru to check (Discord user)')
+                    .setRequired(false))
+                .addStringOption(opt => opt
+                    .setName('mcname')
+                    .setDescription('Or enter a Minecraft username to lookup')
+                    .setRequired(false))
                 .addIntegerOption(opt => opt
                     .setName('weeks')
                     .setDescription('Number of weeks to look back')
@@ -441,8 +451,26 @@ const slashCommands = [
                 await interaction.deferReply({ ephemeral: true });
                 
                 try {
-                    const targetUser = interaction.options.getUser('user');
+                    let targetUser = interaction.options.getUser('user');
+                    const mcname = interaction.options.getString('mcname');
                     const guildId = interaction.guild.id;
+                    
+                    // If no Discord user provided, try to resolve from Minecraft name
+                    if (!targetUser && mcname) {
+                        const resolved = await resolveDiscordFromMinecraft(mcname, client);
+                        if (resolved.discordUser) {
+                            targetUser = resolved.discordUser;
+                        } else if (resolved.discordId) {
+                            targetUser = await client.users.fetch(resolved.discordId).catch(() => null);
+                        }
+                        if (!targetUser) {
+                            return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
+                        }
+                    }
+                    
+                    if (!targetUser) {
+                        return interaction.editReply({ content: 'Please provide either a Discord user or a Minecraft username.' });
+                    }
                     
                     const record = await GuruPerformance.findOne({ 
                         guruId: targetUser.id, 
@@ -518,9 +546,27 @@ const slashCommands = [
                 await interaction.deferReply({ ephemeral: true });
                 
                 try {
-                    const targetUser = interaction.options.getUser('user');
+                    let targetUser = interaction.options.getUser('user');
+                    const mcname = interaction.options.getString('mcname');
                     const weeksBack = interaction.options.getInteger('weeks') || 4;
                     const guildId = interaction.guild.id;
+                    
+                    // If no Discord user provided, try to resolve from Minecraft name
+                    if (!targetUser && mcname) {
+                        const resolved = await resolveDiscordFromMinecraft(mcname, client);
+                        if (resolved.discordUser) {
+                            targetUser = resolved.discordUser;
+                        } else if (resolved.discordId) {
+                            targetUser = await client.users.fetch(resolved.discordId).catch(() => null);
+                        }
+                        if (!targetUser) {
+                            return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
+                        }
+                    }
+                    
+                    if (!targetUser) {
+                        return interaction.editReply({ content: 'Please provide either a Discord user or a Minecraft username.' });
+                    }
                     
                     const now = new Date();
                     const records = await GuruPerformance.find({

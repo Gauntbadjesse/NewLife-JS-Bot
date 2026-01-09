@@ -80,28 +80,28 @@ function formatDuration(ms) {
  */
 function createGiveawayEmbed(giveaway, ended = false) {
     const embed = new EmbedBuilder()
-        .setTitle(ended ? '🎊 GIVEAWAY ENDED' : '🎉 GIVEAWAY')
+        .setTitle(ended ? 'GIVEAWAY ENDED' : 'GIVEAWAY')
         .setColor(ended ? 0x808080 : 0xFFD700)
         .setDescription(`**${giveaway.prize}**${giveaway.description ? `\n\n${giveaway.description}` : ''}`)
         .addFields(
-            { name: '👑 Hosted by', value: `<@${giveaway.hostId}>`, inline: true },
-            { name: '🏆 Winners', value: `${giveaway.winners}`, inline: true }
+            { name: 'Hosted by', value: `<@${giveaway.hostId}>`, inline: true },
+            { name: 'Winners', value: `${giveaway.winners}`, inline: true }
         )
         .setFooter({ text: ended ? 'Giveaway ended' : 'Click the button to enter!' })
         .setTimestamp(giveaway.endsAt);
 
     if (giveaway.requiredRole) {
-        embed.addFields({ name: '🎫 Required Role', value: `<@&${giveaway.requiredRole}>`, inline: true });
+        embed.addFields({ name: 'Required Role', value: `<@&${giveaway.requiredRole}>`, inline: true });
     }
 
     if (!ended) {
         embed.addFields({ 
-            name: '⏰ Ends', 
+            name: 'Ends', 
             value: `<t:${Math.floor(giveaway.endsAt.getTime() / 1000)}:R>`, 
             inline: true 
         });
         embed.addFields({
-            name: '🎟️ Entries',
+            name: 'Entries',
             value: `${giveaway.participants?.length || 0}`,
             inline: true
         });
@@ -109,9 +109,9 @@ function createGiveawayEmbed(giveaway, ended = false) {
 
     if (ended && giveaway.winnerIds?.length > 0) {
         const winnerMentions = giveaway.winnerIds.map(id => `<@${id}>`).join(', ');
-        embed.addFields({ name: '🏅 Winner(s)', value: winnerMentions, inline: false });
+        embed.addFields({ name: 'Winner(s)', value: winnerMentions, inline: false });
     } else if (ended) {
-        embed.addFields({ name: '🏅 Winner(s)', value: 'No valid entries', inline: false });
+        embed.addFields({ name: 'Winner(s)', value: 'No valid entries', inline: false });
     }
 
     return embed;
@@ -128,7 +128,6 @@ function createGiveawayButtons(giveawayId, ended = false) {
             new ButtonBuilder()
                 .setCustomId(`giveaway_enter_${giveawayId}`)
                 .setLabel('Enter Giveaway')
-                .setEmoji('🎉')
                 .setStyle(ButtonStyle.Success)
         );
     }
@@ -188,12 +187,12 @@ async function endGiveaway(client, giveaway) {
         if (winners.length > 0) {
             const winnerMentions = winners.map(id => `<@${id}>`).join(', ');
             await channel.send({
-                content: `🎊 Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`,
+                content: `Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`,
                 allowedMentions: { users: winners }
             });
         } else {
             await channel.send({
-                content: `😢 The giveaway for **${giveaway.prize}** ended with no valid entries.`
+                content: `The giveaway for **${giveaway.prize}** ended with no valid entries.`
             });
         }
     } catch (e) {
@@ -302,7 +301,7 @@ const slashCommands = [
             // Owner only check
             if (!isOwner(interaction.member)) {
                 return interaction.reply({ 
-                    content: '❌ Only the server owner can manage giveaways.', 
+                    content: 'Only the server owner can manage giveaways.', 
                     ephemeral: true 
                 });
             }
@@ -321,21 +320,21 @@ const slashCommands = [
                 const duration = parseDuration(durationStr);
                 if (!duration) {
                     return interaction.reply({ 
-                        content: '❌ Invalid duration format. Use: 30s, 5m, 1h, 2d, or 1w', 
+                        content: 'Invalid duration format. Use: 30s, 5m, 1h, 2d, or 1w', 
                         ephemeral: true 
                     });
                 }
 
                 if (duration < 10000) {
                     return interaction.reply({ 
-                        content: '❌ Duration must be at least 10 seconds.', 
+                        content: 'Duration must be at least 10 seconds.', 
                         ephemeral: true 
                     });
                 }
 
                 if (duration > 30 * 24 * 60 * 60 * 1000) {
                     return interaction.reply({ 
-                        content: '❌ Duration cannot exceed 30 days.', 
+                        content: 'Duration cannot exceed 30 days.', 
                         ephemeral: true 
                     });
                 }
@@ -375,11 +374,11 @@ const slashCommands = [
                     await giveawayDoc.save();
 
                     return interaction.editReply({ 
-                        content: `✅ Giveaway started in ${channel}!\n**Prize:** ${prize}\n**Duration:** ${formatDuration(duration)}\n**Winners:** ${winners}` 
+                        content: `Giveaway started in ${channel}!\n**Prize:** ${prize}\n**Duration:** ${formatDuration(duration)}\n**Winners:** ${winners}` 
                     });
                 } catch (e) {
                     await Giveaway.findByIdAndDelete(giveawayDoc._id);
-                    return interaction.editReply({ content: '❌ Failed to create giveaway. Check bot permissions.' });
+                    return interaction.editReply({ content: 'Failed to create giveaway. Check bot permissions.' });
                 }
             }
 
@@ -395,15 +394,15 @@ const slashCommands = [
                 });
 
                 if (!giveaway) {
-                    return interaction.editReply({ content: '❌ Giveaway not found.' });
+                    return interaction.editReply({ content: 'Giveaway not found.' });
                 }
 
                 if (giveaway.ended) {
-                    return interaction.editReply({ content: '❌ This giveaway has already ended.' });
+                    return interaction.editReply({ content: 'This giveaway has already ended.' });
                 }
 
                 await endGiveaway(client, giveaway);
-                return interaction.editReply({ content: '✅ Giveaway ended!' });
+                return interaction.editReply({ content: 'Giveaway ended!' });
             }
 
             // REROLL WINNERS
@@ -419,34 +418,34 @@ const slashCommands = [
                 });
 
                 if (!giveaway) {
-                    return interaction.editReply({ content: '❌ Giveaway not found.' });
+                    return interaction.editReply({ content: 'Giveaway not found.' });
                 }
 
                 if (!giveaway.ended) {
-                    return interaction.editReply({ content: '❌ This giveaway hasn\'t ended yet.' });
+                    return interaction.editReply({ content: 'This giveaway hasn\'t ended yet.' });
                 }
 
                 if (!giveaway.participants || giveaway.participants.length === 0) {
-                    return interaction.editReply({ content: '❌ No participants to reroll.' });
+                    return interaction.editReply({ content: 'No participants to reroll.' });
                 }
 
                 // Pick new winners (excluding previous winners optionally)
                 const newWinners = pickWinners(giveaway.participants, newWinnerCount);
 
                 if (newWinners.length === 0) {
-                    return interaction.editReply({ content: '❌ No valid entries to reroll.' });
+                    return interaction.editReply({ content: 'No valid entries to reroll.' });
                 }
 
                 const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
                 if (channel) {
                     const winnerMentions = newWinners.map(id => `<@${id}>`).join(', ');
                     await channel.send({
-                        content: `🎊 **Reroll!** New winner(s): ${winnerMentions}! You won **${giveaway.prize}**!`,
+                        content: `**Reroll!** New winner(s): ${winnerMentions}! You won **${giveaway.prize}**!`,
                         allowedMentions: { users: newWinners }
                     });
                 }
 
-                return interaction.editReply({ content: `✅ Rerolled ${newWinners.length} new winner(s)!` });
+                return interaction.editReply({ content: `Rerolled ${newWinners.length} new winner(s)!` });
             }
 
             // LIST GIVEAWAYS
@@ -461,7 +460,7 @@ const slashCommands = [
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle('🎉 Active Giveaways')
+                    .setTitle('Active Giveaways')
                     .setColor(0xFFD700)
                     .setTimestamp();
 
@@ -488,7 +487,7 @@ const slashCommands = [
                 });
 
                 if (!giveaway) {
-                    return interaction.editReply({ content: '❌ Giveaway not found.' });
+                    return interaction.editReply({ content: 'Giveaway not found.' });
                 }
 
                 // Try to delete the message
@@ -502,7 +501,7 @@ const slashCommands = [
                     // Ignore deletion errors
                 }
 
-                return interaction.editReply({ content: '✅ Giveaway deleted.' });
+                return interaction.editReply({ content: 'Giveaway deleted.' });
             }
         }
     }
@@ -520,11 +519,11 @@ async function handleGiveawayButton(interaction, client) {
         const giveaway = await Giveaway.findById(giveawayId);
 
         if (!giveaway) {
-            return interaction.reply({ content: '❌ This giveaway no longer exists.', ephemeral: true });
+            return interaction.reply({ content: 'This giveaway no longer exists.', ephemeral: true });
         }
 
         if (giveaway.ended) {
-            return interaction.reply({ content: '❌ This giveaway has ended.', ephemeral: true });
+            return interaction.reply({ content: 'This giveaway has ended.', ephemeral: true });
         }
 
         // Check required role
@@ -532,7 +531,7 @@ async function handleGiveawayButton(interaction, client) {
             const member = interaction.member;
             if (!member.roles.cache.has(giveaway.requiredRole)) {
                 return interaction.reply({ 
-                    content: `❌ You need the <@&${giveaway.requiredRole}> role to enter this giveaway.`, 
+                    content: `You need the <@&${giveaway.requiredRole}> role to enter this giveaway.`, 
                     ephemeral: true 
                 });
             }
@@ -554,7 +553,7 @@ async function handleGiveawayButton(interaction, client) {
             await interaction.message.edit({ embeds: [embed], components: [buttons] });
 
             return interaction.reply({ 
-                content: '👋 You have left the giveaway.', 
+                content: 'You have left the giveaway.', 
                 ephemeral: true 
             });
         } else {
@@ -570,13 +569,13 @@ async function handleGiveawayButton(interaction, client) {
             await interaction.message.edit({ embeds: [embed], components: [buttons] });
 
             return interaction.reply({ 
-                content: '🎉 You have entered the giveaway! Good luck!', 
+                content: 'You have entered the giveaway! Good luck!', 
                 ephemeral: true 
             });
         }
     } catch (e) {
         console.error('[Giveaways] Button error:', e);
-        return interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
+        return interaction.reply({ content: 'An error occurred.', ephemeral: true });
     }
 }
 

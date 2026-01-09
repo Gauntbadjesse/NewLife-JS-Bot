@@ -117,7 +117,7 @@ const slashCommands = [
 
         async execute(interaction, client) {
             if (!isAdmin(interaction.member)) {
-                return interaction.reply({ content: '❌ Permission denied. Admin only.', ephemeral: true });
+                return interaction.reply({ content: 'Permission denied. Admin only.', ephemeral: true });
             }
 
             const sub = interaction.options.getSubcommand();
@@ -156,7 +156,7 @@ const slashCommands = [
                 }
 
                 if (!message) {
-                    return interaction.editReply({ content: '❌ Message not found. Make sure the message ID is correct and the bot has access to the channel.' });
+                    return interaction.editReply({ content: 'Message not found. Make sure the message ID is correct and the bot has access to the channel.' });
                 }
 
                 // Check if this emoji-role combination already exists
@@ -167,19 +167,19 @@ const slashCommands = [
                 });
 
                 if (existing) {
-                    return interaction.editReply({ content: '❌ This emoji is already set up on this message.' });
+                    return interaction.editReply({ content: 'This emoji is already set up on this message.' });
                 }
 
                 // Check bot permissions
                 if (role.position >= interaction.guild.members.me.roles.highest.position) {
-                    return interaction.editReply({ content: '❌ I cannot assign this role because it\'s higher than or equal to my highest role.' });
+                    return interaction.editReply({ content: 'I cannot assign this role because it\'s higher than or equal to my highest role.' });
                 }
 
                 // Add the reaction to the message
                 try {
                     await message.react(emoji);
                 } catch (e) {
-                    return interaction.editReply({ content: `❌ Failed to add reaction. Make sure the emoji is valid and I have permission to add reactions in that channel.` });
+                    return interaction.editReply({ content: `Failed to add reaction. Make sure the emoji is valid and I have permission to add reactions in that channel.` });
                 }
 
                 // Save to database
@@ -194,7 +194,7 @@ const slashCommands = [
 
                 const embed = new EmbedBuilder()
                     .setColor(0x6BCB77)
-                    .setTitle('✅ Emoji Reaction Role Added')
+                    .setTitle('Emoji Reaction Role Added')
                     .addFields(
                         { name: 'Message', value: `[Jump to message](${message.url})`, inline: true },
                         { name: 'Emoji', value: emoji, inline: true },
@@ -222,7 +222,7 @@ const slashCommands = [
                 });
 
                 if (!deleted) {
-                    return interaction.editReply({ content: '❌ No reaction role found with that emoji on that message.' });
+                    return interaction.editReply({ content: 'No reaction role found with that emoji on that message.' });
                 }
 
                 // Try to remove the bot's reaction from the message
@@ -246,7 +246,7 @@ const slashCommands = [
                     // Ignore errors removing reaction
                 }
 
-                return interaction.editReply({ content: `✅ Removed reaction role: ${emoji} → <@&${deleted.roleId}>` });
+                return interaction.editReply({ content: `Removed reaction role: ${emoji} → <@&${deleted.roleId}>` });
             }
 
             if (sub === 'list') {
@@ -270,7 +270,7 @@ const slashCommands = [
 
                 const embed = new EmbedBuilder()
                     .setColor(0x3b82f6)
-                    .setTitle('📋 Emoji Reaction Roles')
+                    .setTitle('Emoji Reaction Roles')
                     .setFooter({ text: `Total: ${reactionRoles.length} reaction role(s)` })
                     .setTimestamp();
 
@@ -301,10 +301,10 @@ const slashCommands = [
                 });
 
                 if (deleted.deletedCount === 0) {
-                    return interaction.editReply({ content: '❌ No reaction roles found on that message.' });
+                    return interaction.editReply({ content: 'No reaction roles found on that message.' });
                 }
 
-                return interaction.editReply({ content: `✅ Removed ${deleted.deletedCount} reaction role(s) from the message.` });
+                return interaction.editReply({ content: `Removed ${deleted.deletedCount} reaction role(s) from the message.` });
             }
         }
     }
