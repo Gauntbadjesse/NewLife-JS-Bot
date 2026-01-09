@@ -284,20 +284,20 @@ const slashCommands = [
                     } catch (e) { /* ignore DM failures */ }
 
                     try {
-                        if (process.env.LOG_CHANNEL_ID) {
-                            const ch = await client.channels.fetch(process.env.LOG_CHANNEL_ID).catch(() => null);
-                            if (ch) {
-                                const logEmbed = new EmbedBuilder()
-                                    .setTitle('Whitelist Added')
-                                    .addFields(
-                                        { name: 'Minecraft', value: `${mcname} (${platform})`, inline: true },
-                                        { name: 'UUID', value: uuid || 'N/A', inline: true },
-                                        { name: 'Discord', value: `${discordUser.tag} (${discordUser.id})`, inline: true },
-                                        { name: 'Added By', value: `${interaction.user.tag}`, inline: true }
-                                    )
-                                    .setTimestamp();
-                                await ch.send({ embeds: [logEmbed] }).catch(() => null);
-                            }
+                        // Whitelist log channel - specific channel for whitelist notifications
+                        const WHITELIST_LOG_CHANNEL_ID = process.env.WHITELIST_LOG_CHANNEL_ID || '1442648914204295168';
+                        const ch = await client.channels.fetch(WHITELIST_LOG_CHANNEL_ID).catch(() => null);
+                        if (ch) {
+                            const logEmbed = new EmbedBuilder()
+                                .setTitle('Whitelist Added')
+                                .addFields(
+                                    { name: 'Minecraft', value: `${mcname} (${platform})`, inline: true },
+                                    { name: 'UUID', value: uuid || 'N/A', inline: true },
+                                    { name: 'Discord', value: `${discordUser.tag} (${discordUser.id})`, inline: true },
+                                    { name: 'Added By', value: `${interaction.user.tag}`, inline: true }
+                                )
+                                .setTimestamp();
+                            await ch.send({ embeds: [logEmbed] }).catch(() => null);
                         }
                     } catch (e) { console.error('Failed to send log:', e); }
 

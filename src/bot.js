@@ -21,7 +21,11 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildModeration,
     ],
+    partials: ['MESSAGE', 'CHANNEL', 'REACTION'],
 });
 
 // Initialize collections for commands
@@ -134,6 +138,30 @@ client.once('ready', async () => {
 
     // Initialize member system - refresh counter and ensure roles work
     await initMemberSystem(client);
+
+    // Restore emoji reaction roles
+    try {
+        const { restoreReactions } = require('./cogs/emojiReactionRoles');
+        await restoreReactions(client);
+    } catch (e) {
+        console.error('Failed to restore emoji reaction roles:', e);
+    }
+
+    // Initialize giveaway checker
+    try {
+        const { initGiveawayChecker } = require('./cogs/giveaways');
+        initGiveawayChecker(client);
+    } catch (e) {
+        console.error('Failed to initialize giveaway checker:', e);
+    }
+
+    // Cleanup orphaned temp voice channels
+    try {
+        const { cleanupOrphanedChannels } = require('./cogs/tempVC');
+        await cleanupOrphanedChannels(client);
+    } catch (e) {
+        console.error('Failed to cleanup temp VCs:', e);
+    }
 });
 
 /**
@@ -291,6 +319,22 @@ client.on('interactionCreate', async (interaction) => {
             } catch (e) {
                 if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: applications', e, { customId: interaction.customId, user: interaction.user.tag });
             }
+
+            // Try giveaways cog
+            try {
+                const giveawaysCog = require('./cogs/giveaways');
+                if (giveawaysCog.handleGiveawayButton) await giveawaysCog.handleGiveawayButton(interaction, client);
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: giveaways', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
+
+            // Try temp VC cog
+            try {
+                const tempVCCog = require('./cogs/tempVC');
+                if (tempVCCog.handleTempVCButton) await tempVCCog.handleTempVCButton(interaction, client);
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: tempVC', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
         } catch (error) {
             await logError('Button Handler', error, { customId: interaction.customId, user: interaction.user.tag });
             if (!interaction.replied && !interaction.deferred) {
@@ -435,6 +479,14 @@ client.on('guildMemberAdd', async (member) => {
 
         // Update member counter channel (with rate limiting)
         await updateMemberCounter(member.guild, `${member.user.tag} joined`);
+
+        // Log member join via Discord Logger
+        try {
+            const { handleMemberJoin } = require('./cogs/discordLogger');
+            await handleMemberJoin(member, client);
+        } catch (e) {
+            console.error('[DiscordLogger] Failed to handle member join:', e);
+        }
     } catch (e) {
         console.error(`[MemberJoin] Error:`, e);
         if (logError) await logError('guildMemberAdd', e, { member: member?.user?.tag || 'unknown' });
@@ -450,8 +502,146 @@ client.on('guildMemberRemove', async (member) => {
 
         // Update member counter channel (with rate limiting)
         await updateMemberCounter(member.guild, `${member.user?.tag || 'unknown'} left`);
+
+        // Log member leave with roles via Discord Logger
+        try {
+            const { handleMemberLeave } = require('./cogs/discordLogger');
+            await handleMemberLeave(member, client);
+        } catch (e) {
+            console.error('[DiscordLogger] Failed to handle member leave:', e);
+        }
     } catch (e) {
         if (logError) await logError('guildMemberRemove', e, { member: member?.user?.tag || 'unknown' });
+    }
+});
+
+// Discord Logger Events - Message Delete
+client.on('messageDelete', async (message) => {
+    try {
+        const { handleMessageDelete } = require('./cogs/discordLogger');
+        await handleMessageDelete(message, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Discord Logger Events - Bulk Message Delete
+client.on('messageDeleteBulk', async (messages, channel) => {
+    try {
+        const { handleBulkMessageDelete } = require('./cogs/discordLogger');
+        await handleBulkMessageDelete(messages, channel, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Discord Logger Events - Message Edit
+client.on('messageUpdate', async (oldMessage, newMessage) => {
+    try {
+        const { handleMessageEdit } = require('./cogs/discordLogger');
+        await handleMessageEdit(oldMessage, newMessage, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Discord Logger Events - Channel Create
+client.on('channelCreate', async (channel) => {
+    try {
+        const { handleChannelCreate } = require('./cogs/discordLogger');
+        await handleChannelCreate(channel, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Discord Logger Events - Channel Delete
+client.on('channelDelete', async (channel) => {
+    try {
+        const { handleChannelDelete } = require('./cogs/discordLogger');
+        await handleChannelDelete(channel, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Discord Logger Events - Role Create
+client.on('roleCreate', async (role) => {
+    try {
+        const { handleRoleCreate } = require('./cogs/discordLogger');
+        await handleRoleCreate(role, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Discord Logger Events - Role Delete
+client.on('roleDelete', async (role) => {
+    try {
+        const { handleRoleDelete } = require('./cogs/discordLogger');
+        await handleRoleDelete(role, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Discord Logger Events - Member Ban
+client.on('guildBanAdd', async (ban) => {
+    try {
+        const { handleMemberBan } = require('./cogs/discordLogger');
+        await handleMemberBan(ban, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Discord Logger Events - Member Unban
+client.on('guildBanRemove', async (ban) => {
+    try {
+        const { handleMemberUnban } = require('./cogs/discordLogger');
+        await handleMemberUnban(ban, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Discord Logger Events - Voice State Update
+client.on('voiceStateUpdate', async (oldState, newState) => {
+    // Handle temp VC (create/delete channels)
+    try {
+        const { handleVoiceStateUpdate: tempVCHandler } = require('./cogs/tempVC');
+        await tempVCHandler(oldState, newState, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+
+    // Log voice state changes
+    try {
+        const { handleVoiceStateUpdate } = require('./cogs/discordLogger');
+        await handleVoiceStateUpdate(oldState, newState, client);
+    } catch (e) {
+        // Silently ignore errors
+    }
+});
+
+// Reaction Role Events - Handle reactions for legacy reaction roles
+client.on('messageReactionAdd', async (reaction, user) => {
+    try {
+        if (user.bot) return;
+        const { handleReactionAdd } = require('./cogs/emojiReactionRoles');
+        if (handleReactionAdd) await handleReactionAdd(reaction, user, client);
+    } catch (e) {
+        // Module may not exist yet or error occurred
+    }
+});
+
+client.on('messageReactionRemove', async (reaction, user) => {
+    try {
+        if (user.bot) return;
+        const { handleReactionRemove } = require('./cogs/emojiReactionRoles');
+        if (handleReactionRemove) await handleReactionRemove(reaction, user, client);
+    } catch (e) {
+        // Module may not exist yet or error occurred
     }
 });
 
