@@ -1,12 +1,12 @@
 /**
  * Account Linking Cog
  * Allows users to link their Discord account to their Minecraft account
- * Provides /linkaccount for users and /linksettings for staff
+ * Provides /linkaccount for users and admin commands for staff
  */
 
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const LinkedAccount = require('../database/models/LinkedAccount');
-const { isAdmin, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
+const { isAdmin, isSupervisor, isManagement, isOwner, isStaff } = require('../utils/permissions');
 const fetch = require('node-fetch');
 
 // Pending link verifications (in-memory, cleared on restart)
@@ -297,8 +297,305 @@ const slashCommands = [
     }
 ];
 
+/**
+ * Prefix Commands
+ */
+const commands = {
+    linked: {
+        name: 'linked',
+        description: 'View linked accounts for a user',
+        usage: '!linked [@user|userId|minecraftName]',
+        async execute(message, args, client) {
+            // Staff only
+            if (!isStaff(message.member)) {
+                return message.reply({ content: 'Permission denied. Staff only.', allowedMentions: { repliedUser: false } });
+            }
+
+            // Get target
+            let targetUser = null;
+            let searchQuery = null;
+
+            if (args[0]) {
+                // Check for mention
+                targetUser = message.mentions.users.first();
+                
+                // Check for user ID
+                if (!targetUser && /^\d{17,19}$/.test(args[0])) {
+                    targetUser = await client.users.fetch(args[0]).catch(() => null);
+                }
+                
+                // If not found, treat as Minecraft name search
+                if (!targetUser) {
+                    searchQuery = args.join(' ');
+                }
+            } else {
+                // No args - show own accounts
+                targetUser = message.author;
+            }
+
+            // Search by Minecraft name
+            if (searchQuery) {
+                const account = await LinkedAccount.findOne({ 
+                    minecraftUsername: { $regex: new RegExp(`^${searchQuery}$`, 'i') }
+                });
+
+                if (!account) {
+                    return message.reply({ 
+                        content: `No linked account found for Minecraft name: **${searchQuery}**`, 
+                        allowedMentions: { repliedUser: false } 
+                    });
+                }
+
+                targetUser = await client.users.fetch(account.discordId).catch(() => null);
+                if (!targetUser) {
+                    const embed = new EmbedBuilder()
+                        .setTitle('Linked Account Found')
+                        .setColor(getEmbedColor())
+                        .setDescription(`Found account but Discord user has left the server.`)
+                        .addFields(
+                            { name: 'Minecraft', value: `\`${account.minecraftUsername}\``, inline: true },
+                            { name: 'Platform', value: account.platform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                            { name: 'Discord ID', value: `\`${account.discordId}\``, inline: true },
+                            { name: 'UUID', value: `\`${account.uuid}\``, inline: false }
+                        )
+                        .setTimestamp();
+                    
+                    return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+                }
+            }
+
+            // Fetch all accounts for the target user
+            const accounts = await LinkedAccount.find({ discordId: String(targetUser.id) }).sort({ linkedAt: 1 });
+
+            if (accounts.length === 0) {
+                const embed = new EmbedBuilder()
+                    .setTitle('No Linked Accounts')
+                    .setColor(0xffaa00)
+                    .setDescription(`${targetUser} has no linked Minecraft accounts.`)
+                    .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+                    .setTimestamp();
+
+                return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle('Linked Accounts')
+                .setColor(getEmbedColor())
+                .setDescription(`Showing linked accounts for ${targetUser}`)
+                .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+                .addFields(
+                    { name: 'Discord', value: `${targetUser.tag}\n\`${targetUser.id}\``, inline: true },
+                    { name: 'Total Accounts', value: `${accounts.length}`, inline: true }
+                )
+                .setTimestamp();
+
+            for (const account of accounts) {
+                const platformIcon = account.platform === 'bedrock' ? 'Bedrock' : 'Java';
+                const primaryBadge = account.primary ? ' [PRIMARY]' : '';
+                
+                embed.addFields({
+                    name: `${account.minecraftUsername}${primaryBadge}`,
+                    value: [
+                        `**Platform:** ${platformIcon}`,
+                        `**UUID:** \`${account.uuid}\``,
+                        `**Linked:** <t:${Math.floor(new Date(account.linkedAt).getTime() / 1000)}:R>`
+                    ].join('\n'),
+                    inline: false
+                });
+            }
+
+            // Set head thumbnail if Java account exists
+            const javaAccount = accounts.find(a => a.platform === 'java');
+            if (javaAccount) {
+                embed.setThumbnail(`https://mc-heads.net/avatar/${javaAccount.uuid}/128`);
+            }
+
+            return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+        }
+    },
+
+    unlink: {
+        name: 'unlink',
+        description: 'Unlink a Minecraft account from a user (Admin)',
+        usage: '!unlink <@user|userId> <minecraft_username|all>',
+        async execute(message, args, client) {
+            // Admin only
+            if (!isAdmin(message.member)) {
+                return message.reply({ content: 'Permission denied. Admin only.', allowedMentions: { repliedUser: false } });
+            }
+
+            if (args.length < 2) {
+                return message.reply({ 
+                    content: 'Usage: `!unlink <@user|userId> <minecraft_username|all>`\n\nExamples:\n• `!unlink @User PlayerName` - Unlink specific account\n• `!unlink @User all` - Unlink all accounts', 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            // Get target user
+            let targetUser = message.mentions.users.first();
+            if (!targetUser && /^\d{17,19}$/.test(args[0])) {
+                targetUser = await client.users.fetch(args[0]).catch(() => null);
+            }
+
+            if (!targetUser) {
+                return message.reply({ content: 'Please mention a user or provide a valid user ID.', allowedMentions: { repliedUser: false } });
+            }
+
+            const mcName = args.slice(1).join(' ');
+
+            // Unlink all accounts
+            if (mcName.toLowerCase() === 'all') {
+                const result = await LinkedAccount.deleteMany({ discordId: String(targetUser.id) });
+                
+                if (result.deletedCount === 0) {
+                    return message.reply({ content: `${targetUser.tag} has no linked accounts.`, allowedMentions: { repliedUser: false } });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle('All Accounts Unlinked')
+                    .setColor(0xff4444)
+                    .setDescription(`Removed **${result.deletedCount}** linked account(s) from ${targetUser}`)
+                    .setFooter({ text: `Unlinked by ${message.author.tag}` })
+                    .setTimestamp();
+
+                return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+            }
+
+            // Unlink specific account
+            const account = await LinkedAccount.findOne({ 
+                discordId: String(targetUser.id),
+                minecraftUsername: { $regex: new RegExp(`^${mcName}$`, 'i') }
+            });
+
+            if (!account) {
+                return message.reply({ 
+                    content: `No account named **${mcName}** found linked to ${targetUser.tag}.`, 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            await LinkedAccount.deleteOne({ _id: account._id });
+
+            const embed = new EmbedBuilder()
+                .setTitle('Account Unlinked')
+                .setColor(0xff4444)
+                .addFields(
+                    { name: 'Discord User', value: `${targetUser.tag}`, inline: true },
+                    { name: 'Minecraft', value: `${account.minecraftUsername}`, inline: true },
+                    { name: 'Platform', value: account.platform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                    { name: 'UUID', value: `\`${account.uuid}\``, inline: false }
+                )
+                .setFooter({ text: `Unlinked by ${message.author.tag}` })
+                .setTimestamp();
+
+            return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+        }
+    },
+
+    forcelink: {
+        name: 'forcelink',
+        description: 'Force link a Minecraft account to a user (Admin)',
+        usage: '!forcelink <@user|userId> <platform> <minecraft_username>',
+        async execute(message, args, client) {
+            // Admin only
+            if (!isAdmin(message.member)) {
+                return message.reply({ content: 'Permission denied. Admin only.', allowedMentions: { repliedUser: false } });
+            }
+
+            if (args.length < 3) {
+                return message.reply({ 
+                    content: 'Usage: `!forcelink <@user|userId> <java|bedrock> <minecraft_username>`\n\nExample: `!forcelink @User java Notch`', 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            // Get target user
+            let targetUser = message.mentions.users.first();
+            let argsOffset = 0;
+            
+            if (!targetUser && /^\d{17,19}$/.test(args[0])) {
+                targetUser = await client.users.fetch(args[0]).catch(() => null);
+            }
+            
+            if (message.mentions.users.size > 0) {
+                argsOffset = 1;
+            } else {
+                argsOffset = 1;
+            }
+
+            if (!targetUser) {
+                return message.reply({ content: 'Please mention a user or provide a valid user ID.', allowedMentions: { repliedUser: false } });
+            }
+
+            const platform = args[argsOffset]?.toLowerCase();
+            if (!['java', 'bedrock'].includes(platform)) {
+                return message.reply({ content: 'Platform must be `java` or `bedrock`.', allowedMentions: { repliedUser: false } });
+            }
+
+            const username = args.slice(argsOffset + 1).join(' ');
+            if (!username) {
+                return message.reply({ content: 'Please provide a Minecraft username.', allowedMentions: { repliedUser: false } });
+            }
+
+            // Lookup the Minecraft profile
+            const profile = await lookupMcProfile(username, platform);
+            if (!profile) {
+                return message.reply({ 
+                    content: `Could not find a ${platform} account with username: **${username}**`, 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            // Check if UUID is already linked
+            const existingByUuid = await LinkedAccount.findOne({ uuid: profile.uuid });
+            if (existingByUuid) {
+                const existingUser = await client.users.fetch(existingByUuid.discordId).catch(() => null);
+                return message.reply({ 
+                    content: `**${profile.name}** is already linked to ${existingUser ? existingUser.tag : `ID: ${existingByUuid.discordId}`}.\n\nUse \`!unlink\` to remove it first.`, 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            // Count existing accounts
+            const existingCount = await LinkedAccount.countDocuments({ discordId: String(targetUser.id) });
+
+            // Create the link
+            const newLink = new LinkedAccount({
+                discordId: String(targetUser.id),
+                minecraftUsername: profile.name,
+                uuid: profile.uuid,
+                platform: platform,
+                linkedAt: new Date(),
+                verified: true,
+                primary: existingCount === 0
+            });
+
+            await newLink.save();
+
+            const embed = new EmbedBuilder()
+                .setTitle('Account Force Linked')
+                .setColor(getEmbedColor())
+                .addFields(
+                    { name: 'Discord User', value: `${targetUser}`, inline: true },
+                    { name: 'Minecraft', value: `\`${profile.name}\``, inline: true },
+                    { name: 'Platform', value: platform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                    { name: 'UUID', value: `\`${profile.uuid}\``, inline: false }
+                )
+                .setFooter({ text: `Linked by ${message.author.tag}` })
+                .setTimestamp();
+
+            if (platform === 'java') {
+                embed.setThumbnail(`https://mc-heads.net/avatar/${profile.uuid}/128`);
+            }
+
+            return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+        }
+    }
+};
+
 module.exports = {
     name: 'Linking',
     slashCommands,
+    commands,
     lookupMcProfile
 };

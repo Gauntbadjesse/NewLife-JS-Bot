@@ -37,13 +37,37 @@ async function findKingdom(guildId, name) {
 }
 
 /**
- * Get the kingdom a user is a ruler of (from database)
+ * Get the kingdom a user is a ruler of (checks both role AND database)
+ * If user has ruler role but isn't in DB, adds them to DB
  */
 async function getUserRuledKingdom(guildId, member) {
     const Kingdom = await getKingdomModel();
     const kingdoms = await Kingdom.find({ guildId });
     
     for (const kingdom of kingdoms) {
+        // First check: Does the user have the leader role?
+        const hasLeaderRole = member.roles.cache.has(kingdom.leaderRoleId);
+        
+        if (hasLeaderRole) {
+            // User has the role - check if they're in the database
+            const dbMember = kingdom.getMember(member.id);
+            
+            if (!dbMember) {
+                // User has role but not in DB - add them as leader
+                kingdom.addMember(member.id, member.user.tag, true, null);
+                await kingdom.save();
+                console.log(`[Kingdom] Auto-added ${member.user.tag} as leader of ${kingdom.name} (had role)`);
+            } else if (!dbMember.isLeader) {
+                // User has role but marked as regular member - promote them
+                kingdom.setLeader(member.id, true);
+                await kingdom.save();
+                console.log(`[Kingdom] Auto-promoted ${member.user.tag} to leader of ${kingdom.name} (had role)`);
+            }
+            
+            return kingdom;
+        }
+        
+        // Fallback: Check database entry (for cases where role might be temporarily missing)
         const dbMember = kingdom.getMember(member.id);
         if (dbMember && dbMember.isLeader) {
             return kingdom;
@@ -166,6 +190,10 @@ const slashCommands = [
                     .setName('name')
                     .setDescription('Kingdom name')
                     .setRequired(true))
+                .addUserOption(opt => opt
+                    .setName('ruler')
+                    .setDescription('User to assign as the kingdom ruler')
+                    .setRequired(true))
                 .addBooleanOption(opt => opt
                     .setName('leader_ping')
                     .setDescription('Allow leader to be pinged')
@@ -231,6 +259,7 @@ const slashCommands = [
             // CREATE
             if (sub === 'create') {
                 const name = interaction.options.getString('name').trim();
+                const rulerUser = interaction.options.getUser('ruler');
                 const leaderPing = interaction.options.getBoolean('leader_ping');
                 const color = interaction.options.getString('color').trim();
 
@@ -243,6 +272,12 @@ const slashCommands = [
                 const existing = await findKingdom(interaction.guild.id, name);
                 if (existing) {
                     return interaction.reply({ content: `Kingdom **${name}** already exists.`, ephemeral: true });
+                }
+
+                // Get the ruler member
+                const rulerMember = await interaction.guild.members.fetch(rulerUser.id).catch(() => null);
+                if (!rulerMember) {
+                    return interaction.reply({ content: 'Could not find the specified ruler in this server.', ephemeral: true });
                 }
 
                 await interaction.deferReply({ ephemeral: true });
@@ -286,13 +321,19 @@ const slashCommands = [
                         createdAt: new Date()
                     });
 
+                    // Add the ruler to the kingdom database
+                    kingdom.addMember(rulerMember.id, rulerMember.user.tag, true, interaction.user.id);
                     await kingdom.save();
+
+                    // Assign the ruler role to the specified user
+                    await rulerMember.roles.add(leaderRole.id, `Assigned as ruler of ${name} by ${interaction.user.tag}`);
 
                     const embed = new EmbedBuilder()
                         .setTitle('Kingdom Created')
                         .setColor(color)
                         .addFields(
                             { name: 'Name', value: name, inline: true },
+                            { name: 'Ruler', value: `${rulerMember}`, inline: true },
                             { name: 'Member Role', value: `${memberRole}`, inline: true },
                             { name: 'Leader Role', value: `${leaderRole}`, inline: true },
                             { name: 'Leader Ping', value: leaderPing ? 'Enabled' : 'Disabled', inline: true },
