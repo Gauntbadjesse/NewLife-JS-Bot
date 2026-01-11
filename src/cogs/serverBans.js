@@ -1278,6 +1278,11 @@ const slashCommands = [
         data: new SlashCommandBuilder()
             .setName('warn')
             .setDescription('Warn a Discord user')
+            .addStringOption(opt => opt
+                .setName('reason')
+                .setDescription('Reason for the warning')
+                .setRequired(true)
+            )
             .addUserOption(opt => opt
                 .setName('target')
                 .setDescription('Discord user to warn')
@@ -1287,11 +1292,6 @@ const slashCommands = [
                 .setName('mcname')
                 .setDescription('Or enter a Minecraft username to lookup')
                 .setRequired(false)
-            )
-            .addStringOption(opt => opt
-                .setName('reason')
-                .setDescription('Reason for the warning')
-                .setRequired(true)
             )
             .addStringOption(opt => opt
                 .setName('severity')

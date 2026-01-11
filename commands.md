@@ -59,7 +59,7 @@ Special: `Whitelist Guru` - Can use whitelist commands and close apply tickets
 
 ### /infract
 - **Permission:** Management
-- **Options:** `target` (optional), `mcname` (optional), `type` (required: termination/warning/notice/strike), `reason` (required)
+- **Options:** `type` (required: termination/warning/notice/strike), `reason` (required), `user` (optional), `mcname` (optional)
 - **Description:** Issue staff infraction
 
 ### /infractions
@@ -89,7 +89,7 @@ Special: `Whitelist Guru` - Can use whitelist commands and close apply tickets
 
 ### /warn
 - **Permission:** Staff
-- **Options:** `target` (optional), `mcname` (optional), `reason` (required)
+- **Options:** `reason` (required), `target` (optional), `mcname` (optional), `severity` (optional), `category` (optional)
 - **Description:** Issue Discord warning
 
 ### /warnings

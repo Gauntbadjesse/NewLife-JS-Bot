@@ -91,14 +91,6 @@ const slashCommands = [
         data: new SlashCommandBuilder()
             .setName('infract')
             .setDescription('Issue a staff infraction')
-            .addUserOption(opt => opt
-                .setName('user')
-                .setDescription('The staff member to infract (Discord user)')
-                .setRequired(false))
-            .addStringOption(opt => opt
-                .setName('mcname')
-                .setDescription('Or enter a Minecraft username to lookup')
-                .setRequired(false))
             .addStringOption(opt => opt
                 .setName('type')
                 .setDescription('Type of infraction')
@@ -112,7 +104,15 @@ const slashCommands = [
             .addStringOption(opt => opt
                 .setName('reason')
                 .setDescription('Reason for the infraction')
-                .setRequired(true)),
+                .setRequired(true))
+            .addUserOption(opt => opt
+                .setName('user')
+                .setDescription('The staff member to infract (Discord user)')
+                .setRequired(false))
+            .addStringOption(opt => opt
+                .setName('mcname')
+                .setDescription('Or enter a Minecraft username to lookup')
+                .setRequired(false)),
         
         async execute(interaction, client) {
             // Permission check - Management+ only
