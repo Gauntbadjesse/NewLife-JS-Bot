@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 
 // Member schema to track kingdom membership persistently
 const kingdomMemberSchema = new mongoose.Schema({
-    odId: { type: String, required: true },
+    discordId: { type: String, required: true },
     discordTag: { type: String },
     isLeader: { type: Boolean, default: false },
     joinedAt: { type: Date, default: Date.now },

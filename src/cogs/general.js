@@ -171,6 +171,7 @@ const commands = {
                     `\`${prefix}remove <case_id>\` - Permanently delete a record`,
                     `\`${prefix}addkingdoms\` - Add preset kingdoms to database`,
                     `\`${prefix}welcometest\` - Test welcome DM`,
+                    `\`${prefix}cleanup\` - Unlink/unwhitelist users not in Discord`,
                     `\`/giveaway start/end/reroll/list\` - Giveaway management`,
                     `\`/serverstats send\` - Send stats DM`,
                     `\`/whitelist stats\` - Weekly whitelist stats`,
@@ -1036,7 +1037,8 @@ const slashCommands = [
                     `\`/giveaway start/end/reroll/list/delete\` - Giveaways`,
                     `\`/serverstats send\` - Send stats DM`,
                     `\`/whitelist stats\` - Weekly whitelist stats`,
-                    `\`/guru report\` - Trigger weekly guru report`
+                    `\`/guru report\` - Trigger weekly guru report`,
+                    `\`!cleanup\` - Unlink/unwhitelist users not in Discord`
                 ];
                 embed.addFields({ name: 'Owner Commands', value: ownerCommands.join('\n'), inline: false });
             }

@@ -578,6 +578,24 @@ client.on('guildMemberRemove', async (member) => {
         } catch (e) {
             console.error('[DiscordLogger] Failed to handle member leave:', e);
         }
+
+        // Auto-unlink and unwhitelist when member leaves
+        try {
+            const { unlinkAndUnwhitelist } = require('./cogs/linking');
+            const result = await unlinkAndUnwhitelist(member.user.id);
+            if (result.count > 0) {
+                console.log(`[MemberLeave] Unlinked and unwhitelisted ${result.count} account(s) for ${member.user.tag} (${member.user.id})`);
+                if (result.accounts.length > 0) {
+                    const accountNames = result.accounts.map(a => `${a.name} (${a.platform})`).join(', ');
+                    console.log(`[MemberLeave] Removed accounts: ${accountNames}`);
+                }
+                if (result.errors.length > 0) {
+                    console.error(`[MemberLeave] Errors during unwhitelist:`, result.errors);
+                }
+            }
+        } catch (e) {
+            console.error('[MemberLeave] Failed to unlink/unwhitelist:', e);
+        }
     } catch (e) {
         if (logError) await logError('guildMemberRemove', e, { member: member?.user?.tag || 'unknown' });
     }

@@ -8,6 +8,7 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 const LinkedAccount = require('../database/models/LinkedAccount');
 const { isAdmin, isSupervisor, isManagement, isOwner, isStaff } = require('../utils/permissions');
 const fetch = require('node-fetch');
+const { executeRcon } = require('../utils/rcon');
 
 // Pending link verifications (in-memory, cleared on restart)
 const pendingLinks = new Map();
@@ -56,6 +57,38 @@ async function lookupMcProfile(username, platform = 'java') {
 function getEmbedColor() {
     const color = process.env.EMBED_COLOR || '#10b981';
     return color.startsWith('#') ? parseInt(color.slice(1), 16) : parseInt(color, 16);
+}
+
+/**
+ * Unlink and unwhitelist all accounts for a Discord user
+ * @param {string} discordId - The Discord user ID
+ * @returns {Promise<{count: number, accounts: Array, errors: Array}>}
+ */
+async function unlinkAndUnwhitelist(discordId) {
+    const accounts = await LinkedAccount.find({ discordId: String(discordId) });
+    const errors = [];
+    
+    for (const account of accounts) {
+        try {
+            // Remove from whitelist based on platform
+            if (account.platform === 'java') {
+                await executeRcon(`whitelist remove ${account.minecraftUsername}`);
+            } else if (account.platform === 'bedrock') {
+                await executeRcon(`fwhitelist remove ${account.uuid}`);
+            }
+        } catch (e) {
+            errors.push(`Failed to unwhitelist ${account.minecraftUsername}: ${e.message}`);
+        }
+    }
+    
+    // Delete all linked accounts
+    await LinkedAccount.deleteMany({ discordId: String(discordId) });
+    
+    return {
+        count: accounts.length,
+        accounts: accounts.map(a => ({ name: a.minecraftUsername, platform: a.platform, uuid: a.uuid })),
+        errors
+    };
 }
 
 const slashCommands = [
@@ -590,6 +623,130 @@ const commands = {
 
             return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
         }
+    },
+
+    cleanup: {
+        name: 'cleanup',
+        description: 'Unlink and unwhitelist all accounts for users no longer in the Discord (Owner)',
+        usage: '!cleanup [--dry-run]',
+        async execute(message, args, client) {
+            // Owner only
+            if (!isOwner(message.member)) {
+                return message.reply({ content: 'Permission denied. Owner only.', allowedMentions: { repliedUser: false } });
+            }
+
+            const isDryRun = args.includes('--dry-run');
+            
+            const statusMsg = await message.reply({ 
+                content: `${isDryRun ? '[DRY RUN] ' : ''}Scanning linked accounts... This may take a moment.`, 
+                allowedMentions: { repliedUser: false } 
+            });
+
+            try {
+                // Get all linked accounts
+                const allAccounts = await LinkedAccount.find({});
+                const uniqueDiscordIds = [...new Set(allAccounts.map(a => a.discordId))];
+                
+                const toRemove = [];
+                const guild = message.guild;
+
+                // Check each Discord ID to see if they're still in the server
+                for (const discordId of uniqueDiscordIds) {
+                    try {
+                        const member = await guild.members.fetch(discordId).catch(() => null);
+                        if (!member) {
+                            // User is no longer in the server
+                            const userAccounts = allAccounts.filter(a => a.discordId === discordId);
+                            toRemove.push({
+                                discordId,
+                                accounts: userAccounts.map(a => ({ name: a.minecraftUsername, platform: a.platform, uuid: a.uuid }))
+                            });
+                        }
+                    } catch (e) {
+                        // Member not found - add to removal list
+                        const userAccounts = allAccounts.filter(a => a.discordId === discordId);
+                        toRemove.push({
+                            discordId,
+                            accounts: userAccounts.map(a => ({ name: a.minecraftUsername, platform: a.platform, uuid: a.uuid }))
+                        });
+                    }
+                }
+
+                if (toRemove.length === 0) {
+                    return statusMsg.edit({ content: 'All linked accounts belong to current Discord members. No cleanup needed.' });
+                }
+
+                // Count total accounts to remove
+                const totalAccounts = toRemove.reduce((sum, u) => sum + u.accounts.length, 0);
+
+                if (isDryRun) {
+                    // Build summary for dry run
+                    let description = `Found **${toRemove.length}** users with **${totalAccounts}** accounts to clean up:\n\n`;
+                    for (const user of toRemove.slice(0, 10)) {
+                        const accountList = user.accounts.map(a => `\`${a.name}\` (${a.platform})`).join(', ');
+                        description += `**ID:** ${user.discordId}\n${accountList}\n\n`;
+                    }
+                    if (toRemove.length > 10) {
+                        description += `*...and ${toRemove.length - 10} more users*`;
+                    }
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('[DRY RUN] Cleanup Preview')
+                        .setColor(0xffaa00)
+                        .setDescription(description)
+                        .addFields({ name: 'Run Cleanup', value: 'Use `!cleanup` (without --dry-run) to execute.' })
+                        .setFooter({ text: `Requested by ${message.author.tag}` })
+                        .setTimestamp();
+
+                    return statusMsg.edit({ content: null, embeds: [embed] });
+                }
+
+                // Actually perform the cleanup
+                let removedCount = 0;
+                let errorCount = 0;
+                const errors = [];
+
+                for (const user of toRemove) {
+                    for (const account of user.accounts) {
+                        try {
+                            // Remove from whitelist
+                            if (account.platform === 'java') {
+                                await executeRcon(`whitelist remove ${account.name}`);
+                            } else if (account.platform === 'bedrock') {
+                                await executeRcon(`fwhitelist remove ${account.uuid}`);
+                            }
+                            removedCount++;
+                        } catch (e) {
+                            errorCount++;
+                            errors.push(`${account.name}: ${e.message}`);
+                        }
+                    }
+                    
+                    // Delete from database
+                    await LinkedAccount.deleteMany({ discordId: user.discordId });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle('Cleanup Complete')
+                    .setColor(0x10b981)
+                    .setDescription(`Cleaned up **${toRemove.length}** users who left the Discord.`)
+                    .addFields(
+                        { name: 'Accounts Unwhitelisted', value: `${removedCount}`, inline: true },
+                        { name: 'Database Entries Removed', value: `${totalAccounts}`, inline: true }
+                    )
+                    .setFooter({ text: `Executed by ${message.author.tag}` })
+                    .setTimestamp();
+
+                if (errorCount > 0) {
+                    embed.addFields({ name: 'Errors', value: `${errorCount} whitelist removal(s) failed` });
+                }
+
+                return statusMsg.edit({ content: null, embeds: [embed] });
+            } catch (e) {
+                console.error('[Cleanup] Error:', e);
+                return statusMsg.edit({ content: `Cleanup failed: ${e.message}` });
+            }
+        }
     }
 };
 
@@ -597,5 +754,6 @@ module.exports = {
     name: 'Linking',
     slashCommands,
     commands,
-    lookupMcProfile
+    lookupMcProfile,
+    unlinkAndUnwhitelist
 };

@@ -443,6 +443,10 @@ Special: `Whitelist Guru` - Can use whitelist commands and close apply tickets
 - **Permission:** Admin
 - **Description:** Unlink Minecraft account
 
+### !cleanup [--dry-run]
+- **Permission:** Owner
+- **Description:** Unlink and unwhitelist all accounts for users no longer in Discord. Use --dry-run to preview without making changes.
+
 ### !forcelink <@user|userId> <java|bedrock> <mcname>
 - **Permission:** Admin
 - **Description:** Force link account
