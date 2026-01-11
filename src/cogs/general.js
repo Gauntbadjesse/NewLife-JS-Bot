@@ -75,7 +75,7 @@ const commands = {
             const embed = new EmbedBuilder()
                 .setColor(getEmbedColor())
                 .setTitle('NewLife Management Commands')
-                .setDescription(`Use \`${prefix}help <command>\` for detailed information about a specific command.`)
+                .setDescription(`Use \`${prefix}help <command>\` for detailed information about a specific command.\nUse \`/help\` for slash command list.`)
                 .setFooter({ text: 'NewLife Management' })
                 .setTimestamp();
 
@@ -84,7 +84,11 @@ const commands = {
                 `\`${prefix}help [command]\` - Show this help menu`,
                 `\`${prefix}ping\` - Check bot latency`,
                 `\`${prefix}m [role]\` - Show online members or members in a role`,
-                `\`${prefix}kingdom\` - Kingdom management`
+                `\`${prefix}kingdom\` - Kingdom management`,
+                `\`/suggest <suggestion>\` - Submit a suggestion`,
+                `\`/linkaccount\` - Link your Minecraft account`,
+                `\`/myaccounts\` - View your linked accounts`,
+                `\`/loa view\` - View staff on LOA`
             ];
             embed.addFields({ name: 'General Commands', value: everyoneCommands.join('\n'), inline: false });
 
@@ -95,7 +99,12 @@ const commands = {
                     `\`${prefix}dm guru @user\` - DM the guru guide to a user`,
                     `\`${prefix}rules quiz @user\` - Send the rules quiz to a user`,
                     `\`${prefix}history <player>\` - Show player's full history`,
-                    `\`${prefix}stats\` - Show database statistics`
+                    `\`${prefix}stats\` - Show database statistics`,
+                    `\`${prefix}linked <@user|mc>\` - View linked accounts`,
+                    `\`/loa start <duration>\` - Start leave of absence`,
+                    `\`/loa end\` - End your LOA early`,
+                    `\`/note add/list/delete/search\` - Player notes`,
+                    `\`/whitelist add\` - Add to whitelist`
                 ];
                 embed.addFields({ name: 'Staff Commands', value: staffCommands.join('\n'), inline: false });
             }
@@ -107,9 +116,22 @@ const commands = {
                     `\`${prefix}unmute <user>\` - Remove timeout from a member`,
                     `\`${prefix}case <id>\` - Look up a case by ID`,
                     `\`${prefix}pardon <case_id>\` - Pardon (remove) a case`,
-                    `\`${prefix}lookup <user>\` - Show user moderation stats`
+                    `\`${prefix}lookup <user>\` - Show user moderation stats`,
+                    `\`/stream toggle\` - Toggle streaming mode`,
+                    `\`/playerlookup <player>\` - Player information lookup`
                 ];
                 embed.addFields({ name: 'Moderator Commands', value: modCommands.join('\n'), inline: false });
+            }
+
+            // Supervisor+ commands
+            if (isSupervisor(member)) {
+                const supervisorCommands = [
+                    `\`${prefix}page <@user> <reason>\` - Page user (10 pings)`,
+                    `\`/panel\` - Send ticket panel`,
+                    `\`/close <reason>\` - Close ticket`,
+                    `\`/infractions [user]\` - View staff infractions`
+                ];
+                embed.addFields({ name: 'Supervisor Commands', value: supervisorCommands.join('\n'), inline: false });
             }
 
             // Admin+ commands
@@ -120,12 +142,26 @@ const commands = {
                     `\`${prefix}kick <user> <reason>\` - Kick a Discord member`,
                     `\`${prefix}lock\` - Lock the current channel`,
                     `\`${prefix}unlock\` - Unlock the current channel`,
-                    `\`${prefix}linked <@user|mc>\` - Show linked accounts`,
-                    `\`${prefix}link <@user> <java|bedrock> <mc>\` - Manually link an account`,
+                    `\`${prefix}unlink <@user> <mc|all>\` - Unlink account`,
+                    `\`${prefix}forcelink <@user> <platform> <mc>\` - Force link`,
                     `\`${prefix}postverify [channel]\` - Post the verification embed`,
-                    `\`${prefix}memberupdate\` - Update the member counter`
+                    `\`${prefix}memberupdate\` - Update the member counter`,
+                    `\`/kingdom create/delete/list\` - Kingdom management`,
+                    `\`/reactionroles\` - Reaction role management`,
+                    `\`/emojirole\` - Emoji reaction roles`,
+                    `\`/tempvc setup/remove/list\` - Temp VC management`
                 ];
                 embed.addFields({ name: 'Admin Commands', value: adminCommands.join('\n'), inline: false });
+            }
+
+            // Management+ commands
+            if (isManagement(member)) {
+                const managementCommands = [
+                    `\`/infract <user> <type> <reason>\` - Issue staff infraction`,
+                    `\`/revokeinfraction <case>\` - Revoke infraction`,
+                    `\`/guru stats/performance/history\` - Guru tracking`
+                ];
+                embed.addFields({ name: 'Management Commands', value: managementCommands.join('\n'), inline: false });
             }
 
             // Owner commands
@@ -134,8 +170,11 @@ const commands = {
                     `\`${prefix}update\` - Pull latest from git and restart`,
                     `\`${prefix}remove <case_id>\` - Permanently delete a record`,
                     `\`${prefix}addkingdoms\` - Add preset kingdoms to database`,
-                    `\`${prefix}temp2\` - Add member role to all users`,
-                    `\`${prefix}test1\` - Deny view access to unverified role`
+                    `\`${prefix}welcometest\` - Test welcome DM`,
+                    `\`/giveaway start/end/reroll/list\` - Giveaway management`,
+                    `\`/serverstats send\` - Send stats DM`,
+                    `\`/whitelist stats\` - Weekly whitelist stats`,
+                    `\`/guru report\` - Trigger weekly guru report`
                 ];
                 embed.addFields({ name: 'Owner Commands', value: ownerCommands.join('\n'), inline: false });
             }
@@ -910,7 +949,7 @@ const slashCommands = [
             const embed = new EmbedBuilder()
                 .setColor(getEmbedColor())
                 .setTitle('NewLife Management Commands')
-                .setDescription('All commands are available as both prefix and slash commands.')
+                .setDescription(`Use \`${prefix}help\` for prefix command list.`)
                 .setFooter({ text: 'NewLife Management' })
                 .setTimestamp();
 
@@ -918,52 +957,88 @@ const slashCommands = [
             const everyoneCommands = [
                 `\`/help\` - Show this help menu`,
                 `\`/ping\` - Check bot latency`,
-                `\`!kingdom\` - Kingdom management`
+                `\`/suggest <suggestion>\` - Submit a suggestion`,
+                `\`/linkaccount <platform> <username>\` - Link Minecraft account`,
+                `\`/myaccounts\` - View your linked accounts`,
+                `\`/serverstats view\` - View server statistics`,
+                `\`/loa view\` - View staff on LOA`,
+                `\`/tempvc rename/limit/lock/unlock\` - Manage your temp channel`
             ];
             embed.addFields({ name: 'General Commands', value: everyoneCommands.join('\n'), inline: false });
+
+            // Staff+ commands
+            if (isStaff(member)) {
+                const staffCommands = [
+                    `\`/history <player>\` - Show player's history`,
+                    `\`/lookup <case_id>\` - Look up any case`,
+                    `\`/whitelist add\` - Add to whitelist`,
+                    `\`/note add/list/delete/search/recent\` - Player notes`,
+                    `\`/loa start <duration>\` - Start leave of absence`,
+                    `\`/loa end\` - End your LOA`,
+                    `\`/close <reason>\` - Close ticket`,
+                    `\`/tclose <time> <reason>\` - Timed ticket close`,
+                    `\`/ban <player> <reason> <duration>\` - Ban from MC server`,
+                    `\`/unban <player>\` - Unban from MC server`,
+                    `\`/checkban <player>\` - Check if banned`,
+                    `\`/warn <target> <reason>\` - Issue Discord warning`,
+                    `\`/warnings <target>\` - View Discord warnings`
+                ];
+                embed.addFields({ name: 'Staff Commands', value: staffCommands.join('\n'), inline: false });
+            }
 
             // Moderator+ commands
             if (isModerator(member)) {
                 const modCommands = [
-                    `\`/warn case <id>\` - Look up a warning by ID`,
-                    `\`/warn user <player> <reason>\` - Issue a warning`,
-                    `\`/warnings <player>\` - List player warnings`,
-                    `\`/history <player>\` - Show player's history`,
-                    `\`/lookup <id>\` - Look up any case by ID`,
-                    `\`/checkban <player>\` - Check if player is banned`
+                    `\`/playerlookup <player>\` - Comprehensive player lookup`,
+                    `\`/stream toggle\` - Toggle streaming mode`,
+                    `\`/stream status\` - Check streaming status`
                 ];
                 embed.addFields({ name: 'Moderator Commands', value: modCommands.join('\n'), inline: false });
-            }
-
-            // Admin+ commands
-            if (isAdmin(member)) {
-                const adminCommands = [
-                    `\`/ban case <id>\` - Look up a ban by ID`,
-                    `\`/ban user <player> <duration> <reason>\` - Ban a player`,
-                    `\`/bans <player>\` - List player bans`,
-                    `\`/stats\` - Show database statistics`
-                ];
-                embed.addFields({ name: 'Admin Commands', value: adminCommands.join('\n'), inline: false });
             }
 
             // Supervisor+ commands
             if (isSupervisor(member)) {
                 const supervisorCommands = [
                     `\`/panel\` - Send the support panel`,
-                    `\`/close <reason>\` - Close current ticket`,
-                    `\`/tclose <time> <reason>\` - Timed ticket close`
+                    `\`/infractions [user]\` - View staff infractions`
                 ];
                 embed.addFields({ name: 'Supervisor Commands', value: supervisorCommands.join('\n'), inline: false });
+            }
+
+            // Admin+ commands
+            if (isAdmin(member)) {
+                const adminCommands = [
+                    `\`/stats\` - Show database statistics`,
+                    `\`/apanel\` - Post whitelist application panel`,
+                    `\`/kingdom create/delete/list/sync\` - Kingdom management`,
+                    `\`/reactionroles create/add/remove/list/delete\` - Reaction roles`,
+                    `\`/emojirole add/remove/list/clear\` - Emoji reaction roles`,
+                    `\`/tempvc setup/remove/list\` - Temp VC management`
+                ];
+                embed.addFields({ name: 'Admin Commands', value: adminCommands.join('\n'), inline: false });
             }
 
             // Management+ commands
             if (isManagement(member)) {
                 const managementCommands = [
-                    `\`/infract <user> <type> <reason>\` - Issue a staff infraction`,
-                    `\`/infractions [user] [type]\` - View staff infractions`,
-                    `\`/revokeinfraction <case>\` - Revoke an infraction`
+                    `\`/infract <user> <type> <reason>\` - Issue staff infraction`,
+                    `\`/revokeinfraction <case>\` - Revoke an infraction`,
+                    `\`/guru stats\` - View guru stats`,
+                    `\`/guru performance [user]\` - View guru performance`,
+                    `\`/guru history [user]\` - View guru history`
                 ];
                 embed.addFields({ name: 'Management Commands', value: managementCommands.join('\n'), inline: false });
+            }
+
+            // Owner commands
+            if (isOwner(member)) {
+                const ownerCommands = [
+                    `\`/giveaway start/end/reroll/list/delete\` - Giveaways`,
+                    `\`/serverstats send\` - Send stats DM`,
+                    `\`/whitelist stats\` - Weekly whitelist stats`,
+                    `\`/guru report\` - Trigger weekly guru report`
+                ];
+                embed.addFields({ name: 'Owner Commands', value: ownerCommands.join('\n'), inline: false });
             }
 
             return interaction.reply({
