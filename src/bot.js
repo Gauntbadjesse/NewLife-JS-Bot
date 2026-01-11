@@ -162,6 +162,30 @@ client.once('ready', async () => {
     } catch (e) {
         console.error('Failed to cleanup temp VCs:', e);
     }
+
+    // Initialize server stats milestone tracking
+    try {
+        const { initializeMilestone, sendDailyStats } = require('./cogs/serverStats');
+        const guild = client.guilds.cache.first();
+        if (guild) {
+            await initializeMilestone(guild);
+        }
+        // Schedule daily stats DM at midnight UTC
+        cron.schedule('0 0 * * *', async () => {
+            await sendDailyStats(client);
+        }, { timezone: 'UTC' });
+        console.log('[ServerStats] Initialized milestone tracking and daily stats');
+    } catch (e) {
+        console.error('Failed to initialize server stats:', e);
+    }
+
+    // Check for expired LOAs
+    try {
+        const { checkExpiredLOAs } = require('./cogs/loa');
+        await checkExpiredLOAs(client);
+    } catch (e) {
+        console.error('Failed to check expired LOAs:', e);
+    }
 });
 
 /**
@@ -271,6 +295,26 @@ client.on('messageCreate', async (message) => {
         // Silently ignore if tracking fails
     }
 
+    // Handle welcome test command
+    try {
+        const welcome = require('./cogs/welcome');
+        if (welcome.handleMessage) {
+            await welcome.handleMessage(message);
+        }
+    } catch (e) {
+        // Silently ignore
+    }
+
+    // Handle page command
+    try {
+        const paging = require('./cogs/paging');
+        if (paging.handleMessage) {
+            await paging.handleMessage(message);
+        }
+    } catch (e) {
+        // Silently ignore
+    }
+
     const prefix = process.env.BOT_PREFIX || '!';
     if (!message.content.startsWith(prefix)) return;
 
@@ -334,6 +378,14 @@ client.on('interactionCreate', async (interaction) => {
                 if (tempVCCog.handleTempVCButton) await tempVCCog.handleTempVCButton(interaction, client);
             } catch (e) {
                 if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: tempVC', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
+
+            // Try suggestions cog
+            try {
+                const suggestionsCog = require('./cogs/suggestions');
+                if (suggestionsCog.handleButton) await suggestionsCog.handleButton(interaction);
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: suggestions', e, { customId: interaction.customId, user: interaction.user.tag });
             }
         } catch (error) {
             await logError('Button Handler', error, { customId: interaction.customId, user: interaction.user.tag });
@@ -486,6 +538,22 @@ client.on('guildMemberAdd', async (member) => {
             await handleMemberJoin(member, client);
         } catch (e) {
             console.error('[DiscordLogger] Failed to handle member join:', e);
+        }
+
+        // Send welcome DM to new member
+        try {
+            const { sendWelcomeDM } = require('./cogs/welcome');
+            await sendWelcomeDM(member);
+        } catch (e) {
+            console.error('[Welcome] Failed to send welcome DM:', e);
+        }
+
+        // Check for member milestone
+        try {
+            const { checkMilestone } = require('./cogs/serverStats');
+            await checkMilestone(member.guild);
+        } catch (e) {
+            console.error('[ServerStats] Failed to check milestone:', e);
         }
     } catch (e) {
         console.error(`[MemberJoin] Error:`, e);
