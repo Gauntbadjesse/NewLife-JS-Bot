@@ -710,10 +710,19 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 });
 
-// Reaction Role Events - Handle reactions for legacy reaction roles
+// Reaction Role Events - Handle reactions for reaction roles
 client.on('messageReactionAdd', async (reaction, user) => {
     try {
         if (user.bot) return;
+        // Try main reactionRoles module
+        const { handleReactionAdd } = require('./cogs/reactionRoles');
+        if (handleReactionAdd) await handleReactionAdd(reaction, user, client);
+    } catch (e) {
+        // Module may not exist yet or error occurred
+    }
+    try {
+        if (user.bot) return;
+        // Try legacy emojiReactionRoles module
         const { handleReactionAdd } = require('./cogs/emojiReactionRoles');
         if (handleReactionAdd) await handleReactionAdd(reaction, user, client);
     } catch (e) {
@@ -724,6 +733,15 @@ client.on('messageReactionAdd', async (reaction, user) => {
 client.on('messageReactionRemove', async (reaction, user) => {
     try {
         if (user.bot) return;
+        // Try main reactionRoles module
+        const { handleReactionRemove } = require('./cogs/reactionRoles');
+        if (handleReactionRemove) await handleReactionRemove(reaction, user, client);
+    } catch (e) {
+        // Module may not exist yet or error occurred
+    }
+    try {
+        if (user.bot) return;
+        // Try legacy emojiReactionRoles module
         const { handleReactionRemove } = require('./cogs/emojiReactionRoles');
         if (handleReactionRemove) await handleReactionRemove(reaction, user, client);
     } catch (e) {
