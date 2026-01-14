@@ -13,6 +13,13 @@
 
 Special: `Whitelist Guru` - Can use whitelist commands and close apply tickets
 
+## Ticket Permissions
+| Ticket Type | Access Roles |
+|-------------|--------------|
+| General | Moderator, Admin, Supervisor, Management |
+| Report | Admin, Supervisor, Management |
+| Management | Supervisor, Management |
+
 ---
 
 ## Slash Commands
@@ -52,6 +59,31 @@ Special: `Whitelist Guru` - Can use whitelist commands and close apply tickets
 - **Permission:** Staff / Whitelist Guru (apply tickets)
 - **Options:** `time` (required), `reason` (required)
 - **Description:** Close ticket after delay (e.g., 30s, 5m, 1h)
+
+### /escalate
+- **Permission:** Moderator+
+- **Options:** `level` (required: general/report/management)
+- **Description:** Escalate ticket to higher permission level. Pings Staff Team for general/report, Management for management tickets.
+
+### /add
+- **Permission:** Staff
+- **Options:** `user` (required)
+- **Description:** Add a user to the current ticket
+
+### /remove
+- **Permission:** Staff
+- **Options:** `user` (required)
+- **Description:** Remove a user from the current ticket
+
+### /mute
+- **Permission:** Moderator+
+- **Options:** `duration` (required), `reason` (required), `target` (optional), `mcname` (optional)
+- **Description:** Mute a Discord user for a period of time. DMs the user and logs the action.
+
+### /unmute
+- **Permission:** Moderator+
+- **Options:** `target` (required), `reason` (optional)
+- **Description:** Unmute a Discord user
 
 ### /apanel
 - **Permission:** Admin / Supervisor

@@ -747,6 +747,196 @@ const commands = {
                 return statusMsg.edit({ content: `Cleanup failed: ${e.message}` });
             }
         }
+    },
+
+    nick: {
+        name: 'nick',
+        description: 'Update user nickname(s) to their linked Minecraft name',
+        usage: '!nick @user [@user2...] | !nick all',
+        async execute(message, args, client) {
+            // Staff only
+            if (!isStaff(message.member)) {
+                return message.reply({ content: 'Permission denied. Staff only.', allowedMentions: { repliedUser: false } });
+            }
+
+            const guild = message.guild;
+
+            // Check for "all" argument
+            if (args[0] && args[0].toLowerCase() === 'all') {
+                const statusMsg = await message.reply({ content: '🔄 Updating all member nicknames... This may take a while.', allowedMentions: { repliedUser: false } });
+
+                try {
+                    // Get all linked accounts
+                    const allAccounts = await LinkedAccount.find({});
+                    
+                    // Group by discordId and pick primary or first account
+                    const accountMap = new Map();
+                    for (const account of allAccounts) {
+                        if (!accountMap.has(account.discordId)) {
+                            accountMap.set(account.discordId, account);
+                        } else if (account.primary) {
+                            accountMap.set(account.discordId, account);
+                        }
+                    }
+
+                    let updated = 0;
+                    let skipped = 0;
+                    let failed = 0;
+                    const errors = [];
+
+                    for (const [discordId, account] of accountMap) {
+                        try {
+                            const member = await guild.members.fetch(discordId).catch(() => null);
+                            if (!member) {
+                                skipped++;
+                                continue;
+                            }
+
+                            // Skip if nickname already matches
+                            if (member.nickname === account.minecraftUsername) {
+                                skipped++;
+                                continue;
+                            }
+
+                            // Can't change owner's nickname
+                            if (member.id === guild.ownerId) {
+                                skipped++;
+                                continue;
+                            }
+
+                            // Can't change if bot's role is lower
+                            const botMember = guild.members.cache.get(client.user.id);
+                            if (member.roles.highest.position >= botMember.roles.highest.position) {
+                                skipped++;
+                                continue;
+                            }
+
+                            await member.setNickname(account.minecraftUsername, 'Synced to linked Minecraft name');
+                            updated++;
+                        } catch (e) {
+                            failed++;
+                            if (errors.length < 5) {
+                                errors.push(`<@${discordId}>: ${e.message.substring(0, 50)}`);
+                            }
+                        }
+                    }
+
+                    const embed = new EmbedBuilder()
+                        .setTitle('Nickname Sync Complete')
+                        .setColor(getEmbedColor())
+                        .addFields(
+                            { name: 'Updated', value: `${updated}`, inline: true },
+                            { name: 'Skipped', value: `${skipped}`, inline: true },
+                            { name: 'Failed', value: `${failed}`, inline: true }
+                        )
+                        .setFooter({ text: `Executed by ${message.author.tag}` })
+                        .setTimestamp();
+
+                    if (errors.length > 0) {
+                        embed.addFields({ name: 'Sample Errors', value: errors.join('\n'), inline: false });
+                    }
+
+                    return statusMsg.edit({ content: null, embeds: [embed] });
+                } catch (e) {
+                    console.error('[Nick All] Error:', e);
+                    return statusMsg.edit({ content: `Failed to sync nicknames: ${e.message}` });
+                }
+            }
+
+            // Handle mentioned users (one or multiple)
+            const mentionedUsers = message.mentions.users;
+
+            if (mentionedUsers.size === 0) {
+                return message.reply({ 
+                    content: 'Usage: `!nick @user [@user2...]` or `!nick all`', 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            const results = [];
+
+            for (const [userId, user] of mentionedUsers) {
+                try {
+                    const member = await guild.members.fetch(userId).catch(() => null);
+                    if (!member) {
+                        results.push({ user: user.tag, success: false, error: 'User not in server' });
+                        continue;
+                    }
+
+                    // Get their linked account (primary or first)
+                    let account = await LinkedAccount.findOne({ discordId: userId, primary: true });
+                    if (!account) {
+                        account = await LinkedAccount.findOne({ discordId: userId });
+                    }
+
+                    if (!account) {
+                        results.push({ user: user.tag, success: false, error: 'No linked account' });
+                        continue;
+                    }
+
+                    // Can't change owner's nickname
+                    if (member.id === guild.ownerId) {
+                        results.push({ user: user.tag, success: false, error: 'Cannot change server owner' });
+                        continue;
+                    }
+
+                    // Can't change if bot's role is lower
+                    const botMember = guild.members.cache.get(client.user.id);
+                    if (member.roles.highest.position >= botMember.roles.highest.position) {
+                        results.push({ user: user.tag, success: false, error: 'Role hierarchy' });
+                        continue;
+                    }
+
+                    const oldNick = member.nickname || member.user.username;
+                    await member.setNickname(account.minecraftUsername, `Synced by ${message.author.tag}`);
+                    results.push({ user: user.tag, success: true, oldNick, newNick: account.minecraftUsername });
+                } catch (e) {
+                    results.push({ user: user.tag, success: false, error: e.message.substring(0, 30) });
+                }
+            }
+
+            // Build response
+            if (results.length === 1) {
+                const r = results[0];
+                if (r.success) {
+                    return message.reply({ 
+                        content: `✅ Updated **${r.user}**'s nickname: \`${r.oldNick}\` → \`${r.newNick}\``, 
+                        allowedMentions: { repliedUser: false } 
+                    });
+                } else {
+                    return message.reply({ 
+                        content: `❌ Failed to update **${r.user}**: ${r.error}`, 
+                        allowedMentions: { repliedUser: false } 
+                    });
+                }
+            }
+
+            // Multiple users - build embed
+            const successCount = results.filter(r => r.success).length;
+            const failCount = results.length - successCount;
+
+            const embed = new EmbedBuilder()
+                .setTitle('Nickname Updates')
+                .setColor(failCount === 0 ? getEmbedColor() : 0xffaa00)
+                .addFields(
+                    { name: 'Updated', value: `${successCount}`, inline: true },
+                    { name: 'Failed', value: `${failCount}`, inline: true }
+                )
+                .setFooter({ text: `Executed by ${message.author.tag}` })
+                .setTimestamp();
+
+            const successList = results.filter(r => r.success).map(r => `✅ **${r.user}**: \`${r.newNick}\``).slice(0, 10);
+            const failList = results.filter(r => !r.success).map(r => `❌ **${r.user}**: ${r.error}`).slice(0, 10);
+
+            if (successList.length > 0) {
+                embed.addFields({ name: 'Successful', value: successList.join('\n'), inline: false });
+            }
+            if (failList.length > 0) {
+                embed.addFields({ name: 'Failed', value: failList.join('\n'), inline: false });
+            }
+
+            return message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+        }
     }
 };
 

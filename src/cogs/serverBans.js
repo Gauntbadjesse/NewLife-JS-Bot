@@ -9,6 +9,7 @@ const ServerBan = require('../database/models/ServerBan');
 const LinkedAccount = require('../database/models/LinkedAccount');
 const Kick = require('../database/models/Kick');
 const Warning = require('../database/models/Warning');
+const Mute = require('../database/models/Mute');
 const { getNextCaseNumber } = require('../database/caseCounter');
 const { isStaff, isAdmin, isModerator } = require('../utils/permissions');
 const { sendDm } = require('../utils/dm');
@@ -1471,6 +1472,420 @@ const slashCommands = [
     },
     {
         data: new SlashCommandBuilder()
+            .setName('mute')
+            .setDescription('Mute a Discord user for a period of time')
+            .addStringOption(opt => opt
+                .setName('duration')
+                .setDescription('Mute duration (e.g., 10m, 1h, 1d)')
+                .setRequired(true)
+            )
+            .addStringOption(opt => opt
+                .setName('reason')
+                .setDescription('Reason for the mute')
+                .setRequired(true)
+            )
+            .addUserOption(opt => opt
+                .setName('target')
+                .setDescription('Discord user to mute')
+                .setRequired(false)
+            )
+            .addStringOption(opt => opt
+                .setName('mcname')
+                .setDescription('Or enter a Minecraft username to lookup')
+                .setRequired(false)
+            ),
+
+        async execute(interaction, client) {
+            // Permission check - Staff only
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({ 
+                    content: 'You do not have permission to use this command.', 
+                    flags: 64
+                });
+            }
+
+            await interaction.deferReply();
+
+            let targetUser = interaction.options.getUser('target');
+            const mcname = interaction.options.getString('mcname');
+            const reason = interaction.options.getString('reason');
+            const durationStr = interaction.options.getString('duration');
+
+            // Resolve target from mcname if no user provided
+            if (!targetUser && mcname) {
+                const resolved = await resolveDiscordFromMinecraft(mcname, interaction.client);
+                if (!resolved) {
+                    return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
+                }
+                targetUser = resolved;
+            }
+
+            if (!targetUser) {
+                return interaction.editReply({ content: 'You must provide either a Discord user or a Minecraft username.' });
+            }
+
+            // Parse duration
+            const durationParsed = parseDuration(durationStr);
+            if (!durationParsed) {
+                return interaction.editReply({ content: 'Invalid duration format. Use formats like: 10m, 1h, 1d, 7d' });
+            }
+
+            const discordId = targetUser.id;
+            const discordTag = targetUser.tag;
+
+            // Check if user is already muted
+            const existingMute = await Mute.getActiveMute(discordId);
+            if (existingMute) {
+                return interaction.editReply({ 
+                    content: `**${discordTag}** is already muted until <t:${Math.floor(existingMute.expiresAt.getTime() / 1000)}:f>` 
+                });
+            }
+
+            // Get linked accounts for context
+            const linkedAccounts = await getAllLinkedAccounts(discordId);
+            let primaryProfile = null;
+            if (linkedAccounts.length > 0) {
+                const primary = linkedAccounts[0];
+                primaryProfile = {
+                    uuid: normalizeUuid(primary.uuid),
+                    name: primary.minecraftUsername,
+                    platform: primary.platform
+                };
+            }
+
+            // Get case number
+            let caseNumber;
+            try {
+                caseNumber = await getNextCaseNumber('mute');
+            } catch (e) {
+                caseNumber = Date.now();
+            }
+
+            // Get muted role
+            const mutedRoleId = process.env.MUTED_ROLE_ID;
+            if (!mutedRoleId) {
+                return interaction.editReply({ content: 'Muted role is not configured. Please set MUTED_ROLE_ID in environment.' });
+            }
+
+            // Add muted role to user
+            try {
+                const member = await interaction.guild.members.fetch(discordId);
+                await member.roles.add(mutedRoleId, `Muted by ${interaction.user.tag} - ${reason}`);
+            } catch (e) {
+                console.error('Failed to add muted role:', e);
+                return interaction.editReply({ content: `Failed to add muted role: ${e.message}` });
+            }
+
+            // Create the mute record
+            const { randomUUID } = require('crypto');
+            const mute = new Mute({
+                _id: randomUUID(),
+                caseNumber,
+                discordId,
+                discordTag,
+                uuid: primaryProfile?.uuid || null,
+                playerName: primaryProfile?.name || null,
+                platform: primaryProfile?.platform || null,
+                reason,
+                duration: durationParsed.display,
+                durationMs: durationParsed.ms,
+                expiresAt: durationParsed.expiresAt,
+                staffId: interaction.user.id,
+                staffName: interaction.user.tag,
+                createdAt: new Date(),
+                active: true,
+                dmSent: false
+            });
+
+            await mute.save();
+
+            // Send DM to muted user
+            let dmSent = false;
+            try {
+                const dmEmbed = new EmbedBuilder()
+                    .setTitle('You have been muted')
+                    .setColor(0xFF4444)
+                    .setDescription(`You have been muted in **${interaction.guild.name}**.`)
+                    .addFields(
+                        { name: 'Reason', value: reason, inline: false },
+                        { name: 'Duration', value: durationParsed.display, inline: true },
+                        { name: 'Expires', value: `<t:${Math.floor(durationParsed.expiresAt.getTime() / 1000)}:f>`, inline: true }
+                    )
+                    .setFooter({ text: `Case #${caseNumber}` })
+                    .setTimestamp();
+
+                await targetUser.send({ embeds: [dmEmbed] });
+                dmSent = true;
+                mute.dmSent = true;
+                await mute.save();
+            } catch (e) {
+                console.error('Failed to send mute DM:', e);
+            }
+
+            // Log to channel
+            if (LOG_CHANNEL_ID) {
+                try {
+                    const logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
+                    if (logChannel) {
+                        const logEmbed = new EmbedBuilder()
+                            .setTitle('User Muted')
+                            .setColor(0xFF4444)
+                            .addFields(
+                                { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
+                                { name: 'Duration', value: durationParsed.display, inline: true },
+                                { name: 'Expires', value: `<t:${Math.floor(durationParsed.expiresAt.getTime() / 1000)}:f>`, inline: true },
+                                { name: 'Reason', value: reason, inline: false },
+                                { name: 'Moderator', value: interaction.user.tag, inline: true },
+                                { name: 'DM Sent', value: dmSent ? 'Yes' : 'No', inline: true }
+                            )
+                            .setFooter({ text: `Case #${caseNumber}` })
+                            .setTimestamp();
+
+                        if (primaryProfile) {
+                            logEmbed.addFields({ 
+                                name: 'Minecraft Account', 
+                                value: `${primaryProfile.name} (${primaryProfile.platform})`, 
+                                inline: false 
+                            });
+                        }
+
+                        await logChannel.send({ embeds: [logEmbed] });
+                    }
+                } catch (e) {
+                    console.error('Failed to log mute:', e);
+                }
+            }
+
+            // Build response embed
+            const embed = new EmbedBuilder()
+                .setTitle('User Muted')
+                .setColor(0xFF4444)
+                .addFields(
+                    { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
+                    { name: 'Duration', value: durationParsed.display, inline: true },
+                    { name: 'Expires', value: `<t:${Math.floor(durationParsed.expiresAt.getTime() / 1000)}:R>`, inline: true },
+                    { name: 'Reason', value: reason, inline: false },
+                    { name: 'DM Sent', value: dmSent ? 'Yes' : 'No', inline: true }
+                )
+                .setFooter({ text: `Case #${caseNumber} | Muted by ${interaction.user.tag}` })
+                .setTimestamp();
+
+            if (primaryProfile) {
+                embed.addFields({ 
+                    name: 'Minecraft Account', 
+                    value: `**${primaryProfile.name}** (${primaryProfile.platform})`, 
+                    inline: false 
+                });
+            }
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('unmute')
+            .setDescription('Unmute a Discord user')
+            .addUserOption(opt => opt
+                .setName('target')
+                .setDescription('Discord user to unmute')
+                .setRequired(true)
+            )
+            .addStringOption(opt => opt
+                .setName('reason')
+                .setDescription('Reason for unmuting')
+                .setRequired(false)
+            ),
+
+        async execute(interaction, client) {
+            // Permission check - Staff only
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({ 
+                    content: 'You do not have permission to use this command.', 
+                    flags: 64
+                });
+            }
+
+            await interaction.deferReply();
+
+            const targetUser = interaction.options.getUser('target');
+            const reason = interaction.options.getString('reason') || 'No reason provided';
+            const discordId = targetUser.id;
+            const discordTag = targetUser.tag;
+
+            // Check if user has an active mute
+            const activeMute = await Mute.getActiveMute(discordId);
+            if (!activeMute) {
+                return interaction.editReply({ content: `**${discordTag}** is not currently muted.` });
+            }
+
+            // Remove muted role
+            const mutedRoleId = process.env.MUTED_ROLE_ID;
+            if (mutedRoleId) {
+                try {
+                    const member = await interaction.guild.members.fetch(discordId);
+                    await member.roles.remove(mutedRoleId, `Unmuted by ${interaction.user.tag} - ${reason}`);
+                } catch (e) {
+                    console.error('Failed to remove muted role:', e);
+                }
+            }
+
+            // Update mute record
+            activeMute.active = false;
+            activeMute.unmutedAt = new Date();
+            activeMute.unmutedBy = interaction.user.id;
+            activeMute.unmutedByTag = interaction.user.tag;
+            await activeMute.save();
+
+            // Log to channel
+            if (LOG_CHANNEL_ID) {
+                try {
+                    const logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
+                    if (logChannel) {
+                        const logEmbed = new EmbedBuilder()
+                            .setTitle('User Unmuted')
+                            .setColor(0x00FF00)
+                            .addFields(
+                                { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
+                                { name: 'Unmuted By', value: interaction.user.tag, inline: true },
+                                { name: 'Reason', value: reason, inline: false },
+                                { name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true }
+                            )
+                            .setTimestamp();
+
+                        await logChannel.send({ embeds: [logEmbed] });
+                    }
+                } catch (e) {
+                    console.error('Failed to log unmute:', e);
+                }
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle('User Unmuted')
+                .setColor(0x00FF00)
+                .addFields(
+                    { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
+                    { name: 'Reason', value: reason, inline: false },
+                    { name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true }
+                )
+                .setFooter({ text: `Unmuted by ${interaction.user.tag}` })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('setupmute')
+            .setDescription('Create and configure a Muted role with proper channel permissions')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+        async execute(interaction, client) {
+            // Permission check - Admin only
+            if (!isAdmin(interaction.member)) {
+                return interaction.reply({ 
+                    content: 'You do not have permission to use this command. Administrator only.', 
+                    flags: 64
+                });
+            }
+
+            await interaction.deferReply();
+
+            const guild = interaction.guild;
+
+            // Check if muted role already exists
+            const existingRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'muted');
+            if (existingRole) {
+                return interaction.editReply({
+                    content: `A Muted role already exists: ${existingRole} (ID: \`${existingRole.id}\`)\n\nAdd this to your .env file:\n\`\`\`\nMUTED_ROLE_ID=${existingRole.id}\n\`\`\``
+                });
+            }
+
+            // Create the Muted role
+            let mutedRole;
+            try {
+                mutedRole = await guild.roles.create({
+                    name: 'Muted',
+                    color: 0x808080,
+                    reason: 'Muted role created by setup command',
+                    permissions: []
+                });
+            } catch (e) {
+                console.error('Failed to create muted role:', e);
+                return interaction.editReply({ content: 'Failed to create Muted role. Check bot permissions.' });
+            }
+
+            // Position the role below the bot's highest role
+            try {
+                const botMember = guild.members.cache.get(client.user.id);
+                const botHighestRole = botMember.roles.highest;
+                await mutedRole.setPosition(botHighestRole.position - 1);
+            } catch (e) {
+                console.error('Failed to position muted role:', e);
+            }
+
+            // Apply permissions to all text channels
+            let successCount = 0;
+            let failCount = 0;
+
+            const textChannels = guild.channels.cache.filter(c => 
+                c.type === 0 || // GuildText
+                c.type === 15 || // GuildForum
+                c.type === 5 || // GuildAnnouncement
+                c.type === 11 || // PublicThread
+                c.type === 12 // PrivateThread
+            );
+
+            for (const [, channel] of textChannels) {
+                try {
+                    await channel.permissionOverwrites.edit(mutedRole, {
+                        SendMessages: false,
+                        SendMessagesInThreads: false,
+                        CreatePublicThreads: false,
+                        CreatePrivateThreads: false,
+                        AddReactions: false,
+                        Speak: false
+                    });
+                    successCount++;
+                } catch (e) {
+                    failCount++;
+                }
+            }
+
+            // Apply to voice channels too
+            const voiceChannels = guild.channels.cache.filter(c => 
+                c.type === 2 || // GuildVoice
+                c.type === 13 // GuildStageVoice
+            );
+
+            for (const [, channel] of voiceChannels) {
+                try {
+                    await channel.permissionOverwrites.edit(mutedRole, {
+                        Speak: false,
+                        Stream: false,
+                        SendMessages: false
+                    });
+                    successCount++;
+                } catch (e) {
+                    failCount++;
+                }
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle('✅ Muted Role Created')
+                .setColor(0x00FF00)
+                .addFields(
+                    { name: 'Role', value: `${mutedRole} (ID: \`${mutedRole.id}\`)`, inline: false },
+                    { name: 'Channels Configured', value: `${successCount} succeeded, ${failCount} failed`, inline: false },
+                    { name: 'Next Step', value: `Add this to your \`.env\` file:\n\`\`\`\nMUTED_ROLE_ID=${mutedRole.id}\n\`\`\`\nThen restart the bot.`, inline: false }
+                )
+                .setFooter({ text: 'The role has been configured to deny sending messages in all channels' })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
             .setName('warnings')
             .setDescription('View warnings for a user')
             .addUserOption(opt => opt
@@ -1751,9 +2166,62 @@ const slashCommands = [
     }
 ];
 
+/**
+ * Process expired mutes - removes muted role from expired mutes
+ * Should be called periodically
+ */
+async function processExpiredMutes(client) {
+    try {
+        const expiredMutes = await Mute.getExpiredMutes();
+        const mutedRoleId = process.env.MUTED_ROLE_ID;
+        
+        for (const mute of expiredMutes) {
+            try {
+                // Find the guild and member
+                for (const [, guild] of client.guilds.cache) {
+                    try {
+                        const member = await guild.members.fetch(mute.discordId).catch(() => null);
+                        if (member && mutedRoleId) {
+                            await member.roles.remove(mutedRoleId, 'Mute expired');
+                            console.log(`[Mutes] Removed expired mute from ${mute.discordTag}`);
+                        }
+                    } catch (e) {
+                        // Member might not be in this guild
+                    }
+                }
+                
+                // Mark as inactive
+                mute.active = false;
+                mute.unmutedAt = new Date();
+                mute.unmutedBy = 'system';
+                mute.unmutedByTag = 'Auto-expire';
+                await mute.save();
+            } catch (e) {
+                console.error(`Failed to process expired mute for ${mute.discordId}:`, e);
+            }
+        }
+    } catch (e) {
+        console.error('Error processing expired mutes:', e);
+    }
+}
+
+/**
+ * Initialize mute expiration processor
+ * Checks every 30 seconds for expired mutes
+ */
+function initMuteProcessor(client) {
+    // Process immediately
+    processExpiredMutes(client);
+    
+    // Then check every 30 seconds
+    setInterval(() => processExpiredMutes(client), 30 * 1000);
+    console.log(' Mute expiration processor initialized');
+}
+
 module.exports = {
     name: 'ServerBans',
     slashCommands,
     lookupMcProfile,
-    getAllLinkedAccounts
+    getAllLinkedAccounts,
+    initMuteProcessor
 };

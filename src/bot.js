@@ -125,6 +125,14 @@ client.once('ready', async () => {
         console.error('Failed to initialize timed close processor:', e);
     }
 
+    // Initialize mute expiration processor
+    try {
+        const { initMuteProcessor } = require('./cogs/serverBans');
+        initMuteProcessor(client);
+    } catch (e) {
+        console.error('Failed to initialize mute processor:', e);
+    }
+
     // Initialize guru performance scheduler
     try {
         const { initGuruScheduler } = require('./cogs/guruTracking');
@@ -389,6 +397,25 @@ client.on('interactionCreate', async (interaction) => {
             }
         } catch (error) {
             await logError('Button Handler', error, { customId: interaction.customId, user: interaction.user.tag });
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
+            }
+        }
+        return;
+    }
+
+    // String Select Menu handler
+    if (interaction.isStringSelectMenu()) {
+        try {
+            // Try tickets cog
+            try {
+                const ticketsCog = require('./cogs/tickets');
+                if (ticketsCog.handleSelectMenu) await ticketsCog.handleSelectMenu(interaction);
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('SelectMenu: tickets', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
+        } catch (error) {
+            await logError('SelectMenu Handler', error, { customId: interaction.customId, user: interaction.user.tag });
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
             }

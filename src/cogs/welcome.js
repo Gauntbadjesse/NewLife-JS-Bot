@@ -1,6 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-
-const OWNER_ID = process.env.OWNER_ID;
+const { isOwner } = require('../utils/permissions');
 
 module.exports = {
     // No slash commands for this cog
@@ -10,18 +9,17 @@ module.exports = {
         
         // !welcometest command (owner only)
         if (message.content.toLowerCase() === '!welcometest') {
-            if (message.author.id !== OWNER_ID) {
-                return message.reply('This command is owner only.');
+            if (!isOwner(message.member)) {
+                return message.reply({ content: 'This command is owner only.', allowedMentions: { repliedUser: false } });
             }
 
             const embed = this.createWelcomeEmbed(message.member || message.author, message.guild);
             
             try {
-                const owner = await message.client.users.fetch(OWNER_ID);
-                await owner.send({ embeds: [embed] });
-                await message.reply('Welcome embed sent to your DMs.');
+                await message.author.send({ embeds: [embed] });
+                await message.reply({ content: 'Welcome embed sent to your DMs.', allowedMentions: { repliedUser: false } });
             } catch (error) {
-                await message.reply('Failed to send DM. Make sure your DMs are open.');
+                await message.reply({ content: 'Failed to send DM. Make sure your DMs are open.', allowedMentions: { repliedUser: false } });
             }
         }
     },

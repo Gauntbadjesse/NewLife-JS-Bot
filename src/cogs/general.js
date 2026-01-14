@@ -978,11 +978,16 @@ const slashCommands = [
                     `\`/loa end\` - End your LOA`,
                     `\`/close <reason>\` - Close ticket`,
                     `\`/tclose <time> <reason>\` - Timed ticket close`,
+                    `\`/add <user>\` - Add user to ticket`,
+                    `\`/remove <user>\` - Remove user from ticket`,
+                    `\`/escalate <level>\` - Escalate ticket`,
                     `\`/ban <player> <reason> <duration>\` - Ban from MC server`,
                     `\`/unban <player>\` - Unban from MC server`,
                     `\`/checkban <player>\` - Check if banned`,
                     `\`/warn <target> <reason>\` - Issue Discord warning`,
-                    `\`/warnings <target>\` - View Discord warnings`
+                    `\`/warnings <target>\` - View Discord warnings`,
+                    `\`/mute <duration> <reason> <target>\` - Mute a user`,
+                    `\`/unmute <target>\` - Unmute a user`
                 ];
                 embed.addFields({ name: 'Staff Commands', value: staffCommands.join('\n'), inline: false });
             }

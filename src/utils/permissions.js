@@ -92,10 +92,10 @@ function isStaff(member) {
 }
 
 /**
- * Check if member can access General/Report tickets (Sr Mod+)
+ * Check if member can access General/Report tickets (Moderator+)
  */
 function canAccessGeneralTickets(member) {
-    return isSrMod(member);
+    return isModerator(member);
 }
 
 /**
@@ -106,12 +106,12 @@ function canAccessManagementTickets(member) {
 }
 
 /**
- * Get role IDs that should have access to general/report tickets
+ * Get role IDs that should have access to general tickets (Mod, Admin, Supervisor, Management)
  */
 function getGeneralTicketRoles() {
     const roleIds = getRoleIds();
     return [
-        roleIds.SR_MOD,
+        roleIds.MODERATOR,
         roleIds.ADMIN,
         roleIds.SUPERVISOR,
         roleIds.MANAGEMENT,
@@ -120,7 +120,20 @@ function getGeneralTicketRoles() {
 }
 
 /**
- * Get role IDs that should have access to management tickets
+ * Get role IDs that should have access to report tickets (Admin, Supervisor, Management)
+ */
+function getReportTicketRoles() {
+    const roleIds = getRoleIds();
+    return [
+        roleIds.ADMIN,
+        roleIds.SUPERVISOR,
+        roleIds.MANAGEMENT,
+        roleIds.OWNER
+    ].filter(id => id);
+}
+
+/**
+ * Get role IDs that should have access to management tickets (Supervisor, Management)
  */
 function getManagementTicketRoles() {
     const roleIds = getRoleIds();
@@ -145,6 +158,7 @@ module.exports = {
     canAccessGeneralTickets,
     canAccessManagementTickets,
     getGeneralTicketRoles,
+    getReportTicketRoles,
     getManagementTicketRoles,
     getRoleIds
 };

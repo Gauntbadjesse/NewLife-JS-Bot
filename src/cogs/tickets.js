@@ -14,6 +14,7 @@ const {
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle,
+    StringSelectMenuBuilder,
     ChannelType,
     PermissionFlagsBits,
     ModalBuilder,
@@ -22,10 +23,14 @@ const {
 } = require('discord.js');
 const { 
     isStaff, 
+    isModerator,
+    isAdmin,
     canAccessManagementTickets,
     getGeneralTicketRoles,
+    getReportTicketRoles,
     getManagementTicketRoles,
-    isSupervisor
+    isSupervisor,
+    getRoleIds
 } = require('../utils/permissions');
 const { createErrorEmbed, createSuccessEmbed, getEmbedColor } = require('../utils/embeds');
 const Application = require('../database/models/Application');
@@ -234,49 +239,48 @@ async function generateTranscript(channel) {
 }
 
 /**
- * Create the support panel embed with buttons
+ * Create the support panel embed with dropdown menu
  * @returns {Object} { embed, components }
  */
 function createSupportPanelEmbed() {
     const embed = new EmbedBuilder()
         .setColor(getEmbedColor())
         .setTitle('Support Center')
-        .setDescription('Need assistance? Select a category below to open a ticket.\n\nOur staff team will respond as soon as possible.')
-        .addFields(
-            {
-                name: 'General Support',
-                value: 'Questions, concerns, or general inquiries',
-                inline: true
-            },
-            {
-                name: 'Player Report',
-                value: 'Report a player for rule violations',
-                inline: true
-            },
-            {
-                name: 'Management',
-                value: 'Staff-related matters',
-                inline: true
-            }
-        )
+        .setDescription('Need assistance? Select a category below that best describes your situation.\n\nOur staff team will respond as soon as possible.')
         .setFooter({ text: 'NewLife SMP | Support System' })
         .setTimestamp();
 
-    const row = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('ticket_general')
-                .setLabel('General')
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId('ticket_report')
-                .setLabel('Report')
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId('ticket_management')
-                .setLabel('Management')
-                .setStyle(ButtonStyle.Secondary)
-        );
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('ticket_select')
+        .setPlaceholder('Select a ticket category...')
+        .addOptions([
+            {
+                label: 'General Support',
+                description: 'I need help with something on the server',
+                value: 'general',
+                emoji: '🎫'
+            },
+            {
+                label: 'Player Report',
+                description: 'I want to report a player who broke the rules',
+                value: 'report',
+                emoji: '🚨'
+            },
+            {
+                label: 'Management',
+                description: 'I need to report a staff member or speak with management',
+                value: 'management',
+                emoji: '🛠️'
+            },
+            {
+                label: 'Other',
+                description: 'Something else not listed above',
+                value: 'other',
+                emoji: '❓'
+            }
+        ]);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
 
     return { embed, components: [row] };
 }
@@ -338,9 +342,17 @@ async function createTicket(interaction, type) {
     }
 
     // Get appropriate roles for this ticket type
-    const staffRoles = type === 'management' 
-        ? getManagementTicketRoles() 
-        : getGeneralTicketRoles();
+    // General: Mod, Admin, Supervisor, Management
+    // Report: Admin, Supervisor, Management
+    // Management: Supervisor, Management
+    let staffRoles;
+    if (type === 'management') {
+        staffRoles = getManagementTicketRoles();
+    } else if (type === 'report') {
+        staffRoles = getReportTicketRoles();
+    } else {
+        staffRoles = getGeneralTicketRoles();
+    }
 
     // Build permission overwrites
     const permissionOverwrites = [
@@ -768,6 +780,218 @@ const slashCommands = [
                 ]
             });
         }
+    },
+    // Escalate ticket command
+    {
+        data: new SlashCommandBuilder()
+            .setName('escalate')
+            .setDescription('Escalate a ticket to a higher permission level')
+            .addStringOption(option =>
+                option.setName('level')
+                    .setDescription('Escalate to which level')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'General (Mod+)', value: 'general' },
+                        { name: 'Report (Admin+)', value: 'report' },
+                        { name: 'Management (Supervisor+)', value: 'management' }
+                    )
+            ),
+        async execute(interaction, client) {
+            // Check if this is a ticket channel
+            if (!interaction.channel.name.startsWith('ticket-')) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Invalid Channel', 'This command can only be used in ticket channels.')],
+                    ephemeral: true
+                });
+            }
+
+            // Permission check - Moderator+ can escalate
+            if (!isModerator(interaction.member)) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Permission Denied', 'Only staff members can escalate tickets.')],
+                    ephemeral: true
+                });
+            }
+
+            const level = interaction.options.getString('level');
+            const roleIds = getRoleIds();
+            
+            let newRoles;
+            let pingRole;
+            let levelName;
+            
+            if (level === 'general') {
+                newRoles = getGeneralTicketRoles();
+                pingRole = process.env.STAFF_TEAM || roleIds.MODERATOR;
+                levelName = 'General (Moderator+)';
+            } else if (level === 'report') {
+                newRoles = getReportTicketRoles();
+                pingRole = process.env.STAFF_TEAM || roleIds.ADMIN;
+                levelName = 'Report (Admin+)';
+            } else if (level === 'management') {
+                newRoles = getManagementTicketRoles();
+                pingRole = roleIds.MANAGEMENT;
+                levelName = 'Management (Supervisor+)';
+            }
+
+            await interaction.deferReply();
+
+            try {
+                // Remove all staff role permissions first
+                const allStaffRoles = [...new Set([
+                    ...getGeneralTicketRoles(),
+                    ...getReportTicketRoles(),
+                    ...getManagementTicketRoles()
+                ])].filter(id => id);
+
+                for (const roleId of allStaffRoles) {
+                    try {
+                        await interaction.channel.permissionOverwrites.delete(roleId);
+                    } catch (e) {
+                        // Role might not have overwrites
+                    }
+                }
+
+                // Add new role permissions
+                for (const roleId of newRoles) {
+                    if (roleId) {
+                        await interaction.channel.permissionOverwrites.edit(roleId, {
+                            ViewChannel: true,
+                            SendMessages: true,
+                            AttachFiles: true,
+                            ReadMessageHistory: true,
+                            ManageMessages: true
+                        });
+                    }
+                }
+
+                // Send notification
+                const escalateEmbed = new EmbedBuilder()
+                    .setColor(0xFFA500)
+                    .setTitle('Ticket Escalated')
+                    .setDescription(`This ticket has been escalated to **${levelName}**.`)
+                    .addFields(
+                        { name: 'Escalated By', value: interaction.user.tag, inline: true }
+                    )
+                    .setTimestamp();
+
+                await interaction.editReply({ embeds: [escalateEmbed] });
+
+                // Ping the appropriate role
+                if (pingRole) {
+                    await interaction.channel.send({ content: `<@&${pingRole}> - This ticket requires your attention.` });
+                }
+
+            } catch (error) {
+                console.error('[Tickets] Error escalating ticket:', error);
+                await interaction.editReply({
+                    embeds: [createErrorEmbed('Error', 'Failed to escalate ticket. Please try again.')]
+                });
+            }
+        }
+    },
+    // Add user to ticket
+    {
+        data: new SlashCommandBuilder()
+            .setName('add')
+            .setDescription('Add a user to the current ticket')
+            .addUserOption(option =>
+                option.setName('user')
+                    .setDescription('User to add to the ticket')
+                    .setRequired(true)
+            ),
+        async execute(interaction, client) {
+            // Check if this is a ticket channel
+            if (!interaction.channel.name.startsWith('ticket-')) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Invalid Channel', 'This command can only be used in ticket channels.')],
+                    ephemeral: true
+                });
+            }
+
+            // Permission check - Staff only
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Permission Denied', 'Only staff members can add users to tickets.')],
+                    ephemeral: true
+                });
+            }
+
+            const user = interaction.options.getUser('user');
+
+            try {
+                await interaction.channel.permissionOverwrites.edit(user.id, {
+                    ViewChannel: true,
+                    SendMessages: true,
+                    AttachFiles: true,
+                    ReadMessageHistory: true
+                });
+
+                await interaction.reply({
+                    embeds: [createSuccessEmbed('User Added', `${user} has been added to this ticket.`)]
+                });
+
+            } catch (error) {
+                console.error('[Tickets] Error adding user:', error);
+                await interaction.reply({
+                    embeds: [createErrorEmbed('Error', 'Failed to add user to ticket.')],
+                    ephemeral: true
+                });
+            }
+        }
+    },
+    // Remove user from ticket
+    {
+        data: new SlashCommandBuilder()
+            .setName('remove')
+            .setDescription('Remove a user from the current ticket')
+            .addUserOption(option =>
+                option.setName('user')
+                    .setDescription('User to remove from the ticket')
+                    .setRequired(true)
+            ),
+        async execute(interaction, client) {
+            // Check if this is a ticket channel
+            if (!interaction.channel.name.startsWith('ticket-')) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Invalid Channel', 'This command can only be used in ticket channels.')],
+                    ephemeral: true
+                });
+            }
+
+            // Permission check - Staff only
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Permission Denied', 'Only staff members can remove users from tickets.')],
+                    ephemeral: true
+                });
+            }
+
+            const user = interaction.options.getUser('user');
+
+            // Don't allow removing the bot
+            if (user.id === client.user.id) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Invalid User', 'You cannot remove the bot from the ticket.')],
+                    ephemeral: true
+                });
+            }
+
+            try {
+                await interaction.channel.permissionOverwrites.delete(user.id);
+
+                await interaction.reply({
+                    embeds: [createSuccessEmbed('User Removed', `${user} has been removed from this ticket.`)]
+                });
+
+            } catch (error) {
+                console.error('[Tickets] Error removing user:', error);
+                await interaction.reply({
+                    embeds: [createErrorEmbed('Error', 'Failed to remove user from ticket.')],
+                    ephemeral: true
+                });
+            }
+        }
     }
 ];
 
@@ -825,6 +1049,35 @@ async function handleButton(interaction) {
         } catch (e) {
             console.error('Failed to show apply modal:', e);
             await interaction.reply({ embeds: [createErrorEmbed('Error', 'Failed to open application form.')], ephemeral: true });
+        }
+    }
+}
+
+/**
+ * Select menu interaction handler
+ */
+async function handleSelectMenu(interaction) {
+    const customId = interaction.customId;
+    
+    if (customId === 'ticket_select') {
+        const selectedValue = interaction.values[0];
+        
+        // Map the selected value to ticket type
+        // 'other' opens a general ticket
+        if (selectedValue === 'management') {
+            // Check if user can create management tickets
+            if (!canAccessManagementTickets(interaction.member)) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Access Denied', 'Management tickets are only available to Supervisors and above.')],
+                    ephemeral: true
+                });
+            }
+            await createTicket(interaction, 'management');
+        } else if (selectedValue === 'report') {
+            await createTicket(interaction, 'report');
+        } else {
+            // 'general' or 'other' both open a general ticket
+            await createTicket(interaction, 'general');
         }
     }
 }
@@ -928,6 +1181,7 @@ module.exports = {
     commands,
     slashCommands,
     handleButton,
+    handleSelectMenu,
     handleModalSubmit,
     initTimedCloseProcessor,
     trackGuruMessageInTicket,
