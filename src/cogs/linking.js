@@ -749,6 +749,16 @@ const commands = {
         }
     },
 
+    update: {
+        name: 'update',
+        description: 'Update user nickname(s) to their linked Minecraft name',
+        usage: '!update @user [@user2...] | !update all',
+        async execute(message, args, client) {
+            // Alias to nick command
+            return module.exports.commands.nick.execute(message, args, client);
+        }
+    },
+
     nick: {
         name: 'nick',
         description: 'Update user nickname(s) to their linked Minecraft name',

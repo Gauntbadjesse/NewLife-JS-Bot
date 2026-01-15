@@ -8,7 +8,7 @@
  * - !lookup: Moderator+
  * - !stats: Admin+
  * - !ping: Everyone
- * - !update: Owner only - Pull latest from git and restart
+ * - !pull: Owner only - Pull latest from git and restart
  */
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
@@ -435,15 +435,15 @@ const commands = {
         }
     },
 
-    // !update - Pull latest code, install deps, and restart (Admin only)
-    update: {
-        name: 'update',
+    // !pull - Pull latest code, install deps, and restart (Admin only)
+    pull: {
+        name: 'pull',
         description: 'Pull latest from git, install deps, and restart the bot (Admin only)',
-        usage: '!update',
+        usage: '!pull',
         async execute(message, args, client) {
             const ownerId = process.env.OWNER_USER_ID || process.env.BOT_OWNER_ID;
             if (!ownerId) {
-                return message.reply({ embeds: [createErrorEmbed('Not Configured', 'OWNER_USER_ID is not set in the environment. Set it to the Discord user ID allowed to run `!update`.')], allowedMentions: { repliedUser: false } });
+                return message.reply({ embeds: [createErrorEmbed('Not Configured', 'OWNER_USER_ID is not set in the environment. Set it to the Discord user ID allowed to run `!pull`.')], allowedMentions: { repliedUser: false } });
             }
 
             if (message.author.id !== String(ownerId)) {
