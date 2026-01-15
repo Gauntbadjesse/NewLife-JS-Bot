@@ -42,7 +42,8 @@ evidenceSchema.pre('save', function(next) {
  * Get evidence for a specific case
  */
 evidenceSchema.statics.getForCase = async function(caseNumber, caseType) {
-    return this.findOne({ caseNumber, caseType });
+    const evidence = await this.findOne({ caseNumber, caseType });
+    return evidence ? [evidence] : [];
 };
 
 /**
@@ -55,15 +56,24 @@ evidenceSchema.statics.getForUser = async function(discordId) {
 /**
  * Add evidence item to a case
  */
-evidenceSchema.statics.addEvidence = async function(caseNumber, caseType, targetDiscordId, targetTag, item) {
+evidenceSchema.statics.addEvidence = async function(caseNumber, caseType, targetDiscordId, type, content, addedBy, addedByTag, filename = null, mimeType = null) {
     let evidence = await this.findOne({ caseNumber, caseType });
+    
+    const item = {
+        type,
+        content,
+        addedBy,
+        addedByTag,
+        filename,
+        mimeType,
+        addedAt: new Date()
+    };
     
     if (!evidence) {
         evidence = new this({
             caseNumber,
             caseType,
-            targetDiscordId,
-            targetTag,
+            targetDiscordId: targetDiscordId || 'unknown',
             items: [item]
         });
     } else {

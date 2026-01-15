@@ -194,6 +194,14 @@ client.once('ready', async () => {
     } catch (e) {
         console.error('Failed to check expired LOAs:', e);
     }
+
+    // Initialize staff online tracker (grants "Currently Moderating" role to staff on MC server)
+    try {
+        const { initStaffOnlineTracker } = require('./cogs/staffOnline');
+        initStaffOnlineTracker(client);
+    } catch (e) {
+        console.error('Failed to initialize staff online tracker:', e);
+    }
 });
 
 /**
