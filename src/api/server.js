@@ -47,95 +47,110 @@ function getSession(req) {
 
 const viewerStyles = `
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;background:#0f0f1a;color:#e2e8f0;min-height:100vh}
-.header{background:#1a1a2e;padding:16px 24px;border-bottom:1px solid #2d2d44;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}
-.logo{font-size:1.3em;font-weight:700;color:#10b981}
-.nav{display:flex;gap:6px;flex-wrap:wrap}
-.nav a{color:#94a3b8;text-decoration:none;padding:8px 18px;border-radius:6px;font-weight:500;font-size:.9em;transition:.2s}
-.nav a:hover{background:rgba(255,255,255,.05);color:#e2e8f0}
-.nav a.active{background:#10b981;color:#0f0f1a}
-.logout{padding:6px 14px;background:0 0;border:1px solid #64748b;color:#94a3b8;text-decoration:none;border-radius:5px;font-size:.8em;display:flex;align-items:center;gap:8px}
-.logout:hover{border-color:#ef4444;color:#ef4444}
-.logout img{width:24px;height:24px;border-radius:50%}
-.user-info{display:flex;align-items:center;gap:12px}
-.user-info img{width:32px;height:32px;border-radius:50%}
-.user-info span{color:#e2e8f0;font-size:.9em}
-.main{padding:24px;max-width:1400px;margin:0 auto}
-.title{font-size:1.5em;font-weight:600;margin-bottom:20px;color:#f1f5f9}
-.stats{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
-.stat{background:#1a1a2e;padding:14px 20px;border-radius:8px;border:1px solid #2d2d44}
-.stat .num{font-size:1.4em;font-weight:700;color:#10b981}
-.stat .lbl{font-size:.7em;color:#64748b;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
-.filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
-.search{flex:1;min-width:220px;padding:10px 14px;border:1px solid #2d2d44;border-radius:6px;background:#1a1a2e;color:#e2e8f0;font-size:.9em}
-.search:focus{outline:none;border-color:#10b981}
-.search::placeholder{color:#64748b}
-select{padding:10px 14px;border:1px solid #2d2d44;border-radius:6px;background:#1a1a2e;color:#e2e8f0;font-size:.9em;cursor:pointer}
-select:focus{outline:none;border-color:#10b981}
-.btn{padding:10px 18px;border:none;border-radius:6px;font-weight:600;font-size:.85em;cursor:pointer;text-decoration:none;display:inline-block}
-.btn-go{background:#10b981;color:#0f0f1a}
-.btn-go:hover{background:#059669}
-.btn-clr{background:#2d2d44;color:#94a3b8;text-decoration:none}
-.btn-clr:hover{background:#3f3f5a}
-.btn-discord{background:#5865F2;color:#fff;padding:14px 28px;font-size:1em;display:inline-flex;align-items:center;gap:10px;border-radius:8px;text-decoration:none;transition:.2s}
-.btn-discord:hover{background:#4752C4}
-.btn-discord svg{width:24px;height:24px}
-.tbl{background:#1a1a2e;border-radius:10px;border:1px solid #2d2d44;overflow-x:auto}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#0a0a12 0%,#12121f 100%);color:#e2e8f0;min-height:100vh}
+.header{background:rgba(18,18,31,.95);backdrop-filter:blur(10px);padding:0 32px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;height:64px}
+.logo{font-size:1.2em;font-weight:700;background:linear-gradient(135deg,#10b981 0%,#34d399 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.02em}
+.nav{display:flex;gap:4px}
+.nav a{color:#94a3b8;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:500;font-size:.875em;transition:all .2s ease;position:relative}
+.nav a:hover{color:#e2e8f0;background:rgba(255,255,255,.04)}
+.nav a.active{color:#10b981;background:rgba(16,185,129,.1)}
+.nav a.active::after{content:'';position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);width:24px;height:2px;background:#10b981;border-radius:2px}
+.logout{padding:8px 16px;background:transparent;border:1px solid rgba(255,255,255,.1);color:#94a3b8;text-decoration:none;border-radius:8px;font-size:.8em;font-weight:500;transition:all .2s ease}
+.logout:hover{border-color:rgba(239,68,68,.5);color:#f87171;background:rgba(239,68,68,.05)}
+.user-info{display:flex;align-items:center;gap:10px}
+.user-info img{width:32px;height:32px;border-radius:50%;border:2px solid rgba(255,255,255,.1)}
+.user-info span{color:#e2e8f0;font-size:.875em;font-weight:500}
+.main{padding:32px;max-width:1400px;margin:0 auto}
+.title{font-size:1.75em;font-weight:600;margin-bottom:24px;color:#f8fafc;letter-spacing:-.02em}
+.subtitle{font-size:.9em;color:#64748b;margin-top:-16px;margin-bottom:24px}
+.stats{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+.stat{background:rgba(255,255,255,.02);padding:20px 24px;border-radius:12px;border:1px solid rgba(255,255,255,.06);min-width:120px}
+.stat .num{font-size:1.75em;font-weight:700;background:linear-gradient(135deg,#10b981 0%,#34d399 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat .lbl{font-size:.7em;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:500}
+.filter-card{background:rgba(255,255,255,.02);padding:24px;border-radius:12px;border:1px solid rgba(255,255,255,.06);margin-bottom:24px}
+.filter-card h3{color:#f1f5f9;margin-bottom:20px;font-size:1em;font-weight:600;display:flex;align-items:center;gap:8px}
+.filter-card h3::before{content:'';width:3px;height:16px;background:linear-gradient(180deg,#10b981,#059669);border-radius:2px}
+.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.filter-group{display:flex;flex-direction:column;gap:6px}
+.filter-group label{font-size:.75em;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:500}
+.filter-group input,.filter-group select{padding:12px 14px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(0,0,0,.2);color:#e2e8f0;font-size:.875em;transition:all .2s ease;width:100%}
+.filter-group input:focus,.filter-group select:focus{outline:none;border-color:rgba(16,185,129,.5);box-shadow:0 0 0 3px rgba(16,185,129,.1)}
+.filter-group input::placeholder{color:#4b5563}
+.filter-actions{display:flex;gap:12px;margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,.06)}
+.filters{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:flex-end}
+.search{flex:1;min-width:220px;padding:12px 16px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(0,0,0,.2);color:#e2e8f0;font-size:.875em;transition:all .2s ease}
+.search:focus{outline:none;border-color:rgba(16,185,129,.5);box-shadow:0 0 0 3px rgba(16,185,129,.1)}
+.search::placeholder{color:#4b5563}
+select{padding:12px 16px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(0,0,0,.2);color:#e2e8f0;font-size:.875em;cursor:pointer;transition:all .2s ease}
+select:focus{outline:none;border-color:rgba(16,185,129,.5);box-shadow:0 0 0 3px rgba(16,185,129,.1)}
+.btn{padding:12px 20px;border:none;border-radius:8px;font-weight:600;font-size:.8em;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:all .2s ease;text-transform:uppercase;letter-spacing:.5px}
+.btn-go{background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;box-shadow:0 4px 12px rgba(16,185,129,.25)}
+.btn-go:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(16,185,129,.35)}
+.btn-clr{background:rgba(255,255,255,.05);color:#94a3b8;border:1px solid rgba(255,255,255,.1)}
+.btn-clr:hover{background:rgba(255,255,255,.08);color:#e2e8f0}
+.btn-discord{background:linear-gradient(135deg,#5865F2 0%,#4752C4 100%);color:#fff;padding:14px 32px;font-size:.9em;display:inline-flex;align-items:center;gap:12px;border-radius:10px;text-decoration:none;transition:all .2s ease;box-shadow:0 4px 12px rgba(88,101,242,.25)}
+.btn-discord:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(88,101,242,.35)}
+.btn-discord svg{width:22px;height:22px}
+.tbl{background:rgba(255,255,255,.02);border-radius:12px;border:1px solid rgba(255,255,255,.06);overflow:hidden}
 table{width:100%;border-collapse:collapse;min-width:600px}
-th{padding:12px 14px;text-align:left;background:#222233;color:#64748b;font-weight:600;font-size:.7em;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
-td{padding:12px 14px;border-top:1px solid #2d2d44;font-size:.85em;color:#cbd5e1}
+th{padding:14px 16px;text-align:left;background:rgba(0,0,0,.2);color:#64748b;font-weight:600;font-size:.7em;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+td{padding:14px 16px;border-top:1px solid rgba(255,255,255,.04);font-size:.85em;color:#cbd5e1}
 tr:hover{background:rgba(255,255,255,.02)}
-.tag{display:inline-block;padding:3px 8px;border-radius:4px;font-size:.7em;font-weight:600}
-.tag-r{background:rgba(239,68,68,.12);color:#f87171}
-.tag-g{background:rgba(100,116,139,.12);color:#94a3b8}
-.tag-o{background:rgba(139,0,0,.15);color:#fca5a5}
-.tag-b{background:rgba(59,130,246,.12);color:#60a5fa}
-.tag-y{background:rgba(234,179,8,.12);color:#facc15}
-.tag-p{background:rgba(168,85,247,.12);color:#c084fc}
-.pages{display:flex;justify-content:center;gap:6px;margin-top:20px}
-.pages a,.pages span{padding:8px 14px;border-radius:5px;text-decoration:none;font-size:.85em}
-.pages a{background:#1a1a2e;color:#10b981;border:1px solid #2d2d44}
-.pages a:hover{background:#2d2d44}
+.tag{display:inline-block;padding:4px 10px;border-radius:6px;font-size:.7em;font-weight:600;letter-spacing:.3px}
+.tag-r{background:rgba(239,68,68,.15);color:#f87171}
+.tag-g{background:rgba(100,116,139,.15);color:#94a3b8}
+.tag-o{background:rgba(251,146,60,.15);color:#fb923c}
+.tag-b{background:rgba(59,130,246,.15);color:#60a5fa}
+.tag-y{background:rgba(250,204,21,.15);color:#fde047}
+.tag-p{background:rgba(168,85,247,.15);color:#c084fc}
+.pages{display:flex;justify-content:center;gap:8px;margin-top:24px}
+.pages a,.pages span{padding:10px 16px;border-radius:8px;text-decoration:none;font-size:.85em;font-weight:500}
+.pages a{background:rgba(255,255,255,.02);color:#10b981;border:1px solid rgba(255,255,255,.06);transition:all .2s ease}
+.pages a:hover{background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3)}
 .pages span{color:#64748b}
-.empty{text-align:center;padding:50px 20px;color:#64748b}
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.login-box{width:100%;max-width:400px;background:#1a1a2e;padding:40px;border-radius:12px;border:1px solid #2d2d44;text-align:center}
-.login-box h2{margin-bottom:12px;color:#10b981;font-size:1.5em}
-.login-box p{color:#94a3b8;margin-bottom:24px;font-size:.9em}
-.login-box .err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#f87171;padding:12px;border-radius:6px;margin-bottom:20px;font-size:.9em}
-.search-box{background:#1a1a2e;padding:20px;border-radius:10px;border:1px solid #2d2d44;margin-bottom:20px}
-.search-box h3{color:#f1f5f9;margin-bottom:15px;font-size:1.1em}
-.search-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.empty{text-align:center;padding:60px 20px;color:#64748b}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(ellipse at top,rgba(16,185,129,.08) 0%,transparent 50%)}
+.login-box{width:100%;max-width:420px;background:rgba(255,255,255,.02);padding:48px 40px;border-radius:16px;border:1px solid rgba(255,255,255,.06);text-align:center;backdrop-filter:blur(10px)}
+.login-box h2{margin-bottom:8px;color:#f8fafc;font-size:1.5em;font-weight:600}
+.login-box p{color:#64748b;margin-bottom:32px;font-size:.9em;line-height:1.6}
+.login-box .err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;padding:14px;border-radius:8px;margin-bottom:24px;font-size:.875em}
+.search-box{background:rgba(255,255,255,.02);padding:24px;border-radius:12px;border:1px solid rgba(255,255,255,.06);margin-bottom:24px}
+.search-box h3{color:#f1f5f9;margin-bottom:20px;font-size:1em;font-weight:600}
+.search-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .search-row:last-child{margin-bottom:0}
-.search-row input,.search-row select{flex:1;min-width:150px}
-.search-hint{font-size:.75em;color:#64748b;margin-top:8px}
-.btn-edit{padding:4px 10px;font-size:.75em;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none}
-.btn-edit:hover{background:#2563eb}
-.case-detail{background:#1a1a2e;padding:24px;border-radius:10px;border:1px solid #2d2d44;margin-bottom:20px}
-.case-detail h2{margin-bottom:16px;color:#10b981}
-.case-detail .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px}
-.case-detail .info-item{padding:12px;background:#0f0f1a;border-radius:6px}
-.case-detail .info-item label{font-size:.75em;color:#64748b;display:block;margin-bottom:4px}
-.case-detail .info-item span{color:#f1f5f9;font-size:.95em}
-.evidence-section{background:#1a1a2e;padding:24px;border-radius:10px;border:1px solid #2d2d44;margin-bottom:20px}
-.evidence-section h3{margin-bottom:16px;color:#f1f5f9}
-.evidence-item{background:#0f0f1a;padding:16px;border-radius:8px;margin-bottom:12px;border:1px solid #2d2d44}
-.evidence-item .meta{font-size:.75em;color:#64748b;margin-bottom:8px}
-.evidence-item .content{color:#e2e8f0}
-.evidence-item img{max-width:100%;max-height:400px;border-radius:6px;margin-top:8px}
-.evidence-form{margin-top:20px;padding-top:20px;border-top:1px solid #2d2d44}
-.evidence-form h4{color:#f1f5f9;margin-bottom:12px}
-.evidence-form textarea{width:100%;min-height:100px;padding:12px;background:#0f0f1a;border:1px solid #2d2d44;border-radius:6px;color:#f1f5f9;margin-bottom:12px;resize:vertical}
-.evidence-form input[type="file"]{margin-bottom:12px;color:#94a3b8}
-.evidence-form .btns{display:flex;gap:10px}
-.user-cases-section{margin-bottom:20px}
-.user-cases-section h2{color:#10b981;margin-bottom:8px}
-.user-cases-section p{color:#94a3b8;margin-bottom:20px}
-.back-link{display:inline-block;margin-bottom:20px;color:#10b981;text-decoration:none}
-.back-link:hover{text-decoration:underline}
-.no-evidence{color:#64748b;font-style:italic;padding:20px;text-align:center}
-.img-preview{max-width:200px;max-height:150px;margin-top:8px;border-radius:4px}
-@media(max-width:768px){.header{flex-wrap:wrap;gap:12px;padding:12px}.nav{width:100%;justify-content:center}.main{padding:16px 12px}th,td{padding:8px 6px;font-size:.75em}.hide{display:none}.filters{flex-direction:column}.search,select{width:100%}.search-row{flex-direction:column}.search-row input,.search-row select{width:100%}.case-detail .info-grid{grid-template-columns:1fr}}
+.search-row input,.search-row select{flex:1;min-width:160px}
+.search-hint{font-size:.75em;color:#4b5563;margin-top:12px;line-height:1.5}
+.btn-edit{padding:6px 12px;font-size:.75em;background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.2);border-radius:6px;cursor:pointer;text-decoration:none;font-weight:500;transition:all .2s ease}
+.btn-edit:hover{background:rgba(59,130,246,.25);border-color:rgba(59,130,246,.4)}
+.case-detail{background:rgba(255,255,255,.02);padding:28px;border-radius:12px;border:1px solid rgba(255,255,255,.06);margin-bottom:24px}
+.case-detail h2{margin-bottom:20px;color:#f8fafc;font-size:1.25em;font-weight:600}
+.case-detail .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.case-detail .info-item{padding:16px;background:rgba(0,0,0,.2);border-radius:8px;border:1px solid rgba(255,255,255,.04)}
+.case-detail .info-item label{font-size:.7em;color:#64748b;display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:500}
+.case-detail .info-item span{color:#f1f5f9;font-size:.9em}
+.evidence-section{background:rgba(255,255,255,.02);padding:28px;border-radius:12px;border:1px solid rgba(255,255,255,.06);margin-bottom:24px}
+.evidence-section h3{margin-bottom:20px;color:#f1f5f9;font-size:1em;font-weight:600}
+.evidence-item{background:rgba(0,0,0,.2);padding:20px;border-radius:10px;margin-bottom:12px;border:1px solid rgba(255,255,255,.04)}
+.evidence-item .meta{font-size:.75em;color:#64748b;margin-bottom:10px}
+.evidence-item .content{color:#e2e8f0;line-height:1.6}
+.evidence-item img{max-width:100%;max-height:400px;border-radius:8px;margin-top:12px}
+.evidence-form{margin-top:24px;padding-top:24px;border-top:1px solid rgba(255,255,255,.06)}
+.evidence-form h4{color:#f1f5f9;margin-bottom:16px;font-size:.9em;font-weight:600}
+.evidence-form textarea{width:100%;min-height:120px;padding:14px;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:#f1f5f9;margin-bottom:16px;resize:vertical;font-family:inherit;font-size:.875em;line-height:1.5}
+.evidence-form textarea:focus{outline:none;border-color:rgba(16,185,129,.5)}
+.evidence-form input[type="file"]{margin-bottom:16px;color:#94a3b8;font-size:.85em}
+.evidence-form .btns{display:flex;gap:12px}
+.user-cases-section{margin-bottom:24px}
+.user-cases-section h2{color:#f8fafc;margin-bottom:8px;font-size:1.25em;font-weight:600}
+.user-cases-section p{color:#64748b;margin-bottom:24px;font-size:.9em;line-height:1.6}
+.back-link{display:inline-flex;align-items:center;gap:6px;margin-bottom:24px;color:#10b981;text-decoration:none;font-size:.875em;font-weight:500;transition:color .2s ease}
+.back-link:hover{color:#34d399}
+.back-link::before{content:'←';font-size:1.1em}
+.no-evidence{color:#4b5563;font-style:normal;padding:40px 20px;text-align:center;background:rgba(0,0,0,.1);border-radius:8px}
+.img-preview{max-width:200px;max-height:150px;margin-top:12px;border-radius:6px}
+.status-active{color:#f87171}
+.status-inactive{color:#94a3b8}
+@media(max-width:768px){.header{flex-wrap:wrap;gap:12px;padding:12px 16px;height:auto}.nav{width:100%;justify-content:center;gap:2px}.nav a{padding:8px 12px;font-size:.8em}.main{padding:20px 16px}th,td{padding:10px 12px;font-size:.8em}.hide{display:none}.filters{flex-direction:column}.search,select{width:100%}.filter-grid{grid-template-columns:1fr}.search-row{flex-direction:column}.search-row input,.search-row select{width:100%}.case-detail .info-grid{grid-template-columns:1fr}.stats{gap:12px}.stat{padding:16px 20px;min-width:100px}}
 `;
 
 // Discord OAuth2 Login Page
@@ -144,7 +159,7 @@ function loginPage(error = '') {
     
     return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Staff Panel - Login</title><style>${viewerStyles}</style></head>
 <body><div class="login-wrap"><div class="login-box">
-<h2>🛡️ Staff Panel</h2>
+<h2>Staff Panel</h2>
 <p>Sign in with Discord to access the moderation dashboard.<br>Only staff members can access this panel.</p>
 ${error ? `<div class="err">${error}</div>` : ''}
 <a href="${discordAuthUrl}" class="btn-discord">
@@ -302,7 +317,7 @@ function getHeader(active, session = null) {
     return `<div class="header">
     <div class="logo">NewLife SMP</div>
     <nav class="nav">
-        <a href="/viewer/search" class="${active === 'search' ? 'active' : ''}">🔍 Search All</a>
+        <a href="/viewer/search" class="${active === 'search' ? 'active' : ''}">Search All</a>
         <a href="/viewer/bans" class="${active === 'bans' ? 'active' : ''}">Bans</a>
         <a href="/viewer/kicks" class="${active === 'kicks' ? 'active' : ''}">Kicks</a>
         <a href="/viewer/warnings" class="${active === 'warnings' ? 'active' : ''}">Warnings</a>
@@ -513,46 +528,64 @@ app.get('/viewer/search', viewerAuth, async (req, res) => {
         let pag = '';
         if (totalPages > 1) {
             const url = (p) => `/viewer/search?page=${p}&search=${encodeURIComponent(search)}&type=${caseType}&status=${status}&staff=${encodeURIComponent(staff)}&from=${dateFrom}&to=${dateTo}&case=${caseNum}`;
-            if (page > 1) pag += `<a href="${url(page - 1)}">← Prev</a>`;
+            if (page > 1) pag += `<a href="${url(page - 1)}">Previous</a>`;
             pag += `<span>Page ${page} of ${totalPages}</span>`;
-            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next →</a>`;
+            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next</a>`;
         }
 
         res.setHeader('Content-Type', 'text/html');
         res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Search All Logs</title><style>${viewerStyles}</style></head><body>
 ${getHeader('search', req.session)}
 <div class="main">
-    <h1 class="title">🔍 Search All Moderation Logs</h1>
+    <h1 class="title">Search All Moderation Logs</h1>
     
-    <div class="search-box">
-        <h3>Advanced Search</h3>
+    <div class="filter-card">
+        <h3>Search Filters</h3>
         <form method="GET">
-            <div class="search-row">
-                <input class="search" type="text" name="search" placeholder="Search username, Discord tag, or reason..." value="${search}">
-                <input class="search" type="text" name="case" placeholder="Case # (exact)" value="${caseNum}">
+            <div class="filter-grid">
+                <div class="filter-group">
+                    <label>Search</label>
+                    <input type="text" name="search" placeholder="Username, Discord, reason..." value="${search}">
+                </div>
+                <div class="filter-group">
+                    <label>Case Number</label>
+                    <input type="text" name="case" placeholder="Exact case #" value="${caseNum}">
+                </div>
+                <div class="filter-group">
+                    <label>Type</label>
+                    <select name="type">
+                        <option value="">All Types</option>
+                        <option value="ban" ${caseType === 'ban' ? 'selected' : ''}>Bans</option>
+                        <option value="kick" ${caseType === 'kick' ? 'selected' : ''}>Kicks</option>
+                        <option value="warning" ${caseType === 'warning' ? 'selected' : ''}>Warnings</option>
+                        <option value="mute" ${caseType === 'mute' ? 'selected' : ''}>Mutes</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Status</label>
+                    <select name="status">
+                        <option value="">All Status</option>
+                        <option value="active" ${status === 'active' ? 'selected' : ''}>Active</option>
+                        <option value="expired" ${status === 'expired' ? 'selected' : ''}>Expired/Removed</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Staff Member</label>
+                    <input type="text" name="staff" placeholder="Staff name..." value="${staff}">
+                </div>
+                <div class="filter-group">
+                    <label>From Date</label>
+                    <input type="date" name="from" value="${dateFrom}">
+                </div>
+                <div class="filter-group">
+                    <label>To Date</label>
+                    <input type="date" name="to" value="${dateTo}">
+                </div>
             </div>
-            <div class="search-row">
-                <select name="type">
-                    <option value="">All Types</option>
-                    <option value="ban" ${caseType === 'ban' ? 'selected' : ''}>Bans</option>
-                    <option value="kick" ${caseType === 'kick' ? 'selected' : ''}>Kicks</option>
-                    <option value="warning" ${caseType === 'warning' ? 'selected' : ''}>Warnings</option>
-                    <option value="mute" ${caseType === 'mute' ? 'selected' : ''}>Mutes</option>
-                </select>
-                <select name="status">
-                    <option value="">All Status</option>
-                    <option value="active" ${status === 'active' ? 'selected' : ''}>Active</option>
-                    <option value="expired" ${status === 'expired' ? 'selected' : ''}>Expired/Removed</option>
-                </select>
-                <input class="search" type="text" name="staff" placeholder="Staff member..." value="${staff}">
-            </div>
-            <div class="search-row">
-                <input class="search" type="date" name="from" placeholder="From date" value="${dateFrom}">
-                <input class="search" type="date" name="to" placeholder="To date" value="${dateTo}">
-                <button class="btn btn-go" type="submit">Search</button>
+            <div class="filter-actions">
+                <button class="btn btn-go" type="submit">Apply Filters</button>
                 <a class="btn btn-clr" href="/viewer/search">Clear All</a>
             </div>
-            <p class="search-hint">Tip: You can search by player name, Discord tag, case number, reason text, or staff member. Use filters to narrow results.</p>
         </form>
     </div>
     
@@ -629,9 +662,9 @@ app.get('/viewer/bans', viewerAuth, async (req, res) => {
         let pag = '';
         if (totalPages > 1) {
             const url = (p) => `/viewer/bans?page=${p}&search=${encodeURIComponent(search)}&status=${status}&staff=${encodeURIComponent(staff)}&duration=${duration}`;
-            if (page > 1) pag += `<a href="${url(page - 1)}">← Prev</a>`;
+            if (page > 1) pag += `<a href="${url(page - 1)}">Previous</a>`;
             pag += `<span>Page ${page} of ${totalPages}</span>`;
-            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next →</a>`;
+            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next</a>`;
         }
         
         res.setHeader('Content-Type', 'text/html');
@@ -646,12 +679,29 @@ ${getHeader('bans', req.session)}
         <div class="stat"><div class="num">${total - activeCt}</div><div class="lbl">Expired</div></div>
     </div>
     <form class="filters" method="GET">
-        <input class="search" type="text" name="search" placeholder="Search player, Discord, reason..." value="${search}">
-        <input class="search" type="text" name="staff" placeholder="Staff member..." value="${staff}" style="max-width:180px">
-        <select name="status"><option value="">All Status</option><option value="active" ${status === 'active' ? 'selected' : ''}>Active</option><option value="expired" ${status === 'expired' ? 'selected' : ''}>Expired</option></select>
-        <select name="duration"><option value="">All Durations</option><option value="perm" ${duration === 'perm' ? 'selected' : ''}>Permanent</option><option value="temp" ${duration === 'temp' ? 'selected' : ''}>Temporary</option></select>
-        <button class="btn btn-go" type="submit">Search</button>
-        <a class="btn btn-clr" href="/viewer/bans">Clear</a>
+        <div class="filter-group" style="flex:1;min-width:200px">
+            <label>Search</label>
+            <input type="text" name="search" placeholder="Player, Discord, reason..." value="${search}">
+        </div>
+        <div class="filter-group" style="min-width:150px">
+            <label>Staff</label>
+            <input type="text" name="staff" placeholder="Staff member..." value="${staff}">
+        </div>
+        <div class="filter-group" style="min-width:120px">
+            <label>Status</label>
+            <select name="status"><option value="">All</option><option value="active" ${status === 'active' ? 'selected' : ''}>Active</option><option value="expired" ${status === 'expired' ? 'selected' : ''}>Expired</option></select>
+        </div>
+        <div class="filter-group" style="min-width:120px">
+            <label>Duration</label>
+            <select name="duration"><option value="">All</option><option value="perm" ${duration === 'perm' ? 'selected' : ''}>Permanent</option><option value="temp" ${duration === 'temp' ? 'selected' : ''}>Temporary</option></select>
+        </div>
+        <div class="filter-group" style="justify-content:flex-end">
+            <label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-go" type="submit">Filter</button>
+                <a class="btn btn-clr" href="/viewer/bans">Clear</a>
+            </div>
+        </div>
     </form>
     <div class="tbl"><table>
         <thead><tr><th>Case</th><th>Player</th><th class="hide">Discord</th><th>Reason</th><th>Duration</th><th>Status</th><th class="hide">Staff</th><th class="hide">Date</th><th>Actions</th></tr></thead>
@@ -712,9 +762,9 @@ app.get('/viewer/kicks', viewerAuth, async (req, res) => {
         let pag = '';
         if (totalPages > 1) {
             const url = (p) => `/viewer/kicks?page=${p}&search=${encodeURIComponent(search)}&staff=${encodeURIComponent(staff)}`;
-            if (page > 1) pag += `<a href="${url(page - 1)}">← Prev</a>`;
+            if (page > 1) pag += `<a href="${url(page - 1)}">Previous</a>`;
             pag += `<span>Page ${page} of ${totalPages}</span>`;
-            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next →</a>`;
+            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next</a>`;
         }
         
         res.setHeader('Content-Type', 'text/html');
@@ -728,10 +778,21 @@ ${getHeader('kicks', req.session)}
         <div class="stat"><div class="num">${k7}</div><div class="lbl">Last 7 Days</div></div>
     </div>
     <form class="filters" method="GET">
-        <input class="search" type="text" name="search" placeholder="Search player, Discord, reason..." value="${search}">
-        <input class="search" type="text" name="staff" placeholder="Staff member..." value="${staff}" style="max-width:180px">
-        <button class="btn btn-go" type="submit">Search</button>
-        <a class="btn btn-clr" href="/viewer/kicks">Clear</a>
+        <div class="filter-group" style="flex:1;min-width:200px">
+            <label>Search</label>
+            <input type="text" name="search" placeholder="Player, Discord, reason..." value="${search}">
+        </div>
+        <div class="filter-group" style="min-width:150px">
+            <label>Staff</label>
+            <input type="text" name="staff" placeholder="Staff member..." value="${staff}">
+        </div>
+        <div class="filter-group" style="justify-content:flex-end">
+            <label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-go" type="submit">Filter</button>
+                <a class="btn btn-clr" href="/viewer/kicks">Clear</a>
+            </div>
+        </div>
     </form>
     <div class="tbl"><table>
         <thead><tr><th>Case</th><th>Player</th><th class="hide">Discord</th><th>Reason</th><th class="hide">Staff</th><th>Date</th><th>Actions</th></tr></thead>
@@ -800,9 +861,9 @@ app.get('/viewer/warnings', viewerAuth, async (req, res) => {
         let pag = '';
         if (totalPages > 1) {
             const url = (p) => `/viewer/warnings?page=${p}&search=${encodeURIComponent(search)}&status=${status}&category=${cat}&staff=${encodeURIComponent(staff)}`;
-            if (page > 1) pag += `<a href="${url(page - 1)}">← Prev</a>`;
+            if (page > 1) pag += `<a href="${url(page - 1)}">Previous</a>`;
             pag += `<span>Page ${page} of ${totalPages}</span>`;
-            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next →</a>`;
+            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next</a>`;
         }
         
         res.setHeader('Content-Type', 'text/html');
@@ -816,12 +877,29 @@ ${getHeader('warnings', req.session)}
         <div class="stat"><div class="num">${total - activeCt}</div><div class="lbl">Removed</div></div>
     </div>
     <form class="filters" method="GET">
-        <input class="search" type="text" name="search" placeholder="Search player, Discord, reason..." value="${search}">
-        <input class="search" type="text" name="staff" placeholder="Staff member..." value="${staff}" style="max-width:180px">
-        <select name="category"><option value="">All Categories</option><option value="behavior" ${cat === 'behavior' ? 'selected' : ''}>Behavior</option><option value="chat" ${cat === 'chat' ? 'selected' : ''}>Chat</option><option value="cheating" ${cat === 'cheating' ? 'selected' : ''}>Cheating</option><option value="griefing" ${cat === 'griefing' ? 'selected' : ''}>Griefing</option><option value="other" ${cat === 'other' ? 'selected' : ''}>Other</option></select>
-        <select name="status"><option value="">All Status</option><option value="active" ${status === 'active' ? 'selected' : ''}>Active</option><option value="removed" ${status === 'removed' ? 'selected' : ''}>Removed</option></select>
-        <button class="btn btn-go" type="submit">Search</button>
-        <a class="btn btn-clr" href="/viewer/warnings">Clear</a>
+        <div class="filter-group" style="flex:1;min-width:200px">
+            <label>Search</label>
+            <input type="text" name="search" placeholder="Player, Discord, reason..." value="${search}">
+        </div>
+        <div class="filter-group" style="min-width:150px">
+            <label>Staff</label>
+            <input type="text" name="staff" placeholder="Staff member..." value="${staff}">
+        </div>
+        <div class="filter-group" style="min-width:120px">
+            <label>Category</label>
+            <select name="category"><option value="">All</option><option value="behavior" ${cat === 'behavior' ? 'selected' : ''}>Behavior</option><option value="chat" ${cat === 'chat' ? 'selected' : ''}>Chat</option><option value="cheating" ${cat === 'cheating' ? 'selected' : ''}>Cheating</option><option value="griefing" ${cat === 'griefing' ? 'selected' : ''}>Griefing</option><option value="other" ${cat === 'other' ? 'selected' : ''}>Other</option></select>
+        </div>
+        <div class="filter-group" style="min-width:120px">
+            <label>Status</label>
+            <select name="status"><option value="">All</option><option value="active" ${status === 'active' ? 'selected' : ''}>Active</option><option value="removed" ${status === 'removed' ? 'selected' : ''}>Removed</option></select>
+        </div>
+        <div class="filter-group" style="justify-content:flex-end">
+            <label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-go" type="submit">Filter</button>
+                <a class="btn btn-clr" href="/viewer/warnings">Clear</a>
+            </div>
+        </div>
     </form>
     <div class="tbl"><table>
         <thead><tr><th>Case</th><th>Discord</th><th class="hide">MC Name</th><th>Reason</th><th>Category</th><th>Status</th><th class="hide">Staff</th><th class="hide">Date</th><th>Actions</th></tr></thead>
@@ -892,9 +970,9 @@ app.get('/viewer/mutes', viewerAuth, async (req, res) => {
         let pag = '';
         if (totalPages > 1) {
             const url = (p) => `/viewer/mutes?page=${p}&search=${encodeURIComponent(search)}&status=${status}&staff=${encodeURIComponent(staff)}`;
-            if (page > 1) pag += `<a href="${url(page - 1)}">← Prev</a>`;
+            if (page > 1) pag += `<a href="${url(page - 1)}">Previous</a>`;
             pag += `<span>Page ${page} of ${totalPages}</span>`;
-            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next →</a>`;
+            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next</a>`;
         }
         
         res.setHeader('Content-Type', 'text/html');
@@ -908,11 +986,25 @@ ${getHeader('mutes', req.session)}
         <div class="stat"><div class="num">${total - activeCt}</div><div class="lbl">Expired</div></div>
     </div>
     <form class="filters" method="GET">
-        <input class="search" type="text" name="search" placeholder="Search user, reason, Discord ID..." value="${search}">
-        <input class="search" type="text" name="staff" placeholder="Staff member..." value="${staff}" style="max-width:180px">
-        <select name="status"><option value="">All</option><option value="active" ${status === 'active' ? 'selected' : ''}>Active</option><option value="expired" ${status === 'expired' ? 'selected' : ''}>Expired</option></select>
-        <button class="btn btn-go" type="submit">Search</button>
-        <a class="btn btn-clr" href="/viewer/mutes">Clear</a>
+        <div class="filter-group" style="flex:1;min-width:200px">
+            <label>Search</label>
+            <input type="text" name="search" placeholder="User, reason, Discord ID..." value="${search}">
+        </div>
+        <div class="filter-group" style="min-width:150px">
+            <label>Staff</label>
+            <input type="text" name="staff" placeholder="Staff member..." value="${staff}">
+        </div>
+        <div class="filter-group" style="min-width:120px">
+            <label>Status</label>
+            <select name="status"><option value="">All</option><option value="active" ${status === 'active' ? 'selected' : ''}>Active</option><option value="expired" ${status === 'expired' ? 'selected' : ''}>Expired</option></select>
+        </div>
+        <div class="filter-group" style="justify-content:flex-end">
+            <label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-go" type="submit">Filter</button>
+                <a class="btn btn-clr" href="/viewer/mutes">Clear</a>
+            </div>
+        </div>
     </form>
     <div class="tbl"><table>
         <thead><tr><th>Case</th><th>User</th><th>Reason</th><th>Duration</th><th>Status</th><th class="hide">Staff</th><th>Date</th><th class="hide">Expires</th><th>Actions</th></tr></thead>
@@ -961,7 +1053,7 @@ app.get('/viewer/case/:type/:caseNumber', viewerAuth, async (req, res) => {
             return res.status(404).send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Case Not Found</title><style>${viewerStyles}</style></head><body>
 ${getHeader('', req.session)}
 <div class="main">
-    <a href="/viewer/search" class="back-link">← Back to Search</a>
+    <a href="/viewer/search" class="back-link">Back to Search</a>
     <h1 class="title">Case Not Found</h1>
     <p style="color:#94a3b8">The requested case #${caseNumber} was not found.</p>
 </div></body></html>`);
@@ -987,15 +1079,15 @@ ${getHeader('', req.session)}
         
         if (type === 'ban') {
             infoItems += `<div class="info-item"><label>Duration</label><span>${caseData.isPermanent ? 'Permanent' : (caseData.duration || '—')}</span></div>`;
-            infoItems += `<div class="info-item"><label>Status</label><span>${caseData.active ? '🔴 Active' : '🟢 Expired'}</span></div>`;
+            infoItems += `<div class="info-item"><label>Status</label><span class="${caseData.active ? 'status-active' : 'status-inactive'}">${caseData.active ? 'Active' : 'Expired'}</span></div>`;
             if (caseData.expiresAt) infoItems += `<div class="info-item"><label>Expires</label><span>${new Date(caseData.expiresAt).toLocaleString()}</span></div>`;
         } else if (type === 'mute') {
             infoItems += `<div class="info-item"><label>Duration</label><span>${caseData.duration || '—'}</span></div>`;
-            infoItems += `<div class="info-item"><label>Status</label><span>${caseData.active ? '🔴 Active' : '🟢 Expired'}</span></div>`;
+            infoItems += `<div class="info-item"><label>Status</label><span class="${caseData.active ? 'status-active' : 'status-inactive'}">${caseData.active ? 'Active' : 'Expired'}</span></div>`;
             if (caseData.expiresAt) infoItems += `<div class="info-item"><label>Expires</label><span>${new Date(caseData.expiresAt).toLocaleString()}</span></div>`;
         } else if (type === 'warning') {
             infoItems += `<div class="info-item"><label>Category</label><span>${caseData.category ? (caseData.category.charAt(0).toUpperCase() + caseData.category.slice(1)) : '—'}</span></div>`;
-            infoItems += `<div class="info-item"><label>Status</label><span>${caseData.active ? '🔴 Active' : '🟢 Removed'}</span></div>`;
+            infoItems += `<div class="info-item"><label>Status</label><span class="${caseData.active ? 'status-active' : 'status-inactive'}">${caseData.active ? 'Active' : 'Removed'}</span></div>`;
         }
         
         // Build evidence items HTML
@@ -1025,7 +1117,7 @@ ${getHeader('', req.session)}
         res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Case #${caseNumber}</title><style>${viewerStyles}</style></head><body>
 ${getHeader('', req.session)}
 <div class="main">
-    <a href="/viewer/${type}s" class="back-link">← Back to ${modelName}s</a>
+    <a href="/viewer/${type}s" class="back-link">Back to ${modelName}s</a>
     
     <h1 class="title">${typeTag} Case #${caseNumber}</h1>
     
@@ -1036,7 +1128,7 @@ ${getHeader('', req.session)}
     </div>
     
     <div class="evidence-section">
-        <h3>📎 Evidence (${evidence.reduce((c, e) => c + e.items.length, 0)} items)</h3>
+        <h3>Evidence (${evidence.reduce((c, e) => c + e.items.length, 0)} items)</h3>
         ${evidenceHtml}
         
         <div class="evidence-form">
@@ -1272,7 +1364,7 @@ app.get('/viewer/my-cases', userAuth, async (req, res) => {
         // Build HTML for each case
         let casesHtml = '';
         if (allCases.length === 0) {
-            casesHtml = '<p class="no-evidence">You have no moderation history. Keep it up! 🎉</p>';
+            casesHtml = '<p class="no-evidence">You have no moderation history.</p>';
         } else {
             for (const c of allCases) {
                 let evidenceHtml = '';
@@ -1325,7 +1417,7 @@ app.get('/viewer/my-cases', userAuth, async (req, res) => {
 </div>
 <div class="main">
     <div class="user-cases-section">
-        <h2>📋 Your Moderation History</h2>
+        <h2>Your Moderation History</h2>
         <p>This page shows all moderation actions taken against your account, along with any evidence provided by staff.</p>
     </div>
     
