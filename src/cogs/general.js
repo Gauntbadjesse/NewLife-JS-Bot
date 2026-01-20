@@ -1281,6 +1281,36 @@ const slashCommands = [
                 embeds: [embed]
             });
         }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('staffreport')
+            .setDescription('Send staff activity report (Owner only)'),
+        async execute(interaction, client) {
+            // Only allow owner
+            const OWNER_ID = process.env.OWNER_ID || '1215431991893872751';
+            if (interaction.user.id !== OWNER_ID) {
+                return interaction.reply({ 
+                    content: '❌ Only the bot owner can use this command.', 
+                    ephemeral: true 
+                });
+            }
+
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const { sendTestReport } = require('../utils/staffTracking');
+                await sendTestReport(client);
+                await interaction.editReply({ 
+                    content: '✅ Staff report sent to your DMs!' 
+                });
+            } catch (error) {
+                console.error('Staff report error:', error);
+                await interaction.editReply({ 
+                    content: '❌ Failed to send staff report: ' + error.message 
+                });
+            }
+        }
     }
 ];
 

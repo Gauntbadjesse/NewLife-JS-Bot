@@ -273,6 +273,11 @@ app.get('/home', async (req, res) => {
         
         if (!isStaff) {
             // Non-staff users can view their own moderation history
+            // Check if there's a redirect query param (from DM link)
+            const redirectCase = req.query.case;
+            if (redirectCase) {
+                return res.redirect(`/viewer/my-cases?highlight=${encodeURIComponent(redirectCase)}`);
+            }
             return res.redirect('/viewer/my-cases');
         }
         
@@ -348,13 +353,20 @@ app.get('/viewer/search', viewerAuth, async (req, res) => {
 
         let allResults = [];
 
-        // Build search conditions
+        // Build search conditions with improved multi-field matching
         const buildSearchQuery = (searchFields) => {
             let conditions = [];
             
             if (search) {
-                const searchCond = { $or: searchFields.map(f => ({ [f]: { $regex: search, $options: 'i' } })) };
-                conditions.push(searchCond);
+                // Support multi-term search: split by spaces and search all terms
+                const terms = search.trim().split(/\s+/).filter(t => t.length > 0);
+                if (terms.length > 0) {
+                    const searchConditions = terms.map(term => ({
+                        $or: searchFields.map(f => ({ [f]: { $regex: term, $options: 'i' } }))
+                    }));
+                    // All terms must match (AND logic across terms)
+                    conditions.push(...searchConditions);
+                }
             }
             
             if (staff) {
@@ -1226,6 +1238,11 @@ app.post('/viewer/evidence/add', viewerAuth, async (req, res) => {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
         }
         
+        // Validate case type
+        if (!['ban', 'kick', 'warning', 'mute'].includes(caseType)) {
+            return res.status(400).json({ success: false, error: 'Invalid case type' });
+        }
+        
         // Find the case to get target discord ID
         let caseData = null;
         switch(caseType) {
@@ -1251,6 +1268,11 @@ app.post('/viewer/evidence/add', viewerAuth, async (req, res) => {
         
         // Add evidence items
         for (const item of items) {
+            // Validate item type
+            if (!['text', 'image'].includes(item.type)) {
+                continue; // Skip invalid items
+            }
+            
             await Evidence.addEvidence(
                 parseInt(caseNumber),
                 caseType,
@@ -1283,9 +1305,17 @@ function userAuth(req, res, next) {
     next();
 }
 
+// User-accessible case view (redirects to my-cases with highlight)
+app.get('/viewer/case/:type/:caseNumber/user', userAuth, async (req, res) => {
+    const { type, caseNumber } = req.params;
+    // Redirect to my-cases with highlight parameter
+    res.redirect(`/viewer/my-cases?highlight=${type}-${caseNumber}`);
+});
+
 app.get('/viewer/my-cases', userAuth, async (req, res) => {
     try {
         const discordId = req.session.discordId;
+        const highlightCase = req.query.highlight || null;
         
         // Fetch all moderation actions against this user
         const [bans, kicks, warnings, mutes] = await Promise.all([
@@ -1383,8 +1413,12 @@ app.get('/viewer/my-cases', userAuth, async (req, res) => {
                 const statusTag = c.status === 'Active' ? '<span class="tag tag-r">Active</span>' : 
                                   c.status === 'Expired' || c.status === 'Removed' ? '<span class="tag tag-g">' + c.status + '</span>' : c.status;
                 
+                // Check if this case should be highlighted
+                const isHighlighted = highlightCase && highlightCase === `${c.type}-${c.caseNumber}`;
+                const highlightStyle = isHighlighted ? 'border: 2px solid #10b981; box-shadow: 0 0 20px rgba(16,185,129,0.3);' : '';
+                
                 casesHtml += `
-                <div class="case-detail" style="margin-bottom:20px">
+                <div class="case-detail" id="case-${c.type}-${c.caseNumber}" style="margin-bottom:20px;${highlightStyle}">
                     <h2>${c.typeTag} Case #${c.caseNumber}</h2>
                     <div class="info-grid">
                         <div class="info-item"><label>Date</label><span>${c.date ? new Date(c.date).toLocaleString() : '—'}</span></div>
@@ -1429,7 +1463,19 @@ app.get('/viewer/my-cases', userAuth, async (req, res) => {
     </div>
     
     ${casesHtml}
-</div></body></html>`);
+</div>
+<script>
+// Scroll to highlighted case if present
+window.addEventListener('DOMContentLoaded', function() {
+    const highlighted = document.querySelector('[id^="case-"][style*="box-shadow"]');
+    if (highlighted) {
+        setTimeout(() => {
+            highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+    }
+});
+</script>
+</body></html>`);
     } catch (e) {
         console.error(e);
         res.status(500).send('Error: ' + e.message);

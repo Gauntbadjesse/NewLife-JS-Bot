@@ -202,6 +202,24 @@ client.once('ready', async () => {
     } catch (e) {
         console.error('Failed to initialize staff online tracker:', e);
     }
+
+    // Initialize username updater (checks and updates MC usernames every 5 minutes)
+    try {
+        const { initUsernameUpdater } = require('./utils/usernameUpdater');
+        initUsernameUpdater();
+        console.log('[UsernameUpdater] Initialized username updater');
+    } catch (e) {
+        console.error('Failed to initialize username updater:', e);
+    }
+
+    // Initialize staff tracking system (sends weekly reports)
+    try {
+        const { initStaffTracking } = require('./utils/staffTracking');
+        initStaffTracking(client);
+        console.log('[StaffTracking] Initialized staff tracking system');
+    } catch (e) {
+        console.error('Failed to initialize staff tracking:', e);
+    }
 });
 
 /**

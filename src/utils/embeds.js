@@ -283,7 +283,11 @@ function createListEmbed(title, items, page, totalPages) {
  * @returns {EmbedBuilder}
  */
 function createWarningDMEmbed(warning) {
-    return new EmbedBuilder()
+    const viewUrl = warning.caseNumber 
+        ? `https://staff.newlifesmp.com/home?case=mute-${warning.caseNumber}`
+        : null;
+    
+    const embed = new EmbedBuilder()
         .setColor(0xFFA500)
         .setTitle('You have been warned on NewLife SMP')
         .setDescription(`You have received a warning from the staff team.`)
@@ -311,6 +315,16 @@ function createWarningDMEmbed(warning) {
         )
         .setFooter({ text: 'NewLife SMP | Please follow the server rules' })
         .setTimestamp();
+    
+    if (viewUrl) {
+        embed.addFields({
+            name: 'View Case Details',
+            value: `[Click here to view this case with evidence](${viewUrl})`,
+            inline: false
+        });
+    }
+    
+    return embed;
 }
 
 /**

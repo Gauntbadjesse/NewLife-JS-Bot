@@ -26,30 +26,50 @@ function parseOnlinePlayers(response) {
     
     const players = [];
     
-    // glist format varies, but typically:
-    // "There are X players online."
-    // Or lists servers with players like:
-    // "[server] (X): player1, player2, player3"
+    // glist format typically shows:
+    // "[server] (count): player1, player2, player3"
+    // or just "player1, player2, player3"
+    // or "There are X players online."
     
     const lines = response.split('\n');
     
     for (const line of lines) {
+        // Skip empty lines and "There are X players" lines
+        if (!line.trim() || line.includes('There are') || line.includes('players online')) {
+            continue;
+        }
+        
         // Match pattern like "[server] (X): player1, player2"
         const serverMatch = line.match(/\[.+?\]\s*\(\d+\):\s*(.+)/);
         if (serverMatch && serverMatch[1]) {
-            const playerList = serverMatch[1].split(',').map(p => p.trim()).filter(p => p);
+            const playerList = serverMatch[1]
+                .split(',')
+                .map(p => p.trim())
+                .filter(p => p && p.length > 0 && p.length <= 16); // Valid MC username length
             players.push(...playerList);
             continue;
         }
         
-        // Also try to match plain comma-separated list
-        if (line.includes(',') && !line.includes('There are')) {
-            const playerList = line.split(',').map(p => p.trim()).filter(p => p && !p.includes('players'));
-            players.push(...playerList);
+        // Try to match just comma-separated names
+        if (line.includes(',')) {
+            const playerList = line
+                .split(',')
+                .map(p => p.trim())
+                .filter(p => p && p.length > 0 && p.length <= 16 && !p.includes('[') && !p.includes('('));
+            if (playerList.length > 0) {
+                players.push(...playerList);
+            }
+        } else {
+            // Single player on a line
+            const trimmed = line.trim();
+            if (trimmed.length > 0 && trimmed.length <= 16 && !trimmed.includes('[') && !trimmed.includes('(')) {
+                players.push(trimmed);
+            }
         }
     }
     
-    return players;
+    // Remove duplicates
+    return [...new Set(players)];
 }
 
 /**
@@ -58,14 +78,23 @@ function parseOnlinePlayers(response) {
  */
 async function getOnlinePlayers() {
     try {
-        const result = await executeProxyRcon('glist');
+        // Try both glist and list commands for compatibility
+        let result = await executeProxyRcon('glist');
+        
+        // If glist fails, try regular list command
+        if (!result.success || !result.response) {
+            console.log('[StaffOnline] glist failed, trying list command...');
+            result = await executeProxyRcon('list');
+        }
         
         if (!result.success) {
             console.error('[StaffOnline] Failed to get player list:', result.response);
             return [];
         }
         
-        return parseOnlinePlayers(result.response);
+        const players = parseOnlinePlayers(result.response);
+        console.log(`[StaffOnline] Found ${players.length} online players:`, players.join(', '));
+        return players;
     } catch (error) {
         console.error('[StaffOnline] Error getting online players:', error.message);
         return [];

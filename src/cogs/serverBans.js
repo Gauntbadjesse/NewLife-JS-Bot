@@ -163,6 +163,10 @@ async function getAllLinkedAccounts(discordId = null, uuid = null, mcUsername = 
  * Send ban DM to user
  */
 async function sendBanDm(client, discordId, banData) {
+    const viewUrl = banData.caseNumber 
+        ? `https://staff.newlifesmp.com/home?case=ban-${banData.caseNumber}`
+        : null;
+    
     const embed = new EmbedBuilder()
         .setTitle('You Have Been Banned')
         .setColor(0xff4444)
@@ -180,6 +184,14 @@ async function sendBanDm(client, discordId, banData) {
             name: 'Expires',
             value: `<t:${Math.floor(banData.expiresAt.getTime() / 1000)}:R>`,
             inline: true
+        });
+    }
+    
+    if (viewUrl) {
+        embed.addFields({
+            name: 'View Case Details',
+            value: `[Click here to view this case with evidence](${viewUrl})`,
+            inline: false
         });
     }
     
@@ -290,6 +302,10 @@ async function kickPlayer(username, reason) {
  * Send kick DM to user
  */
 async function sendKickDm(client, discordId, kickData) {
+    const viewUrl = kickData.caseNumber 
+        ? `https://staff.newlifesmp.com/home?case=kick-${kickData.caseNumber}`
+        : null;
+    
     const embed = new EmbedBuilder()
         .setTitle('You Have Been Kicked')
         .setColor(0xFFA500)
@@ -300,6 +316,14 @@ async function sendKickDm(client, discordId, kickData) {
         )
         .setFooter({ text: 'NewLife SMP | You may rejoin the server' })
         .setTimestamp();
+    
+    if (viewUrl) {
+        embed.addFields({
+            name: 'View Case Details',
+            value: `[Click here to view this case with evidence](${viewUrl})`,
+            inline: false
+        });
+    }
     
     return sendDm(client, discordId, { embeds: [embed] });
 }
@@ -346,6 +370,10 @@ async function sendWarningDm(client, discordId, warningData) {
         severe: 0xFF4444
     };
     
+    const viewUrl = warningData.caseNumber 
+        ? `https://staff.newlifesmp.com/home?case=warning-${warningData.caseNumber}`
+        : null;
+    
     const embed = new EmbedBuilder()
         .setTitle('⚠️ You Have Been Warned')
         .setColor(severityColors[warningData.severity] || 0xFFA500)
@@ -358,6 +386,14 @@ async function sendWarningDm(client, discordId, warningData) {
         )
         .setFooter({ text: `Case #${warningData.caseNumber} | NewLife SMP` })
         .setTimestamp();
+    
+    if (viewUrl) {
+        embed.addFields({
+            name: 'View Case Details',
+            value: `[Click here to view this case with evidence](${viewUrl})`,
+            inline: false
+        });
+    }
     
     embed.addFields({
         name: '⚠️ Notice',
@@ -596,7 +632,8 @@ const slashCommands = [
                     reason,
                     isPermanent: durationData.isPermanent,
                     durationDisplay: durationData.display,
-                    expiresAt: durationData.expiresAt
+                    expiresAt: durationData.expiresAt,
+                    caseNumber: ban.caseNumber
                 });
             }
 
@@ -1241,7 +1278,10 @@ const slashCommands = [
 
             // Send DM to kicked user
             if (discordId) {
-                await sendKickDm(client, discordId, { reason });
+                await sendKickDm(client, discordId, { 
+                    reason,
+                    caseNumber: kick.caseNumber
+                });
             }
 
             // Log to channel
