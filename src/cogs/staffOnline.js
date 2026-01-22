@@ -5,7 +5,7 @@
  */
 
 const LinkedAccount = require('../database/models/LinkedAccount');
-const { executeProxyRcon } = require('../utils/rcon');
+const { executeRcon } = require('../utils/rcon');
 
 // Configuration
 const STAFF_ROLE_ID = process.env.STAFF_TEAM || '1372672239245459498';
@@ -17,75 +17,59 @@ let checkInterval = null;
 let isRunning = false;
 
 /**
- * Parse the glist response to get online player names
- * @param {string} response - The raw glist response
+ * Parse the list response to get online player names
+ * @param {string} response - The raw list command response
  * @returns {string[]} Array of online player usernames
  */
 function parseOnlinePlayers(response) {
     if (!response) return [];
     
+    // Standard Minecraft 'list' output format:
+    // "There are X of a max of Y players online: player1, player2, player3"
+    // or "There are X/Y players online: player1, player2, player3"
+    
     const players = [];
     
-    // glist format typically shows:
-    // "[server] (count): player1, player2, player3"
-    // or just "player1, player2, player3"
-    // or "There are X players online."
+    // Remove ANSI color codes if present
+    const cleanResponse = response.replace(/§[0-9a-fk-or]/gi, '').replace(/\u001b\[[0-9;]*m/g, '');
     
-    const lines = response.split('\n');
-    
-    for (const line of lines) {
-        // Skip empty lines and "There are X players" lines
-        if (!line.trim() || line.includes('There are') || line.includes('players online')) {
-            continue;
-        }
-        
-        // Match pattern like "[server] (X): player1, player2"
-        const serverMatch = line.match(/\[.+?\]\s*\(\d+\):\s*(.+)/);
-        if (serverMatch && serverMatch[1]) {
-            const playerList = serverMatch[1]
-                .split(',')
-                .map(p => p.trim())
-                .filter(p => p && p.length > 0 && p.length <= 16); // Valid MC username length
-            players.push(...playerList);
-            continue;
-        }
-        
-        // Try to match just comma-separated names
-        if (line.includes(',')) {
-            const playerList = line
-                .split(',')
-                .map(p => p.trim())
-                .filter(p => p && p.length > 0 && p.length <= 16 && !p.includes('[') && !p.includes('('));
-            if (playerList.length > 0) {
-                players.push(...playerList);
-            }
-        } else {
-            // Single player on a line
-            const trimmed = line.trim();
-            if (trimmed.length > 0 && trimmed.length <= 16 && !trimmed.includes('[') && !trimmed.includes('(')) {
-                players.push(trimmed);
-            }
-        }
+    // Find the colon separator that comes after "players online:"
+    const colonIndex = cleanResponse.indexOf(':');
+    if (colonIndex === -1) {
+        console.log('[StaffOnline] No colon found in list response, no players online');
+        return [];
     }
+    
+    // Get everything after the colon
+    const playerSection = cleanResponse.substring(colonIndex + 1).trim();
+    
+    if (!playerSection || playerSection.length === 0) {
+        console.log('[StaffOnline] No players listed after colon');
+        return [];
+    }
+    
+    // Split by comma and clean up
+    const playerList = playerSection
+        .split(',')
+        .map(p => p.trim())
+        .filter(p => {
+            // Valid Minecraft username: 3-16 chars, alphanumeric and underscore
+            return p && p.length >= 3 && p.length <= 16 && /^[a-zA-Z0-9_]+$/.test(p);
+        });
+    
+    players.push(...playerList);
     
     // Remove duplicates
     return [...new Set(players)];
 }
 
 /**
- * Get all online players from the Velocity proxy
+ * Get all online players from the Minecraft server via RCON
  * @returns {Promise<string[]>} Array of online player usernames
  */
 async function getOnlinePlayers() {
     try {
-        // Try both glist and list commands for compatibility
-        let result = await executeProxyRcon('glist');
-        
-        // If glist fails, try regular list command
-        if (!result.success || !result.response) {
-            console.log('[StaffOnline] glist failed, trying list command...');
-            result = await executeProxyRcon('list');
-        }
+        const result = await executeRcon('list');
         
         if (!result.success) {
             console.error('[StaffOnline] Failed to get player list:', result.response);
@@ -93,7 +77,7 @@ async function getOnlinePlayers() {
         }
         
         const players = parseOnlinePlayers(result.response);
-        console.log(`[StaffOnline] Found ${players.length} online players:`, players.join(', '));
+        console.log(`[StaffOnline] Found ${players.length} online players:`, players.join(', ') || 'none');
         return players;
     } catch (error) {
         console.error('[StaffOnline] Error getting online players:', error.message);
