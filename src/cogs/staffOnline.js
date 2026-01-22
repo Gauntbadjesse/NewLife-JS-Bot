@@ -154,9 +154,8 @@ async function checkStaffOnline(client) {
             return;
         }
         
-        // Fetch all members with the staff role
-        await guild.members.fetch();
-        const staffMembers = guild.members.cache.filter(m => m.roles.cache.has(STAFF_ROLE_ID));
+        // Get members who have the staff role (fetch from cache, avoid API calls)
+        const staffMembers = staffRole.members;
         
         let rolesAdded = 0;
         let rolesRemoved = 0;
