@@ -39,7 +39,7 @@ public class TabListManager {
         }
 
         Component prefix = buildPrefix(data);
-        player.playerListName(prefix.append(Component.text(" ").append(Component.text(player.getName()))));
+        player.playerListName(prefix.append(Component.text(player.getName())));
     }
 
     private Component buildPrefix(PlayerDataManager.PlayerData data) {
@@ -69,7 +69,7 @@ public class TabListManager {
                 break;
         }
 
-        // Combine: [PvP Box][Status Box]
-        return pvpBox.append(statusBox);
+        // Combine: [PvP Box][Status Box] with space
+        return pvpBox.append(statusBox).append(Component.text(" "));
     }
 }

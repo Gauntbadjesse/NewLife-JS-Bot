@@ -127,9 +127,11 @@ public class PvpCommand implements CommandExecutor, TabCompleter {
         // Schedule task to disable PvP after cooldown
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             PlayerDataManager.PlayerData updatedData = plugin.getDataManager().getPlayerData(uuid);
-            if (updatedData != null && !updatedData.hasPvpCooldown()) {
+            if (updatedData != null) {
                 updatedData.setPvpEnabled(false);
+                updatedData.setPvpCooldownUntil(0); // Clear cooldown
                 plugin.getDataManager().savePlayerData(updatedData);
+                
                 if (player.isOnline()) {
                     plugin.getTabListManager().updatePlayer(player);
                     player.sendMessage(Component.text("✓ PvP is now OFF", NamedTextColor.GREEN, TextDecoration.BOLD)

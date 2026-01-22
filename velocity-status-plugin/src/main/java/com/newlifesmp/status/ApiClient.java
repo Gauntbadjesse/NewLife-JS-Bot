@@ -37,6 +37,8 @@ public class ApiClient {
                 payload.addProperty("timestamp", System.currentTimeMillis());
 
                 String endpoint = apiUrl + "/api/pvp/log";
+                logger.info("Sending log to " + endpoint + " - Type: " + type + ", User: " + username);
+                
                 HttpURLConnection conn = (HttpURLConnection) URI.create(endpoint).toURL().openConnection();
                 conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/json");
@@ -52,14 +54,15 @@ public class ApiClient {
 
                 int responseCode = conn.getResponseCode();
                 if (responseCode == 200 || responseCode == 201) {
-                    logger.info("Logged status change to Discord: " + type + " for " + username);
+                    logger.info("✓ Successfully logged to Discord: " + type + " for " + username);
                 } else {
-                    logger.warning("Discord API returned " + responseCode + " for status change log");
+                    logger.warning("✗ Discord API returned " + responseCode + " for status change log");
                 }
 
                 conn.disconnect();
             } catch (Exception e) {
-                logger.warning("Failed to log to Discord API: " + e.getMessage());
+                logger.warning("✗ Failed to log to Discord API: " + e.getMessage());
+                e.printStackTrace();
             }
         });
     }
