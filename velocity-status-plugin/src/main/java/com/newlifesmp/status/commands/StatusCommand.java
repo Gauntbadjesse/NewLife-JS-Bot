@@ -8,12 +8,15 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
-public class StatusCommand implements CommandExecutor {
+public class StatusCommand implements CommandExecutor, TabCompleter {
 
     private final NewLifeStatus plugin;
 
@@ -89,5 +92,22 @@ public class StatusCommand implements CommandExecutor {
 
     private void sendUsage(Player player) {
         player.sendMessage(Component.text("Usage: /status <recording|streaming|none>", NamedTextColor.RED));
+    }
+
+    @Override
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+        List<String> completions = new ArrayList<>();
+        
+        if (args.length == 1) {
+            completions.add("recording");
+            completions.add("streaming");
+            completions.add("none");
+            
+            // Filter based on what user typed
+            String input = args[0].toLowerCase();
+            completions.removeIf(s -> !s.toLowerCase().startsWith(input));
+        }
+        
+        return completions;
     }
 }

@@ -11,8 +11,8 @@ public class TabListManager {
 
     private final PlayerDataManager dataManager;
 
-    // Box characters
-    private static final String BOX = "■■";
+    // Box character
+    private static final String BOX = "■";
 
     // PvP status colors
     private static final TextColor PVP_ON = NamedTextColor.GREEN;

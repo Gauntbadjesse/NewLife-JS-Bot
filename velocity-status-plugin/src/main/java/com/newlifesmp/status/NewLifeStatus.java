@@ -55,8 +55,13 @@ public class NewLifeStatus extends JavaPlugin {
         }
 
         // Register commands
-        getCommand("pvp").setExecutor(new PvpCommand(this));
-        getCommand("status").setExecutor(new StatusCommand(this));
+        PvpCommand pvpCommand = new PvpCommand(this);
+        getCommand("pvp").setExecutor(pvpCommand);
+        getCommand("pvp").setTabCompleter(pvpCommand);
+        
+        StatusCommand statusCommand = new StatusCommand(this);
+        getCommand("status").setExecutor(statusCommand);
+        getCommand("status").setTabCompleter(statusCommand);
 
         // Register listeners
         getServer().getPluginManager().registerEvents(

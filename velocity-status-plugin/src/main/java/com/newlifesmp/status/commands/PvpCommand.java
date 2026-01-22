@@ -8,12 +8,15 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
-public class PvpCommand implements CommandExecutor {
+public class PvpCommand implements CommandExecutor, TabCompleter {
 
     private final NewLifeStatus plugin;
 
@@ -105,29 +108,46 @@ public class PvpCommand implements CommandExecutor {
 
         if (data.hasPvpCooldown()) {
             long remaining = (data.getPvpCooldownUntil() - System.currentTimeMillis()) / 1000;
-            player.sendMessage(Component.text("You're on PvP cooldown! Wait " + remaining + " seconds", NamedTextColor.RED));
+            player.sendMessage(Component.text("PvP will turn OFF in " + remaining + " seconds", NamedTextColor.YELLOW));
             return;
         }
 
-        data.setPvpEnabled(false);
+        // Set cooldown - PvP stays ON for 5 minutes, then turns OFF
         long cooldownEnd = System.currentTimeMillis() + (plugin.getStatusConfig().getPvpCooldown() * 1000L);
         data.setPvpCooldownUntil(cooldownEnd);
         plugin.getDataManager().savePlayerData(data);
         plugin.getTabListManager().updatePlayer(player);
 
-        player.sendMessage(Component.text("✓ PvP Disabled", NamedTextColor.YELLOW, TextDecoration.BOLD)
+        player.sendMessage(Component.text("⚠ PvP Disabling...", NamedTextColor.YELLOW, TextDecoration.BOLD)
             .append(Component.newline())
-            .append(Component.text("Cooldown: " + plugin.getStatusConfig().getPvpCooldown() + " seconds", NamedTextColor.GRAY)));
+            .append(Component.text("PvP will stay ON for " + plugin.getStatusConfig().getPvpCooldown() + " seconds", NamedTextColor.GRAY))
+            .append(Component.newline())
+            .append(Component.text("You can still be attacked during this time!", NamedTextColor.RED)));
 
-        // Log to Discord
-        if (plugin.getApiClient() != null) {
-            plugin.getApiClient().logStatusChange(
-                uuid.toString(),
-                player.getName(),
-                "pvp_disabled",
-                String.valueOf(plugin.getStatusConfig().getPvpCooldown())
-            );
-        }
+        // Schedule task to disable PvP after cooldown
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            PlayerDataManager.PlayerData updatedData = plugin.getDataManager().getPlayerData(uuid);
+            if (updatedData != null && !updatedData.hasPvpCooldown()) {
+                updatedData.setPvpEnabled(false);
+                plugin.getDataManager().savePlayerData(updatedData);
+                if (player.isOnline()) {
+                    plugin.getTabListManager().updatePlayer(player);
+                    player.sendMessage(Component.text("✓ PvP is now OFF", NamedTextColor.GREEN, TextDecoration.BOLD)
+                        .append(Component.newline())
+                        .append(Component.text("You can no longer be attacked", NamedTextColor.GRAY)));
+                }
+                
+                // Log to Discord
+                if (plugin.getApiClient() != null) {
+                    plugin.getApiClient().logStatusChange(
+                        uuid.toString(),
+                        player.getName(),
+                        "pvp_disabled",
+                        String.valueOf(plugin.getStatusConfig().getPvpCooldown())
+                    );
+                }
+            }
+        }, plugin.getStatusConfig().getPvpCooldown() * 20L); // Convert seconds to ticks
     }
 
     private void handleStatus(Player player, UUID uuid) {
@@ -169,5 +189,23 @@ public class PvpCommand implements CommandExecutor {
 
     private void sendUsage(Player player) {
         player.sendMessage(Component.text("Usage: /pvp <on|off|status|info>", NamedTextColor.RED));
+    }
+
+    @Override
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+        List<String> completions = new ArrayList<>();
+        
+        if (args.length == 1) {
+            completions.add("on");
+            completions.add("off");
+            completions.add("status");
+            completions.add("info");
+            
+            // Filter based on what user typed
+            String input = args[0].toLowerCase();
+            completions.removeIf(s -> !s.toLowerCase().startsWith(input));
+        }
+        
+        return completions;
     }
 }
