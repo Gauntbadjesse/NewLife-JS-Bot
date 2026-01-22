@@ -1,8 +1,0 @@
-{
-  "id": "newlife-status",
-  "name": "NewLife Status",
-  "version": "1.0.0",
-  "description": "PvP consent and recording status system for NewLife SMP",
-  "authors": ["NewLife SMP"],
-  "main": "com.newlifesmp.status.NewLifeStatus"
-}

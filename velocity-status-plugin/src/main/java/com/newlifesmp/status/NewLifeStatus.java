@@ -1,180 +1,116 @@
 package com.newlifesmp.status;
 
-import com.google.inject.Inject;
 import com.newlifesmp.status.commands.PvpCommand;
 import com.newlifesmp.status.commands.StatusCommand;
 import com.newlifesmp.status.listeners.PlayerConnectionListener;
-import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
-import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
-import com.velocitypowered.api.plugin.Plugin;
-import com.velocitypowered.api.plugin.annotation.DataDirectory;
-import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.command.CommandMeta;
-import org.slf4j.Logger;
+import org.bukkit.Bukkit;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.TimeUnit;
 
-@Plugin(
-    id = "newlife-status",
-    name = "NewLife Status",
-    version = "1.0.0",
-    description = "PvP consent and recording status system for NewLife SMP",
-    authors = {"NewLife SMP"}
-)
-public class NewLifeStatus {
+public class NewLifeStatus extends JavaPlugin {
 
-    private final ProxyServer server;
-    private final Logger logger;
-    private final Path dataDirectory;
-    
     private StatusConfig config;
     private PlayerDataManager dataManager;
     private TabListManager tabListManager;
     private ApiClient apiClient;
+    private BukkitTask cooldownTask;
 
-    @Inject
-    public NewLifeStatus(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
-        this.server = server;
-        this.logger = logger;
-        this.dataDirectory = dataDirectory;
-    }
-
-    @Subscribe
-    public void onProxyInitialization(ProxyInitializeEvent event) {
-        logger.info("╔════════════════════════════════════════╗");
-        logger.info("║        NewLife Status v1.0.0           ║");
-        logger.info("║   PvP Consent & Status System          ║");
-        logger.info("╚════════════════════════════════════════╝");
+    @Override
+    public void onEnable() {
+        getLogger().info("╔════════════════════════════════════════╗");
+        getLogger().info("║      NewLife Status v1.0.0            ║");
+        getLogger().info("║   PvP Consent & Status System         ║");
+        getLogger().info("╚════════════════════════════════════════╝");
 
         // Load configuration
         try {
-            loadConfig();
+            loadConfiguration();
         } catch (IOException e) {
-            logger.error("Failed to load configuration!", e);
+            getLogger().severe("Failed to load configuration!");
+            e.printStackTrace();
+            getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
         // Initialize managers
-        Path playerDataPath = dataDirectory.resolve("playerdata");
-        this.dataManager = new PlayerDataManager(playerDataPath, logger);
-        this.tabListManager = new TabListManager(server, dataManager, config, logger);
-        this.apiClient = new ApiClient(
-            config.getApiUrl(),
-            config.getApiKey(),
-            config.getApiTimeout(),
-            logger
-        );
-
-        // Register event listeners
-        server.getEventManager().register(this, new PlayerConnectionListener(this));
+        Path dataPath = getDataFolder().toPath().resolve("playerdata");
+        this.dataManager = new PlayerDataManager(dataPath, getLogger());
+        this.tabListManager = new TabListManager(dataManager);
+        
+        // Initialize API client if enabled
+        if (config.isDiscordEnabled()) {
+            this.apiClient = new ApiClient(
+                config.getDiscordApiUrl(),
+                config.getDiscordApiKey(),
+                getLogger()
+            );
+            getLogger().info("Discord logging enabled");
+        } else {
+            getLogger().info("Discord logging disabled");
+        }
 
         // Register commands
-        CommandMeta pvpMeta = server.getCommandManager().metaBuilder("pvp")
-            .aliases("pvpstatus")
-            .plugin(this)
-            .build();
-        server.getCommandManager().register(pvpMeta, new PvpCommand(this));
+        getCommand("pvp").setExecutor(new PvpCommand(this));
+        getCommand("status").setExecutor(new StatusCommand(this));
 
-        CommandMeta statusMeta = server.getCommandManager().metaBuilder("status")
-            .aliases("recordstatus", "streamstatus")
-            .plugin(this)
-            .build();
-        server.getCommandManager().register(statusMeta, new StatusCommand(this));
+        // Register listeners
+        getServer().getPluginManager().registerEvents(
+            new PlayerConnectionListener(this), 
+            this
+        );
 
-        // Schedule cooldown checker task (every 30 seconds)
-        server.getScheduler()
-            .buildTask(this, this::checkCooldowns)
-            .repeat(30, TimeUnit.SECONDS)
-            .schedule();
+        // Start cooldown check task (runs every second)
+        this.cooldownTask = Bukkit.getScheduler().runTaskTimer(this, () -> {
+            Bukkit.getOnlinePlayers().forEach(player -> {
+                PlayerDataManager.PlayerData data = dataManager.getPlayerData(player.getUniqueId());
+                if (data != null && data.hasPvpCooldown()) {
+                    tabListManager.updatePlayer(player);
+                }
+            });
+        }, 20L, 20L); // 20 ticks = 1 second
 
-        logger.info("NewLife Status enabled successfully!");
-        logger.info("API URL: {}", config.getApiUrl());
-        logger.info("PvP Cooldown: {} minutes", config.getPvpCooldownMinutes());
+        getLogger().info("NewLife Status enabled successfully!");
+        getLogger().info("PvP Cooldown: " + config.getPvpCooldown() + " seconds");
     }
 
-    @Subscribe
-    public void onProxyShutdown(ProxyShutdownEvent event) {
-        logger.info("Saving all player data...");
-        dataManager.saveAll();
-        apiClient.shutdown();
-        logger.info("NewLife Status disabled.");
+    @Override
+    public void onDisable() {
+        if (cooldownTask != null) {
+            cooldownTask.cancel();
+        }
+        getLogger().info("NewLife Status disabled");
     }
 
-    private void loadConfig() throws IOException {
-        if (!Files.exists(dataDirectory)) {
-            Files.createDirectories(dataDirectory);
+    private void loadConfiguration() throws IOException {
+        if (!getDataFolder().exists()) {
+            getDataFolder().mkdirs();
         }
 
-        Path configPath = dataDirectory.resolve("config.yml");
+        Path configPath = getDataFolder().toPath().resolve("config.yml");
         
         if (!Files.exists(configPath)) {
-            // Copy default config from resources
-            try (InputStream in = getClass().getResourceAsStream("/config.yml")) {
+            try (InputStream in = getResource("config.yml")) {
                 if (in != null) {
                     Files.copy(in, configPath);
-                    logger.info("Created default configuration file.");
-                } else {
-                    throw new IOException("Could not find default config.yml in resources");
+                    getLogger().info("Created default configuration file");
                 }
             }
         }
 
-        // Load config
-        try (InputStream in = Files.newInputStream(configPath)) {
-            this.config = new StatusConfig(in);
-            logger.info("Configuration loaded successfully.");
-        }
+        this.config = new StatusConfig(configPath, getLogger());
+        getLogger().info("Configuration loaded successfully");
     }
 
-    /**
-     * Check all players for expired cooldowns and update tab list
-     */
-    private void checkCooldowns() {
-        server.getAllPlayers().forEach(player -> {
-            PlayerDataManager.PlayerData data = dataManager.getPlayerData(player.getUniqueId());
-            
-            if (data.isInCooldown()) {
-                // Check if cooldown just expired
-                if (data.getCooldownRemaining() == 0) {
-                    // PvP is now OFF
-                    tabListManager.updatePlayer(player);
-                    
-                    // Log to Discord
-                    apiClient.logPvpStatusChange(
-                        player.getUniqueId().toString(),
-                        player.getUsername(),
-                        false
-                    );
-                    
-                    player.sendMessage(net.kyori.adventure.text.Component.text(
-                        config.getMessage("pvp_disabled")
-                    ));
-                    
-                    dataManager.savePlayerData(player.getUniqueId(), data);
-                }
-            }
-        });
-    }
-
-    // Getters
-    public ProxyServer getServer() {
-        return server;
-    }
-
-    public Logger getLogger() {
-        return logger;
-    }
-
-    public StatusConfig getConfig() {
+    public StatusConfig getStatusConfig() {
         return config;
     }
 
-    public PlayerDataManager getPlayerDataManager() {
+    public PlayerDataManager getDataManager() {
         return dataManager;
     }
 

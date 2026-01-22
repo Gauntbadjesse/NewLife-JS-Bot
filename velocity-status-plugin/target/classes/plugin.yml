@@ -1,0 +1,27 @@
+name: NewLifeStatus
+version: 1.0.0
+main: com.newlifesmp.status.NewLifeStatus
+api-version: '1.21'
+author: NewLife SMP
+description: PvP consent and recording status system for NewLife SMP
+
+commands:
+  pvp:
+    description: Manage your PvP consent status
+    usage: /pvp <on|off|status|info>
+    aliases: [pvpconsent]
+  status:
+    description: Set your recording/streaming status
+    usage: /status <recording|streaming|none>
+    aliases: [recordstatus, streamstatus]
+
+permissions:
+  newlife.status.pvp:
+    description: Use PvP consent commands
+    default: true
+  newlife.status.status:
+    description: Use status commands
+    default: true
+  newlife.status.admin:
+    description: Admin commands and bypass
+    default: op

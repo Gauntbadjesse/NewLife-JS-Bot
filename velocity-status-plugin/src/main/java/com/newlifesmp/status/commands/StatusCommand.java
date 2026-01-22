@@ -1,13 +1,20 @@
 package com.newlifesmp.status.commands;
 
 import com.newlifesmp.status.NewLifeStatus;
-import com.newlifesmp.status.PlayerDataManager.PlayerData;
-import com.velocitypowered.api.command.SimpleCommand;
-import com.velocitypowered.api.proxy.Player;
+import com.newlifesmp.status.PlayerDataManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
-public class StatusCommand implements SimpleCommand {
+import java.util.UUID;
+
+public class StatusCommand implements CommandExecutor {
+
     private final NewLifeStatus plugin;
 
     public StatusCommand(NewLifeStatus plugin) {
@@ -15,56 +22,72 @@ public class StatusCommand implements SimpleCommand {
     }
 
     @Override
-    public void execute(Invocation invocation) {
-        if (!(invocation.source() instanceof Player)) {
-            invocation.source().sendMessage(Component.text("This command can only be used by players.", NamedTextColor.RED));
-            return;
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(Component.text("This command can only be used by players", NamedTextColor.RED));
+            return true;
         }
 
-        Player player = (Player) invocation.source();
-        String[] args = invocation.arguments();
+        Player player = (Player) sender;
+        UUID uuid = player.getUniqueId();
 
         if (args.length == 0) {
             sendUsage(player);
-            return;
+            return true;
         }
 
-        String mode = args[0].toLowerCase();
+        String status = args[0].toLowerCase();
 
-        switch (mode) {
+        PlayerDataManager.PlayerData data = plugin.getDataManager().getPlayerData(uuid);
+        if (data == null) {
+            data = new PlayerDataManager.PlayerData(uuid.toString(), false, "none", 0);
+        }
+
+        switch (status) {
             case "recording":
-                setStatus(player, "recording");
+                data.setStatus("recording");
+                plugin.getDataManager().savePlayerData(data);
+                plugin.getTabListManager().updatePlayer(player);
+                player.sendMessage(Component.text("✓ Status: ", NamedTextColor.GRAY)
+                    .append(Component.text("Recording", NamedTextColor.RED, TextDecoration.BOLD)));
+                
+                if (plugin.getApiClient() != null) {
+                    plugin.getApiClient().logStatusChange(uuid.toString(), player.getName(), "recording", null);
+                }
                 break;
+
             case "streaming":
-                setStatus(player, "streaming");
+                data.setStatus("streaming");
+                plugin.getDataManager().savePlayerData(data);
+                plugin.getTabListManager().updatePlayer(player);
+                player.sendMessage(Component.text("✓ Status: ", NamedTextColor.GRAY)
+                    .append(Component.text("Streaming", NamedTextColor.LIGHT_PURPLE, TextDecoration.BOLD)));
+                
+                if (plugin.getApiClient() != null) {
+                    plugin.getApiClient().logStatusChange(uuid.toString(), player.getName(), "streaming", null);
+                }
                 break;
+
             case "none":
-                setStatus(player, "none");
+                data.setStatus("none");
+                plugin.getDataManager().savePlayerData(data);
+                plugin.getTabListManager().updatePlayer(player);
+                player.sendMessage(Component.text("✓ Status cleared", NamedTextColor.GRAY));
+                
+                if (plugin.getApiClient() != null) {
+                    plugin.getApiClient().logStatusChange(uuid.toString(), player.getName(), "status_cleared", null);
+                }
                 break;
+
             default:
-                player.sendMessage(Component.text(plugin.getConfig().getMessage("invalid_status")));
                 sendUsage(player);
                 break;
         }
-    }
 
-    private void setStatus(Player player, String status) {
-        PlayerData data = plugin.getPlayerDataManager().getPlayerData(player.getUniqueId());
-        data.setStatus(status);
-        plugin.getPlayerDataManager().savePlayerData(player.getUniqueId(), data);
-        plugin.getTabListManager().updatePlayer(player);
-
-        String messageKey = "status_" + status;
-        player.sendMessage(Component.text(plugin.getConfig().getMessage(messageKey)));
+        return true;
     }
 
     private void sendUsage(Player player) {
-        player.sendMessage(Component.text("Usage:", NamedTextColor.YELLOW));
-        player.sendMessage(Component.text("  /status recording", NamedTextColor.WHITE)
-            .append(Component.text(" - Set status to Recording (Red ■)", NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("  /status streaming", NamedTextColor.WHITE)
-            .append(Component.text(" - Set status to Streaming (Purple ■)", NamedTextColor.GRAY)));
-        player.sendMessage(Component.text("  /status none", NamedTextColor.WHITE)
-            .append(Component.text(" - Clear status (Grey ■)", NamedTextColor.GRAY)));
+        player.sendMessage(Component.text("Usage: /status <recording|streaming|none>", NamedTextColor.RED));
     }
 }

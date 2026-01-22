@@ -2,129 +2,62 @@ package com.newlifesmp.status;
 
 import org.yaml.snakeyaml.Yaml;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
+import java.util.logging.Logger;
 
 public class StatusConfig {
-    private final Map<String, Object> config;
 
-    public StatusConfig(InputStream configStream) {
-        Yaml yaml = new Yaml();
-        this.config = yaml.load(configStream);
+    private final Path configPath;
+    private final Logger logger;
+
+    private int pvpCooldown;
+    private boolean discordEnabled;
+    private String discordApiUrl;
+    private String discordApiKey;
+
+    public StatusConfig(Path configPath, Logger logger) throws IOException {
+        this.configPath = configPath;
+        this.logger = logger;
+        load();
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> getSection(String path) {
-        String[] parts = path.split("\\.");
-        Map<String, Object> current = config;
-        
-        for (int i = 0; i < parts.length - 1; i++) {
-            Object next = current.get(parts[i]);
-            if (next instanceof Map) {
-                current = (Map<String, Object>) next;
-            } else {
-                return null;
-            }
+    public void load() throws IOException {
+        try (InputStream in = Files.newInputStream(configPath)) {
+            Yaml yaml = new Yaml();
+            Map<String, Object> data = yaml.load(in);
+
+            // PvP settings
+            Map<String, Object> pvp = (Map<String, Object>) data.getOrDefault("pvp", Map.of());
+            this.pvpCooldown = ((Number) pvp.getOrDefault("cooldown", 300)).intValue();
+
+            // Discord settings
+            Map<String, Object> discord = (Map<String, Object>) data.getOrDefault("discord", Map.of());
+            this.discordEnabled = (Boolean) discord.getOrDefault("enabled", false);
+            this.discordApiUrl = (String) discord.getOrDefault("api-url", "http://localhost:3001");
+            this.discordApiKey = (String) discord.getOrDefault("api-key", "");
+
+            logger.info("Configuration loaded - PvP Cooldown: " + pvpCooldown + "s, Discord: " + discordEnabled);
         }
-        
-        return current;
     }
 
-    private Object get(String path, Object defaultValue) {
-        String[] parts = path.split("\\.");
-        Map<String, Object> section = getSection(path);
-        
-        if (section == null) {
-            return defaultValue;
-        }
-        
-        Object value = section.get(parts[parts.length - 1]);
-        return value != null ? value : defaultValue;
+    public int getPvpCooldown() {
+        return pvpCooldown;
     }
 
-    public String getString(String path, String defaultValue) {
-        Object value = get(path, defaultValue);
-        return value != null ? value.toString() : defaultValue;
+    public boolean isDiscordEnabled() {
+        return discordEnabled;
     }
 
-    public int getInt(String path, int defaultValue) {
-        Object value = get(path, defaultValue);
-        if (value instanceof Number) {
-            return ((Number) value).intValue();
-        }
-        return defaultValue;
+    public String getDiscordApiUrl() {
+        return discordApiUrl;
     }
 
-    public double getDouble(String path, double defaultValue) {
-        Object value = get(path, defaultValue);
-        if (value instanceof Number) {
-            return ((Number) value).doubleValue();
-        }
-        return defaultValue;
-    }
-
-    public boolean getBoolean(String path, boolean defaultValue) {
-        Object value = get(path, defaultValue);
-        if (value instanceof Boolean) {
-            return (Boolean) value;
-        }
-        return defaultValue;
-    }
-
-    // API Settings
-    public String getApiUrl() {
-        return getString("api.url", "http://localhost:3000/api/pvp");
-    }
-
-    public String getApiKey() {
-        return getString("api.key", "your-api-key-here");
-    }
-
-    public int getApiTimeout() {
-        return getInt("api.timeout", 5000);
-    }
-
-    // PvP Settings
-    public int getPvpCooldownMinutes() {
-        return getInt("pvp.cooldown_minutes", 5);
-    }
-
-    public double getDamageThreshold() {
-        return getDouble("pvp.damage_threshold", 3.75);
-    }
-
-    // Colors
-    public String getColorPvpOn() {
-        return getString("colors.pvp_on", "§a");
-    }
-
-    public String getColorPvpOff() {
-        return getString("colors.pvp_off", "§7");
-    }
-
-    public String getColorPvpCooldown() {
-        return getString("colors.pvp_cooldown", "§e");
-    }
-
-    public String getColorStatusRecording() {
-        return getString("colors.status_recording", "§c");
-    }
-
-    public String getColorStatusStreaming() {
-        return getString("colors.status_streaming", "§5");
-    }
-
-    public String getColorStatusNone() {
-        return getString("colors.status_none", "§7");
-    }
-
-    // TAB Format
-    public String getTabFormat() {
-        return getString("tab_format", "{player_name} {pvp}{status}");
-    }
-
-    // Messages
-    public String getMessage(String key) {
-        return getString("messages." + key, "§cMessage not configured: " + key);
+    public String getDiscordApiKey() {
+        return discordApiKey;
     }
 }
