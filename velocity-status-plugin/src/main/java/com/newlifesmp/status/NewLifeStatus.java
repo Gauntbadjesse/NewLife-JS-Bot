@@ -3,6 +3,7 @@ package com.newlifesmp.status;
 import com.newlifesmp.status.commands.PvpCommand;
 import com.newlifesmp.status.commands.StatusCommand;
 import com.newlifesmp.status.listeners.PlayerConnectionListener;
+import com.newlifesmp.status.listeners.PlayerDeathListener;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
@@ -68,6 +69,10 @@ public class NewLifeStatus extends JavaPlugin {
             new PlayerConnectionListener(this), 
             this
         );
+        getServer().getPluginManager().registerEvents(
+            new PlayerDeathListener(this),
+            this
+        );
 
         // Start cooldown check task (runs every second)
         this.cooldownTask = Bukkit.getScheduler().runTaskTimer(this, () -> {
@@ -116,6 +121,10 @@ public class NewLifeStatus extends JavaPlugin {
     }
 
     public PlayerDataManager getDataManager() {
+        return dataManager;
+    }
+
+    public PlayerDataManager getPlayerDataManager() {
         return dataManager;
     }
 

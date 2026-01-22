@@ -96,8 +96,11 @@ function createPvpKillEmbed(data) {
     const victimRecording = data.victim.status === 'recording';
     const victimStreaming = data.victim.status === 'streaming';
     
+    // Grey if both have PvP on (consensual), Red if one or both have PvP off
+    const embedColor = consensual ? 0x6b7280 : 0xef4444;
+    
     const embed = new EmbedBuilder()
-        .setColor(consensual ? 0x10b981 : 0xef4444)
+        .setColor(embedColor)
         .setTitle('╔═══════════════════════════════════════╗')
         .setDescription(
             `**║        ⚔️ PVP KILL LOGGED            ║**\n` +

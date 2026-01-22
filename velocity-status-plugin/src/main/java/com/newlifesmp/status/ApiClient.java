@@ -28,13 +28,22 @@ public class ApiClient {
         return CompletableFuture.runAsync(() -> {
             try {
                 JsonObject payload = new JsonObject();
+                payload.addProperty("type", "status_change");
                 payload.addProperty("uuid", uuid);
                 payload.addProperty("username", username);
-                payload.addProperty("type", type);
-                if (metadata != null) {
-                    payload.addProperty("metadata", metadata);
-                }
                 payload.addProperty("timestamp", System.currentTimeMillis());
+                
+                // Map type to enabled boolean for PvP status changes
+                if (type.equals("pvp_enabled")) {
+                    payload.addProperty("enabled", true);
+                } else if (type.equals("pvp_disabled")) {
+                    payload.addProperty("enabled", false);
+                } else if (type.equals("recording") || type.equals("streaming") || type.equals("status_cleared")) {
+                    // For recording/streaming status, store as metadata
+                    payload.addProperty("status", type);
+                    // These don't change PvP enabled state, just indicate status change
+                    payload.addProperty("enabled", false); // Will be ignored by Discord logger for non-PvP changes
+                }
 
                 String endpoint = apiUrl + "/api/pvp/log";
                 logger.info("Sending log to " + endpoint + " - Type: " + type + ", User: " + username);
