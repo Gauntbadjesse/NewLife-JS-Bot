@@ -8,6 +8,8 @@ api:
   key: "yhweiughwiufheowinfdoweihfoweih9832597gr8974tg97fg9h3h49f"
   # Request timeout in milliseconds
   timeout: 5000
+  # Port for the HTTP server that receives kick notifications from Discord bot
+  kick-server-port: 3002
 
 # Messages (supports MiniMessage format)
 # See: https://docs.advntr.dev/minimessage/format.html

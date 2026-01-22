@@ -17,6 +17,7 @@ public class BanConfig {
     private String apiUrl;
     private String apiKey;
     private int timeout;
+    private int kickServerPort;
     private String bannedMessage;
     private String apiErrorMessage;
     private String discordInvite;
@@ -40,6 +41,7 @@ public class BanConfig {
             this.apiUrl = (String) api.getOrDefault("url", "http://localhost:3001");
             this.apiKey = (String) api.getOrDefault("key", "your-secure-api-key-here");
             this.timeout = ((Number) api.getOrDefault("timeout", 5000)).intValue();
+            this.kickServerPort = ((Number) api.getOrDefault("kick-server-port", 3002)).intValue();
 
             // Messages
             Map<String, Object> messages = (Map<String, Object>) data.getOrDefault("messages", Map.of());
@@ -136,5 +138,9 @@ public class BanConfig {
 
     public boolean isDebug() {
         return debug;
+    }
+
+    public int getKickServerPort() {
+        return kickServerPort;
     }
 }

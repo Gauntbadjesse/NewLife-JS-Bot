@@ -1,0 +1,42 @@
+# NewLife PvP & Status Plugin Configuration
+plugin:
+  name: "NewLife Status"
+  version: "1.0.0"
+
+# Discord bot API integration
+api:
+  url: "http://localhost:3000/api/pvp"
+  key: "your-api-key-here"
+  timeout: 5000
+
+# PvP settings
+pvp:
+  cooldown_minutes: 5
+  allow_instant_enable: true
+  block_non_consensual: true
+  damage_threshold: 3.75  # Log after this much damage (in HP)
+
+# TAB list display colors
+colors:
+  pvp_on: "§a"           # Green
+  pvp_off: "§7"          # Grey
+  pvp_cooldown: "§e"     # Yellow
+  status_recording: "§c" # Red
+  status_streaming: "§5" # Purple
+  status_none: "§7"      # Grey
+
+# TAB format: {pvp}{status} {player_name}
+tab_format: "{player_name} {pvp}{status}"
+
+# Player messages
+messages:
+  pvp_enabled: "§a✓ PvP enabled! Your light is now §a■ GREEN"
+  pvp_cooldown_started: "§e⏱ PvP cooldown started. You'll be fully disabled in 5 minutes."
+  pvp_disabled: "§7✓ PvP disabled. Your light is now §7■ GREY"
+  pvp_already_on: "§cYour PvP is already enabled!"
+  pvp_already_off: "§cYour PvP is already disabled!"
+  pvp_cooling_down: "§eYou are already cooling down. Please wait."
+  status_recording: "§c■ Status set to: Recording"
+  status_streaming: "§5■ Status set to: Streaming"
+  status_none: "§7■ Status cleared"
+  invalid_status: "§cInvalid status. Use: recording, streaming, or none"

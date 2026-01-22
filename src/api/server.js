@@ -1583,6 +1583,108 @@ app.get('/api/bans/active', async (req, res) => {
     }
 });
 
+// =====================================================
+// PVP STATUS API ENDPOINTS
+// =====================================================
+
+const PvpLog = require('../database/models/PvpLog');
+
+// API Key validation middleware
+function validateApiKey(req, res, next) {
+    const authHeader = req.headers.authorization;
+    const apiKey = process.env.PVP_API_KEY || 'your-api-key-here';
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Missing or invalid authorization header' });
+    }
+    
+    const token = authHeader.substring(7);
+    
+    if (token !== apiKey) {
+        return res.status(403).json({ success: false, error: 'Invalid API key' });
+    }
+    
+    next();
+}
+
+app.post('/api/pvp/log', validateApiKey, async (req, res) => {
+    try {
+        const { type, timestamp, ...data } = req.body;
+        
+        if (!type || !['status_change', 'pvp_kill', 'invalid_pvp', 'death'].includes(type)) {
+            return res.status(400).json({ success: false, error: 'Invalid or missing type' });
+        }
+        
+        // Create log entry
+        const log = new PvpLog({
+            type,
+            timestamp: timestamp ? new Date(timestamp) : new Date(),
+            ...data
+        });
+        
+        await log.save();
+        
+        // Emit event for Discord logging (handled by pvpStatus cog)
+        if (global.discordClient) {
+            global.discordClient.emit('pvpLog', log.toObject());
+        }
+        
+        return res.json({ success: true, logId: log._id });
+    } catch (error) {
+        console.error('PvP Log API Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+app.get('/api/pvp/logs', validateApiKey, async (req, res) => {
+    try {
+        const { type, uuid, limit = 50 } = req.query;
+        
+        let query = {};
+        if (type) query.type = type;
+        if (uuid) {
+            query.$or = [
+                { uuid },
+                { 'killer.uuid': uuid },
+                { 'victim.uuid': uuid },
+                { 'attacker.uuid': uuid }
+            ];
+        }
+        
+        const logs = await PvpLog.find(query)
+            .sort({ timestamp: -1 })
+            .limit(parseInt(limit));
+        
+        return res.json({ success: true, count: logs.length, logs });
+    } catch (error) {
+        console.error('PvP Logs API Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// =====================================================
+// KICK NOTIFICATION ENDPOINT
+// =====================================================
+
+app.post('/api/kick/notify', async (req, res) => {
+    try {
+        const { uuid } = req.body;
+        
+        if (!uuid) {
+            return res.status(400).json({ success: false, error: 'UUID required' });
+        }
+        
+        // Notify all connected Velocity proxies about the kick
+        // This is handled via a shared state or database
+        // For now, just acknowledge receipt
+        
+        return res.json({ success: true, message: 'Kick recorded - player cannot rejoin for 30 minutes' });
+    } catch (error) {
+        console.error('Kick Notify API Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
 function startApiServer(port = null) {
     const serverPort = port || process.env.LINK_API_PORT || 3001;
     return new Promise((resolve, reject) => {

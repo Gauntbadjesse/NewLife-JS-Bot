@@ -1276,6 +1276,24 @@ const slashCommands = [
 
             await kick.save();
 
+            // Notify Velocity plugin about kick cooldown (30 minutes)
+            try {
+                const response = await fetch('http://localhost:3002/kick', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${process.env.LINK_API_KEY}`
+                    },
+                    body: JSON.stringify({ uuid: primaryProfile.uuid })
+                });
+                
+                if (!response.ok) {
+                    console.error('Failed to notify Velocity about kick cooldown');
+                }
+            } catch (error) {
+                console.error('Error notifying Velocity about kick:', error);
+            }
+
             // Send DM to kicked user
             if (discordId) {
                 await sendKickDm(client, discordId, { 

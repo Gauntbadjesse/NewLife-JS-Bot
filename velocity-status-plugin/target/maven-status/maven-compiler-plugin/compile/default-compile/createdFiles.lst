@@ -1,0 +1,9 @@
+com/newlifesmp/status/StatusConfig.class
+com/newlifesmp/status/commands/StatusCommand.class
+com/newlifesmp/status/NewLifeStatus.class
+com/newlifesmp/status/PlayerDataManager.class
+com/newlifesmp/status/PlayerDataManager$PlayerData.class
+com/newlifesmp/status/listeners/PlayerConnectionListener.class
+com/newlifesmp/status/TabListManager.class
+com/newlifesmp/status/ApiClient.class
+com/newlifesmp/status/commands/PvpCommand.class

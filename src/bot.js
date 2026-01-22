@@ -110,6 +110,9 @@ client.once('ready', async () => {
     console.log(` Slash Commands: ${String(client.slashCommands.size).padEnd(21)} `);
     console.log('\\n');
 
+    // Make client globally available for API integration
+    global.discordClient = client;
+
     // Initialize error logger with client
     initErrorLogger(client);
 
@@ -219,6 +222,14 @@ client.once('ready', async () => {
         console.log('[StaffTracking] Initialized staff tracking system');
     } catch (e) {
         console.error('Failed to initialize staff tracking:', e);
+    }
+
+    // Initialize PvP status logger
+    try {
+        const { initPvpLogger } = require('./cogs/pvpStatus');
+        initPvpLogger(client);
+    } catch (e) {
+        console.error('Failed to initialize PvP logger:', e);
     }
 });
 

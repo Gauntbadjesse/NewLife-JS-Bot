@@ -28,6 +28,8 @@ public class NewLifeBans {
     private final Path dataDirectory;
     private BanConfig config;
     private BanApiClient apiClient;
+    private BanCheckListener banCheckListener;
+    private KickHttpServer kickHttpServer;
 
     @Inject
     public NewLifeBans(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
@@ -60,7 +62,22 @@ public class NewLifeBans {
         );
 
         // Register event listeners
-        server.getEventManager().register(this, new BanCheckListener(this));
+        this.banCheckListener = new BanCheckListener(this);
+        server.getEventManager().register(this, banCheckListener);
+
+        // Start HTTP server for kick notifications
+        try {
+            this.kickHttpServer = new KickHttpServer(
+                config.getKickServerPort(),
+                config.getApiKey(),
+                banCheckListener,
+                logger
+            );
+            kickHttpServer.start();
+        } catch (IOException e) {
+            logger.error("Failed to start kick notification server!", e);
+            logger.warn("Kick cooldowns will not work without the HTTP server.");
+        }
 
         // Register commands
         server.getCommandManager().register(
@@ -77,6 +94,9 @@ public class NewLifeBans {
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
+        if (kickHttpServer != null) {
+            kickHttpServer.stop();
+        }
         logger.info("NewLife Bans disabled.");
     }
 

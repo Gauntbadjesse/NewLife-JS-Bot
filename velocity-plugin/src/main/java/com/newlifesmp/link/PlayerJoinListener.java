@@ -1,6 +1,5 @@
 package com.newlifesmp.link;
 
-import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.ResultedEvent;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.LoginEvent;
@@ -22,7 +21,7 @@ public class PlayerJoinListener {
         this.miniMessage = MiniMessage.miniMessage();
     }
 
-    @Subscribe(order = PostOrder.EARLY)
+    @Subscribe
     public void onPlayerLogin(LoginEvent event) {
         Player player = event.getPlayer();
         String uuid = player.getUniqueId().toString();
