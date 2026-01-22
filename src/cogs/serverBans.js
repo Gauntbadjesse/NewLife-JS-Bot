@@ -1588,14 +1588,26 @@ const slashCommands = [
                 return interaction.editReply({ content: 'Invalid duration format. Use formats like: 10m, 1h, 1d, 7d' });
             }
 
+            // Discord timeout limit is 28 days
+            const MAX_TIMEOUT = 28 * 24 * 60 * 60 * 1000;
+            if (durationParsed.ms > MAX_TIMEOUT) {
+                return interaction.editReply({ 
+                    content: 'Discord timeout duration cannot exceed 28 days. Please use a shorter duration.' 
+                });
+            }
+
             const discordId = targetUser.id;
             const discordTag = targetUser.tag;
 
-            // Check if user is already muted
-            const existingMute = await Mute.getActiveMute(discordId);
-            if (existingMute) {
+            // Check if user is already timed out
+            const member = await interaction.guild.members.fetch(discordId).catch(() => null);
+            if (!member) {
+                return interaction.editReply({ content: `Could not find member in this server.` });
+            }
+
+            if (member.communicationDisabledUntil && member.communicationDisabledUntil > new Date()) {
                 return interaction.editReply({ 
-                    content: `**${discordTag}** is already muted until <t:${Math.floor(existingMute.expiresAt.getTime() / 1000)}:f>` 
+                    content: `**${discordTag}** is already timed out until <t:${Math.floor(member.communicationDisabledUntil.getTime() / 1000)}:f>` 
                 });
             }
 
@@ -1619,19 +1631,12 @@ const slashCommands = [
                 caseNumber = Date.now();
             }
 
-            // Get muted role
-            const mutedRoleId = process.env.MUTED_ROLE_ID;
-            if (!mutedRoleId) {
-                return interaction.editReply({ content: 'Muted role is not configured. Please set MUTED_ROLE_ID in environment.' });
-            }
-
-            // Add muted role to user
+            // Apply Discord timeout
             try {
-                const member = await interaction.guild.members.fetch(discordId);
-                await member.roles.add(mutedRoleId, `Muted by ${interaction.user.tag} - ${reason}`);
+                await member.timeout(durationParsed.ms, `${interaction.user.tag}: ${reason}`);
             } catch (e) {
-                console.error('Failed to add muted role:', e);
-                return interaction.editReply({ content: `Failed to add muted role: ${e.message}` });
+                console.error('Failed to timeout member:', e);
+                return interaction.editReply({ content: `Failed to timeout member: ${e.message}` });
             }
 
             // Create the mute record
@@ -1770,29 +1775,34 @@ const slashCommands = [
             const discordId = targetUser.id;
             const discordTag = targetUser.tag;
 
-            // Check if user has an active mute
+            // Get the member
+            const member = await interaction.guild.members.fetch(discordId).catch(() => null);
+            if (!member) {
+                return interaction.editReply({ content: `Could not find member in this server.` });
+            }
+
+            // Check if user is currently timed out
+            if (!member.communicationDisabledUntil || member.communicationDisabledUntil <= new Date()) {
+                return interaction.editReply({ content: `**${discordTag}** is not currently timed out.` });
+            }
+
+            // Remove timeout
+            try {
+                await member.timeout(null, `Unmuted by ${interaction.user.tag}: ${reason}`);
+            } catch (e) {
+                console.error('Failed to remove timeout:', e);
+                return interaction.editReply({ content: `Failed to remove timeout: ${e.message}` });
+            }
+
+            // Check if there's an active mute record and update it
             const activeMute = await Mute.getActiveMute(discordId);
-            if (!activeMute) {
-                return interaction.editReply({ content: `**${discordTag}** is not currently muted.` });
+            if (activeMute) {
+                activeMute.active = false;
+                activeMute.unmutedAt = new Date();
+                activeMute.unmutedBy = interaction.user.id;
+                activeMute.unmutedByTag = interaction.user.tag;
+                await activeMute.save();
             }
-
-            // Remove muted role
-            const mutedRoleId = process.env.MUTED_ROLE_ID;
-            if (mutedRoleId) {
-                try {
-                    const member = await interaction.guild.members.fetch(discordId);
-                    await member.roles.remove(mutedRoleId, `Unmuted by ${interaction.user.tag} - ${reason}`);
-                } catch (e) {
-                    console.error('Failed to remove muted role:', e);
-                }
-            }
-
-            // Update mute record
-            activeMute.active = false;
-            activeMute.unmutedAt = new Date();
-            activeMute.unmutedBy = interaction.user.id;
-            activeMute.unmutedByTag = interaction.user.tag;
-            await activeMute.save();
 
             // Log to channel
             if (LOG_CHANNEL_ID) {
@@ -1805,10 +1815,13 @@ const slashCommands = [
                             .addFields(
                                 { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
                                 { name: 'Unmuted By', value: interaction.user.tag, inline: true },
-                                { name: 'Reason', value: reason, inline: false },
-                                { name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true }
+                                { name: 'Reason', value: reason, inline: false }
                             )
                             .setTimestamp();
+
+                        if (activeMute) {
+                            logEmbed.addFields({ name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true });
+                        }
 
                         await logChannel.send({ embeds: [logEmbed] });
                     }
@@ -1822,11 +1835,14 @@ const slashCommands = [
                 .setColor(0x00FF00)
                 .addFields(
                     { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
-                    { name: 'Reason', value: reason, inline: false },
-                    { name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true }
+                    { name: 'Reason', value: reason, inline: false }
                 )
                 .setFooter({ text: `Unmuted by ${interaction.user.tag}` })
                 .setTimestamp();
+
+            if (activeMute) {
+                embed.addFields({ name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true });
+            }
 
             return interaction.editReply({ embeds: [embed] });
         }
