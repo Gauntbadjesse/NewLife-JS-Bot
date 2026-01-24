@@ -79,7 +79,7 @@ public class PvpCommand implements CommandExecutor, TabCompleter {
         plugin.getDataManager().savePlayerData(data);
         plugin.getTabListManager().updatePlayer(player);
 
-        player.sendMessage(Component.text("✓ PvP Enabled", NamedTextColor.GREEN, TextDecoration.BOLD)
+        player.sendMessage(Component.text("✓ PvP Enabled", NamedTextColor.GREEN)
             .append(Component.newline())
             .append(Component.text("You can now be attacked by other players", NamedTextColor.GRAY)));
 
@@ -118,7 +118,7 @@ public class PvpCommand implements CommandExecutor, TabCompleter {
         plugin.getDataManager().savePlayerData(data);
         plugin.getTabListManager().updatePlayer(player);
 
-        player.sendMessage(Component.text("⚠ PvP Disabling...", NamedTextColor.YELLOW, TextDecoration.BOLD)
+        player.sendMessage(Component.text("⚠ PvP Disabling...", NamedTextColor.YELLOW)
             .append(Component.newline())
             .append(Component.text("PvP will stay ON for " + plugin.getStatusConfig().getPvpCooldown() + " seconds", NamedTextColor.GRAY))
             .append(Component.newline())
@@ -134,7 +134,7 @@ public class PvpCommand implements CommandExecutor, TabCompleter {
                 
                 if (player.isOnline()) {
                     plugin.getTabListManager().updatePlayer(player);
-                    player.sendMessage(Component.text("✓ PvP is now OFF", NamedTextColor.GREEN, TextDecoration.BOLD)
+                    player.sendMessage(Component.text("✓ PvP is now OFF", NamedTextColor.GREEN)
                         .append(Component.newline())
                         .append(Component.text("You can no longer be attacked", NamedTextColor.GRAY)));
                 }
@@ -164,7 +164,7 @@ public class PvpCommand implements CommandExecutor, TabCompleter {
         NamedTextColor color = data.isPvpEnabled() ? NamedTextColor.GREEN : NamedTextColor.RED;
 
         Component message = Component.text("PvP Status: ", NamedTextColor.GRAY)
-            .append(Component.text(status, color, TextDecoration.BOLD));
+            .append(Component.text(status, color));
 
         if (data.hasPvpCooldown()) {
             long remaining = (data.getPvpCooldownUntil() - System.currentTimeMillis()) / 1000;
@@ -176,7 +176,7 @@ public class PvpCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendInfo(Player player) {
-        player.sendMessage(Component.text("=== PvP Consent System ===", NamedTextColor.GOLD, TextDecoration.BOLD)
+        player.sendMessage(Component.text("=== PvP Consent System ===", NamedTextColor.GOLD)
             .append(Component.newline())
             .append(Component.text("• Players must consent to PvP", NamedTextColor.GRAY))
             .append(Component.newline())

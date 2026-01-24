@@ -15,6 +15,8 @@ public class StatusConfig {
     private final Logger logger;
 
     private int pvpCooldown;
+    private int damageSessionTimeout;
+    private int combatTagDuration;
     private boolean discordEnabled;
     private String discordApiUrl;
     private String discordApiKey;
@@ -35,6 +37,14 @@ public class StatusConfig {
             Map<String, Object> pvp = (Map<String, Object>) data.getOrDefault("pvp", Map.of());
             this.pvpCooldown = ((Number) pvp.getOrDefault("cooldown", 300)).intValue();
 
+            // Damage tracking settings
+            Map<String, Object> damageTracking = (Map<String, Object>) data.getOrDefault("damage-tracking", Map.of());
+            this.damageSessionTimeout = ((Number) damageTracking.getOrDefault("session-timeout", 30)).intValue();
+
+            // Combat logging settings
+            Map<String, Object> combatLog = (Map<String, Object>) data.getOrDefault("combat-logging", Map.of());
+            this.combatTagDuration = ((Number) combatLog.getOrDefault("combat-tag-duration", 15)).intValue();
+
             // Discord settings
             Map<String, Object> discord = (Map<String, Object>) data.getOrDefault("discord", Map.of());
             this.discordEnabled = (Boolean) discord.getOrDefault("enabled", false);
@@ -42,11 +52,20 @@ public class StatusConfig {
             this.discordApiKey = (String) discord.getOrDefault("api-key", "");
 
             logger.info("Configuration loaded - PvP Cooldown: " + pvpCooldown + "s, Discord: " + discordEnabled);
+            logger.info("Damage Session Timeout: " + damageSessionTimeout + "s, Combat Tag: " + combatTagDuration + "s");
         }
     }
 
     public int getPvpCooldown() {
         return pvpCooldown;
+    }
+
+    public int getDamageSessionTimeout() {
+        return damageSessionTimeout;
+    }
+
+    public int getCombatTagDuration() {
+        return combatTagDuration;
     }
 
     public boolean isDiscordEnabled() {

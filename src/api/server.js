@@ -1611,7 +1611,7 @@ app.post('/api/pvp/log', validateApiKey, async (req, res) => {
     try {
         const { type, timestamp, ...data } = req.body;
         
-        if (!type || !['status_change', 'pvp_kill', 'invalid_pvp', 'death'].includes(type)) {
+        if (!type || !['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'combat_log'].includes(type)) {
             return res.status(400).json({ success: false, error: 'Invalid or missing type' });
         }
         
@@ -1632,6 +1632,66 @@ app.post('/api/pvp/log', validateApiKey, async (req, res) => {
         return res.json({ success: true, logId: log._id });
     } catch (error) {
         console.error('PvP Log API Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// Additional endpoints for new log types
+app.post('/api/pvp/damage-session', validateApiKey, async (req, res) => {
+    try {
+        const logData = { type: 'pvp_damage_session', ...req.body };
+        const log = new PvpLog(logData);
+        await log.save();
+        
+        if (global.discordClient) {
+            global.discordClient.emit('pvpLog', log.toObject());
+        }
+        
+        return res.json({ success: true, logId: log._id });
+    } catch (error) {
+        console.error('Damage Session Log Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+app.post('/api/pvp/combat-log', validateApiKey, async (req, res) => {
+    try {
+        const logData = { type: 'combat_log', ...req.body };
+        const log = new PvpLog(logData);
+        await log.save();
+        
+        if (global.discordClient) {
+            global.discordClient.emit('pvpLog', log.toObject());
+        }
+        
+        return res.json({ success: true, logId: log._id });
+    } catch (error) {
+        console.error('Combat Log Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+app.post('/api/pvp/send-dm', validateApiKey, async (req, res) => {
+    try {
+        const { minecraft_uuid, minecraft_username, message } = req.body;
+        
+        if (!minecraft_uuid || !message) {
+            return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+        
+        // Emit event for DM sending (handled by dmService or similar)
+        if (global.discordClient) {
+            global.discordClient.emit('sendMinecraftDM', {
+                minecraft_uuid,
+                minecraft_username,
+                message,
+                type: 'combat_log'
+            });
+        }
+        
+        return res.json({ success: true, message: 'DM request queued' });
+    } catch (error) {
+        console.error('Send DM Error:', error);
         return res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });

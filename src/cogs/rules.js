@@ -19,7 +19,7 @@ const commands = {
                 .setColor(getEmbedColor())
                 .setTitle('NewLife SMP — Rules Quiz')
                 .setDescription([
-                    '1. PvP Consent\nWhat are the required elements for valid PvP consent on NewLife SMP, and how long does that consent remain valid?',
+                    '1. PVP\nWhat do you have to do to participate in PvP on NewLife SMP, and how long does that consent last?',
                     '2. Property Claims\nWhat four pieces of information must be written on the sign and mailbox for a property claim to be considered valid?',
                     '3. Griefing Enforcement\nWhat are the automatic consequences for griefing another player’s build or property on NewLife SMP?',
                     '4. Theft Rules\nUnder what conditions is harvesting or taking items considered theft on NewLife SMP, and how do private vs. unmarked farms or builds affect this?',

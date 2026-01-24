@@ -2,7 +2,9 @@ package com.newlifesmp.status;
 
 import com.newlifesmp.status.commands.PvpCommand;
 import com.newlifesmp.status.commands.StatusCommand;
+import com.newlifesmp.status.listeners.CombatLogListener;
 import com.newlifesmp.status.listeners.PlayerConnectionListener;
+import com.newlifesmp.status.listeners.PlayerDamageListener;
 import com.newlifesmp.status.listeners.PlayerDeathListener;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -19,6 +21,8 @@ public class NewLifeStatus extends JavaPlugin {
     private PlayerDataManager dataManager;
     private TabListManager tabListManager;
     private ApiClient apiClient;
+    private DamageTracker damageTracker;
+    private CombatLogListener combatLogListener;
     private BukkitTask cooldownTask;
 
     @Override
@@ -55,6 +59,14 @@ public class NewLifeStatus extends JavaPlugin {
             getLogger().info("Discord logging disabled");
         }
 
+        // Initialize damage tracker
+        this.damageTracker = new DamageTracker(this, config.getDamageSessionTimeout());
+        getLogger().info("Damage tracker initialized (timeout: " + config.getDamageSessionTimeout() + "s)");
+
+        // Initialize combat log listener
+        this.combatLogListener = new CombatLogListener(this, config.getCombatTagDuration());
+        getLogger().info("Combat logging system initialized (tag duration: " + config.getCombatTagDuration() + "s)");
+
         // Register commands
         PvpCommand pvpCommand = new PvpCommand(this);
         getCommand("pvp").setExecutor(pvpCommand);
@@ -71,6 +83,14 @@ public class NewLifeStatus extends JavaPlugin {
         );
         getServer().getPluginManager().registerEvents(
             new PlayerDeathListener(this),
+            this
+        );
+        getServer().getPluginManager().registerEvents(
+            new PlayerDamageListener(this),
+            this
+        );
+        getServer().getPluginManager().registerEvents(
+            combatLogListener,
             this
         );
 
@@ -134,5 +154,13 @@ public class NewLifeStatus extends JavaPlugin {
 
     public ApiClient getApiClient() {
         return apiClient;
+    }
+
+    public DamageTracker getDamageTracker() {
+        return damageTracker;
+    }
+
+    public CombatLogListener getCombatLogListener() {
+        return combatLogListener;
     }
 }

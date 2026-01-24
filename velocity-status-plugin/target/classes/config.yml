@@ -5,27 +5,22 @@ pvp:
   # Cooldown in seconds (how long PvP stays ON before turning OFF)
   cooldown: 300
 
-# Discord Integration
-discord:
-  enabled: true
-  api-url: "http://193.218.34.214:3001"
-  api-key: "yhweiughwiufheowinfdoweihfoweih9832597gr8974tg97fg9h3h49f"
-  pvp_on: "§a"           # Green
-  pvp_off: "§7"          # Grey
-  pvp_cooldown: "§e"     # Yellow
-  status_recording: "§c" # Red
-  status_streaming: "§5" # Purple
-  status_none: "§7"      # Grey
+# Damage tracking settings
+damage-tracking:
+  # Session timeout in seconds (how long to wait after last hit before logging the session)
+  # Default: 30 seconds - logs all damage between players after 30s of no new damage
+  session-timeout: 30
 
-# NewLife PvP & Status Plugin Configuration
-
-# PvP settings
-pvp:
-  # Cooldown in seconds (how long PvP stays ON before turning OFF)
-  cooldown: 300
+# Combat logging settings
+combat-logging:
+  # Combat tag duration in seconds (how long players stay tagged after taking/dealing damage)
+  # If a player with PvP enabled logs out while combat tagged, they will be killed
+  # Default: 15 seconds
+  combat-tag-duration: 15
 
 # Discord Integration
 discord:
   enabled: true
   api-url: "http://193.218.34.214:3001"
   api-key: "yhweiughwiufheowinfdoweihfoweih9832597gr8974tg97fg9h3h49f"
+

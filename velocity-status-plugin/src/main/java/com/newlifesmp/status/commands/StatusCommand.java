@@ -52,7 +52,14 @@ public class StatusCommand implements CommandExecutor, TabCompleter {
                 plugin.getDataManager().savePlayerData(data);
                 plugin.getTabListManager().updatePlayer(player);
                 player.sendMessage(Component.text("✓ Status: ", NamedTextColor.GRAY)
-                    .append(Component.text("Recording", NamedTextColor.RED, TextDecoration.BOLD)));
+                    .append(Component.text("Recording", NamedTextColor.RED)));
+                
+                // Broadcast to server
+                plugin.getServer().broadcast(
+                    Component.text("🔴 ", NamedTextColor.RED)
+                        .append(Component.text(player.getName(), NamedTextColor.WHITE))
+                        .append(Component.text(" is now recording!", NamedTextColor.GRAY))
+                );
                 
                 if (plugin.getApiClient() != null) {
                     plugin.getApiClient().logStatusChange(uuid.toString(), player.getName(), "recording", null);
@@ -64,7 +71,14 @@ public class StatusCommand implements CommandExecutor, TabCompleter {
                 plugin.getDataManager().savePlayerData(data);
                 plugin.getTabListManager().updatePlayer(player);
                 player.sendMessage(Component.text("✓ Status: ", NamedTextColor.GRAY)
-                    .append(Component.text("Streaming", NamedTextColor.LIGHT_PURPLE, TextDecoration.BOLD)));
+                    .append(Component.text("Streaming", NamedTextColor.LIGHT_PURPLE)));
+                
+                // Broadcast to server
+                plugin.getServer().broadcast(
+                    Component.text("🟪 ", NamedTextColor.LIGHT_PURPLE)
+                        .append(Component.text(player.getName(), NamedTextColor.WHITE))
+                        .append(Component.text(" is now streaming!", NamedTextColor.GRAY))
+                );
                 
                 if (plugin.getApiClient() != null) {
                     plugin.getApiClient().logStatusChange(uuid.toString(), player.getName(), "streaming", null);

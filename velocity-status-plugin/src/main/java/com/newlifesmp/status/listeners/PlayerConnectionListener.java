@@ -30,7 +30,39 @@ public class PlayerConnectionListener implements Listener {
             plugin.getDataManager().savePlayerData(data);
             plugin.getLogger().info("Created new player data for " + player.getName());
         } else {
-            plugin.getLogger().info("Loaded player data for " + player.getName());
+            plugin.getLogger().info("Loaded player data for " + player.getName() + 
+                " (PvP: " + data.isPvpEnabled() + ", Status: " + data.getStatus() + 
+                ", Cooldown: " + (data.hasPvpCooldown() ? "active" : "none") + ")");
+            
+            // If player has an active cooldown, schedule task to complete it
+            if (data.hasPvpCooldown()) {
+                long remainingMs = data.getPvpCooldownUntil() - System.currentTimeMillis();
+                if (remainingMs > 0) {
+                    long remainingSec = remainingMs / 1000;
+                    plugin.getLogger().info("Restoring PvP cooldown for " + player.getName() + 
+                        " (" + remainingSec + " seconds remaining)");
+                    
+                    // Schedule the cooldown completion task
+                    plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                        PlayerDataManager.PlayerData currentData = plugin.getDataManager().getPlayerData(uuid);
+                        if (currentData != null && currentData.hasPvpCooldown()) {
+                            currentData.setPvpEnabled(false);
+                            currentData.setPvpCooldownUntil(0);
+                            plugin.getDataManager().savePlayerData(currentData);
+                            
+                            if (player.isOnline()) {
+                                plugin.getTabListManager().updatePlayer(player);
+                                player.sendMessage(net.kyori.adventure.text.Component.text("✓ Your PvP has been turned off after the cooldown period.", net.kyori.adventure.text.format.NamedTextColor.GREEN));
+                            }
+                        }
+                    }, remainingMs / 50); // Convert milliseconds to ticks (1 tick = 50ms)
+                } else {
+                    // Cooldown already expired while offline, disable PvP immediately
+                    data.setPvpEnabled(false);
+                    data.setPvpCooldownUntil(0);
+                    plugin.getDataManager().savePlayerData(data);
+                }
+            }
         }
 
         // Update TAB list
@@ -39,7 +71,22 @@ public class PlayerConnectionListener implements Listener {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        // Player data is already saved, just log
-        plugin.getLogger().info("Player " + event.getPlayer().getName() + " disconnected");
+        Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+        
+        // Ensure latest data is saved before disconnect
+        PlayerDataManager.PlayerData data = plugin.getDataManager().getPlayerData(uuid);
+        if (data != null) {
+            plugin.getDataManager().savePlayerData(data);
+            
+            if (data.hasPvpCooldown()) {
+                long remainingSec = (data.getPvpCooldownUntil() - System.currentTimeMillis()) / 1000;
+                plugin.getLogger().info("Player " + player.getName() + " disconnected with " + 
+                    remainingSec + " seconds of PvP cooldown remaining");
+            } else {
+                plugin.getLogger().info("Player " + player.getName() + " disconnected (PvP: " + 
+                    data.isPvpEnabled() + ", Status: " + data.getStatus() + ")");
+            }
+        }
     }
 }

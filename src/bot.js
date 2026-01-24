@@ -231,6 +231,41 @@ client.once('ready', async () => {
     } catch (e) {
         console.error('Failed to initialize PvP logger:', e);
     }
+
+    // Initialize Minecraft DM handler
+    try {
+        const LinkedAccount = require('./database/models/LinkedAccount');
+        const { sendDm } = require('./utils/dm');
+
+        client.on('sendMinecraftDM', async (data) => {
+            try {
+                const { minecraft_uuid, minecraft_username, message, type } = data;
+                
+                console.log(`[MinecraftDM] Attempting to send ${type} DM to ${minecraft_username} (${minecraft_uuid})`);
+                
+                // Find linked Discord account
+                const linkedAccount = await LinkedAccount.findOne({ minecraftUuid: minecraft_uuid });
+                
+                if (!linkedAccount) {
+                    console.log(`[MinecraftDM] No linked account found for ${minecraft_username}`);
+                    return;
+                }
+                
+                // Send DM to Discord user
+                await sendDm(client, linkedAccount.discordId, {
+                    content: message
+                });
+                
+                console.log(`[MinecraftDM] Successfully sent ${type} DM to ${minecraft_username}`);
+            } catch (error) {
+                console.error('[MinecraftDM] Error sending DM:', error);
+            }
+        });
+        
+        console.log('[MinecraftDM] Initialized Minecraft DM handler');
+    } catch (e) {
+        console.error('Failed to initialize Minecraft DM handler:', e);
+    }
 });
 
 /**

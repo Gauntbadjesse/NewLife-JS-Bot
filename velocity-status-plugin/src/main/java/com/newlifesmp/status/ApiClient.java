@@ -75,4 +75,43 @@ public class ApiClient {
             }
         });
     }
+
+    /**
+     * Send a generic log to the Discord API
+     * @param endpoint The API endpoint (e.g., "pvp/damage-session" or "pvp/combat-log")
+     * @param payload The JSON payload to send
+     */
+    public CompletableFuture<Void> sendLog(String endpoint, JsonObject payload) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                String fullEndpoint = apiUrl + "/api/" + endpoint;
+                logger.info("Sending log to " + fullEndpoint);
+                
+                HttpURLConnection conn = (HttpURLConnection) URI.create(fullEndpoint).toURL().openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+
+                try (OutputStream os = conn.getOutputStream()) {
+                    byte[] input = gson.toJson(payload).getBytes(StandardCharsets.UTF_8);
+                    os.write(input, 0, input.length);
+                }
+
+                int responseCode = conn.getResponseCode();
+                if (responseCode == 200 || responseCode == 201) {
+                    logger.info("✓ Successfully logged to Discord: " + endpoint);
+                } else {
+                    logger.warning("✗ Discord API returned " + responseCode + " for " + endpoint);
+                }
+
+                conn.disconnect();
+            } catch (Exception e) {
+                logger.warning("✗ Failed to log to Discord API: " + e.getMessage());
+                e.printStackTrace();
+            }
+        });
+    }
 }

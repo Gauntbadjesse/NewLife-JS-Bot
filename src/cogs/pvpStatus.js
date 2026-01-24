@@ -53,6 +53,12 @@ async function handlePvpLog(client, logData) {
         case 'death':
             embed = createDeathEmbed(logData);
             break;
+        case 'pvp_damage_session':
+            embed = createDamageSessionEmbed(logData);
+            break;
+        case 'combat_log':
+            embed = createCombatLogEmbed(logData);
+            break;
         default:
             console.warn('[PvP Logger] Unknown log type:', logData.type);
             return;
@@ -163,6 +169,75 @@ function createDeathEmbed(data) {
         )
         .setTimestamp(new Date(data.timestamp))
         .setFooter({ text: 'NewLife PvP' });
+    
+    return embed;
+}
+
+/**
+ * Create embed for damage session
+ */
+function createDamageSessionEmbed(data) {
+    const { player1, player2, total_hits, total_damage, duration_ms, damage_events } = data;
+    
+    // Only log if at least one player had PvP disabled
+    const bothPvpEnabled = player1.pvp_enabled && player2.pvp_enabled;
+    const embedColor = bothPvpEnabled ? 0x6b7280 : 0xef4444;
+    
+    const durationSeconds = (duration_ms / 1000).toFixed(1);
+    
+    const embed = new EmbedBuilder()
+        .setColor(embedColor)
+        .setTitle('╔═══════════════════════════════════════╗')
+        .setDescription(
+            `**║     ⚔️ PVP DAMAGE SESSION            ║**\n` +
+            `**╠═══════════════════════════════════════╣**\n` +
+            `**║** Player 1: **${player1.username}** ${player1.pvp_enabled ? '🟩' : '⬜'}            **║**\n` +
+            `**║** • Dealt: **${player1.damage_dealt.toFixed(1)} HP** (**${player1.hits_dealt}** hits)    **║**\n` +
+            `**║**                                        **║**\n` +
+            `**║** Player 2: **${player2.username}** ${player2.pvp_enabled ? '🟩' : '⬜'}            **║**\n` +
+            `**║** • Dealt: **${player2.damage_dealt.toFixed(1)} HP** (**${player2.hits_dealt}** hits)    **║**\n` +
+            `**║**                                        **║**\n` +
+            `**║** Total Damage: **${total_damage.toFixed(1)} HP**             **║**\n` +
+            `**║** Total Hits: **${total_hits}**                      **║**\n` +
+            `**║** Duration: **${durationSeconds}s**                       **║**\n` +
+            `**║** Consensual: ${bothPvpEnabled ? '✅ YES' : '❌ NO'}                    **║**\n` +
+            `**╚═══════════════════════════════════════╝**`
+        )
+        .addFields(
+            { name: 'Player 1 UUID', value: `\`${player1.uuid}\``, inline: false },
+            { name: 'Player 2 UUID', value: `\`${player2.uuid}\``, inline: false }
+        )
+        .setTimestamp(new Date(data.timestamp))
+        .setFooter({ text: `NewLife PvP • ${total_hits} hits in ${durationSeconds}s` });
+    
+    return embed;
+}
+
+/**
+ * Create embed for combat log
+ */
+function createCombatLogEmbed(data) {
+    const { player, location } = data;
+    
+    const embed = new EmbedBuilder()
+        .setColor(0xdc2626)
+        .setTitle('╔═══════════════════════════════════════╗')
+        .setDescription(
+            `**║     ☠️ COMBAT LOG DETECTED          ║**\n` +
+            `**╠═══════════════════════════════════════╣**\n` +
+            `**║** Player: **${player.username}** 🟩                  **║**\n` +
+            `**║** Action: Logged out during combat     **║**\n` +
+            `**║** Status: Player killed & items dropped **║**\n` +
+            `**║** PvP: Enabled at disconnect           **║**\n` +
+            `**╚═══════════════════════════════════════╝**`
+        )
+        .addFields(
+            { name: 'Player UUID', value: `\`${player.uuid}\``, inline: false },
+            { name: 'Location', value: `\`${location.world}\` (${location.x.toFixed(0)}, ${location.y.toFixed(0)}, ${location.z.toFixed(0)})`, inline: false },
+            { name: '⚠️ Action Taken', value: 'Player was killed before disconnect. Items dropped at logout location. Player has been notified via DM.', inline: false }
+        )
+        .setTimestamp(new Date(data.timestamp))
+        .setFooter({ text: 'NewLife PvP • Combat Logging Prevention' });
     
     return embed;
 }
