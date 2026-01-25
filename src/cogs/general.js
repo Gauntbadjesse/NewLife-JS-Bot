@@ -146,6 +146,7 @@ const commands = {
                     `\`${prefix}forcelink <@user> <platform> <mc>\` - Force link`,
                     `\`${prefix}postverify [channel]\` - Post the verification embed`,
                     `\`${prefix}memberupdate\` - Update the member counter`,
+                    `\`${prefix}nlp @user\` - Grant NewLife+ premium membership`,
                     `\`/kingdom create/delete/list\` - Kingdom management`,
                     `\`/reactionroles\` - Reaction role management`,
                     `\`/emojirole\` - Emoji reaction roles`,
@@ -432,6 +433,108 @@ const commands = {
                 content: null,
                 embeds: [embed]
             });
+        }
+    },
+
+    // !nlp - Grant NewLife+ role and send welcome DM (Admin only)
+    nlp: {
+        name: 'nlp',
+        description: 'Grant NewLife+ premium membership to a user (Admin only)',
+        usage: '!nlp @user',
+        async execute(message, args, client) {
+            if (!isAdmin(message.member)) {
+                return message.reply({ 
+                    embeds: [createErrorEmbed('Permission Denied', 'You do not have permission to use this command.')], 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            const target = message.mentions.users.first() || (args[0] ? await client.users.fetch(args[0]).catch(() => null) : null);
+            if (!target) {
+                return message.reply({ 
+                    embeds: [createErrorEmbed('Missing User', 'Please mention a user to grant NewLife+ to.\n\nUsage: `!nlp @user`')], 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            const PREMIUM_ROLE_ID = '1463405789241802895';
+            const guild = message.guild;
+            
+            // Get the member
+            const member = await guild.members.fetch(target.id).catch(() => null);
+            if (!member) {
+                return message.reply({ 
+                    embeds: [createErrorEmbed('User Not Found', 'Could not find that user in the server.')], 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            // Check if they already have the role
+            if (member.roles.cache.has(PREMIUM_ROLE_ID)) {
+                return message.reply({ 
+                    embeds: [createErrorEmbed('Already Premium', `${target} already has NewLife+.`)], 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
+
+            try {
+                // Grant the role
+                await member.roles.add(PREMIUM_ROLE_ID, `NewLife+ granted by ${message.author.tag}`);
+
+                // Send welcome DM with perks explanation
+                const { sendDm } = require('../utils/dm');
+                const welcomeEmbed = new EmbedBuilder()
+                    .setColor(0xFFD700)
+                    .setTitle('🌟  Welcome to NewLife+')
+                    .setDescription('Thank you for supporting NewLife SMP!\\nYou now have access to exclusive premium perks.')
+                    .addFields(
+                        { 
+                            name: '🎨  Custom Role', 
+                            value: 'Create your own role with a custom name, color, and emoji.\\n`/customrole create <name> [color] [emoji]`', 
+                            inline: false 
+                        },
+                        { 
+                            name: '⭐  Priority Support', 
+                            value: 'Your tickets are highlighted and marked as priority for faster responses.', 
+                            inline: false 
+                        },
+                        { 
+                            name: '🎁  2x Giveaway Entries', 
+                            value: 'Double your chances in all server giveaways automatically.', 
+                            inline: false 
+                        },
+                        { 
+                            name: '🎤  Soundboard Access', 
+                            value: 'Use soundboard and external sounds in your temporary voice channels.', 
+                            inline: false 
+                        }
+                    )
+                    .setFooter({ text: 'NewLife+ • Premium Membership' })
+                    .setTimestamp();
+
+                const dmResult = await sendDm(client, target.id, { embeds: [welcomeEmbed] });
+
+                // Success response
+                const successEmbed = new EmbedBuilder()
+                    .setColor(0x57F287)
+                    .setTitle('✅  NewLife+ Granted')
+                    .setDescription(`<@${target.id}> is now a NewLife+ member!`)
+                    .addFields(
+                        { name: '👤  User', value: target.tag, inline: true },
+                        { name: '👮  Granted By', value: message.author.tag, inline: true },
+                        { name: '📬  DM', value: dmResult.success ? '✅ Sent' : '❌ Failed', inline: true }
+                    )
+                    .setFooter({ text: 'NewLife+ • Premium Membership' })
+                    .setTimestamp();
+
+                return message.reply({ embeds: [successEmbed], allowedMentions: { repliedUser: false } });
+            } catch (error) {
+                console.error('[NLP] Error granting role:', error);
+                return message.reply({ 
+                    embeds: [createErrorEmbed('Error', `Failed to grant NewLife+: ${error.message}`)], 
+                    allowedMentions: { repliedUser: false } 
+                });
+            }
         }
     },
 

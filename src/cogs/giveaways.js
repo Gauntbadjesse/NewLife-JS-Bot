@@ -13,6 +13,9 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 const mongoose = require('mongoose');
 const { isOwner } = require('../utils/permissions');
 
+// Premium role ID - gets double entries in giveaways
+const PREMIUM_ROLE_ID = '1463405789241802895';
+
 // Giveaway schema
 const giveawaySchema = new mongoose.Schema({
     guildId: { type: String, required: true },
@@ -137,17 +140,39 @@ function createGiveawayButtons(giveawayId, ended = false) {
 
 /**
  * Pick random winners from participants
+ * Handles bonus entries (userId_bonus) by mapping back to real user IDs
  */
 function pickWinners(participants, count) {
     if (participants.length === 0) return [];
-    if (participants.length <= count) return [...participants];
+    if (participants.length <= count) {
+        // Deduplicate - bonus entries should map to same user
+        const uniqueUsers = [...new Set(participants.map(p => p.replace('_bonus', '')))];
+        return uniqueUsers.slice(0, count);
+    }
     
     const winners = [];
     const available = [...participants];
+    const wonUsers = new Set(); // Track users who already won (to avoid same user winning twice)
     
-    for (let i = 0; i < count && available.length > 0; i++) {
+    while (winners.length < count && available.length > 0) {
         const index = Math.floor(Math.random() * available.length);
-        winners.push(available.splice(index, 1)[0]);
+        const entry = available.splice(index, 1)[0];
+        
+        // Map bonus entry back to real user ID
+        const userId = entry.replace('_bonus', '');
+        
+        // Only add if this user hasn't already won
+        if (!wonUsers.has(userId)) {
+            winners.push(userId);
+            wonUsers.add(userId);
+            
+            // Also remove any other entries from this user (bonus or regular)
+            for (let i = available.length - 1; i >= 0; i--) {
+                if (available[i].replace('_bonus', '') === userId) {
+                    available.splice(i, 1);
+                }
+            }
+        }
     }
     
     return winners;
@@ -531,19 +556,24 @@ async function handleGiveawayButton(interaction, client) {
             const member = interaction.member;
             if (!member.roles.cache.has(giveaway.requiredRole)) {
                 return interaction.reply({ 
-                    content: `You need the <@&${giveaway.requiredRole}> role to enter this giveaway.`, 
+                    content: `🔒 You need <@&${giveaway.requiredRole}> to enter this giveaway.`, 
                     ephemeral: true 
                 });
             }
         }
 
         const userId = interaction.user.id;
+        const member = interaction.member;
+        const isPremium = member && member.roles && member.roles.cache.has(PREMIUM_ROLE_ID);
+        
+        // Check if user already entered (check for their base entry)
         const alreadyEntered = giveaway.participants?.includes(userId);
 
         if (alreadyEntered) {
-            // Remove entry
+            // Remove all entries for this user (including bonus entries)
+            const entriesToRemove = isPremium ? [userId, `${userId}_bonus`] : [userId];
             await Giveaway.findByIdAndUpdate(giveawayId, {
-                $pull: { participants: userId }
+                $pull: { participants: { $in: entriesToRemove } }
             });
 
             // Update embed with new count
@@ -553,13 +583,14 @@ async function handleGiveawayButton(interaction, client) {
             await interaction.message.edit({ embeds: [embed], components: [buttons] });
 
             return interaction.reply({ 
-                content: 'You have left the giveaway.', 
+                content: '👋 You\'ve left the giveaway.', 
                 ephemeral: true 
             });
         } else {
-            // Add entry
+            // Add entry (premium members get double entries)
+            const entries = isPremium ? [userId, `${userId}_bonus`] : [userId];
             await Giveaway.findByIdAndUpdate(giveawayId, {
-                $addToSet: { participants: userId }
+                $addToSet: { participants: { $each: entries } }
             });
 
             // Update embed with new count
@@ -568,14 +599,15 @@ async function handleGiveawayButton(interaction, client) {
             const buttons = createGiveawayButtons(giveawayId);
             await interaction.message.edit({ embeds: [embed], components: [buttons] });
 
+            const premiumBonus = isPremium ? '\\n\\n⭐ **NewLife+ Bonus** — You have **2x entries**!' : '';
             return interaction.reply({ 
-                content: 'You have entered the giveaway! Good luck!', 
+                content: `🎉 You're in! Good luck!${premiumBonus}`, 
                 ephemeral: true 
             });
         }
     } catch (e) {
         console.error('[Giveaways] Button error:', e);
-        return interaction.reply({ content: 'An error occurred.', ephemeral: true });
+        return interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
     }
 }
 

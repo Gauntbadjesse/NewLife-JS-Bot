@@ -44,6 +44,16 @@ const WHITELIST_GURU_ROLE_ID = process.env.WHITELIST_GURU_ROLE_ID || '1456563910
 // Apply ticket category ID
 const APPLY_CATEGORY_ID = process.env.APPLY_CATEGORY_ID || '1437529831398047755';
 
+// Premium role ID - gets priority tickets
+const PREMIUM_ROLE_ID = '1463405789241802895';
+
+/**
+ * Check if a member has premium role
+ */
+function hasPremiumRole(member) {
+    return member && member.roles && member.roles.cache.has(PREMIUM_ROLE_ID);
+}
+
 // Store ticket creation times for guru tracking (ticket channel ID -> timestamp)
 const ticketCreationTimes = new Map();
 
@@ -412,15 +422,20 @@ async function createTicket(interaction, type) {
         // Build the combined ticket embed based on type
         let ticketEmbed;
 
+        // Check if user has premium role for priority
+        const member = guild.members.cache.get(user.id) || await guild.members.fetch(user.id).catch(() => null);
+        const isPremium = member && hasPremiumRole(member);
+        const priorityTag = isPremium ? '⭐ PRIORITY' : '';
+
         if (type === 'general') {
             ticketEmbed = new EmbedBuilder()
-                .setColor(0x3498DB)
-                .setTitle('General Support Ticket')
-                .setDescription(`Welcome ${user}\n\nThank you for reaching out. A staff member will assist you shortly.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+                .setColor(isPremium ? 0xFFD700 : 0x3498DB)
+                .setTitle(`${isPremium ? '⭐ ' : ''}General Support Ticket${isPremium ? ' (Priority)' : ''}`)
+                .setDescription(`Welcome ${user}\n\n${isPremium ? '**🌟 Premium Member - Priority Support**\n\n' : ''}Thank you for reaching out. A staff member will assist you shortly.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
                 .addFields(
                     { name: 'Ticket Type', value: 'General Support', inline: true },
                     { name: 'Created By', value: user.tag, inline: true },
-                    { name: 'Status', value: 'Open', inline: true },
+                    { name: 'Status', value: isPremium ? '⭐ Priority' : 'Open', inline: true },
                     { name: '\u200B', value: '**Please Provide the Following Information:**', inline: false },
                     { name: 'What is your question or concern?', value: 'Please provide as much detail as possible.', inline: false },
                     { name: 'Is this urgent?', value: 'Let us know if this requires immediate attention.', inline: false }
@@ -430,13 +445,13 @@ async function createTicket(interaction, type) {
 
         } else if (type === 'report') {
             ticketEmbed = new EmbedBuilder()
-                .setColor(0xE74C3C)
-                .setTitle('Player Report Ticket')
-                .setDescription(`Welcome ${user}\n\nThank you for your report. Our moderation team will review this promptly.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+                .setColor(isPremium ? 0xFFD700 : 0xE74C3C)
+                .setTitle(`${isPremium ? '⭐ ' : ''}Player Report Ticket${isPremium ? ' (Priority)' : ''}`)
+                .setDescription(`Welcome ${user}\n\n${isPremium ? '**🌟 Premium Member - Priority Support**\n\n' : ''}Thank you for your report. Our moderation team will review this promptly.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
                 .addFields(
                     { name: 'Ticket Type', value: 'Player Report', inline: true },
                     { name: 'Created By', value: user.tag, inline: true },
-                    { name: 'Status', value: 'Under Review', inline: true },
+                    { name: 'Status', value: isPremium ? '⭐ Priority Review' : 'Under Review', inline: true },
                     { name: '\u200B', value: '**Please Provide the Following Information:**', inline: false },
                     { name: '1. Player Username', value: 'Who are you reporting?', inline: false },
                     { name: '2. Rule Violation', value: 'What rule(s) did they break?', inline: false },
@@ -448,13 +463,13 @@ async function createTicket(interaction, type) {
 
         } else if (type === 'management') {
             ticketEmbed = new EmbedBuilder()
-                .setColor(0x9B59B6)
-                .setTitle('Management Ticket')
-                .setDescription(`Welcome ${user}\n\nThis ticket is visible only to supervisors and management.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+                .setColor(isPremium ? 0xFFD700 : 0x9B59B6)
+                .setTitle(`${isPremium ? '⭐ ' : ''}Management Ticket${isPremium ? ' (Priority)' : ''}`)
+                .setDescription(`Welcome ${user}\n\n${isPremium ? '**🌟 Premium Member - Priority Support**\n\n' : ''}This ticket is visible only to supervisors and management.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
                 .addFields(
                     { name: 'Ticket Type', value: 'Management', inline: true },
                     { name: 'Created By', value: user.tag, inline: true },
-                    { name: 'Status', value: 'Confidential', inline: true },
+                    { name: 'Status', value: isPremium ? '⭐ Priority' : 'Confidential', inline: true },
                     { name: '\u200B', value: '**Please Provide the Following Information:**', inline: false },
                     { name: '1. Subject', value: 'What is the topic of this inquiry?', inline: false },
                     { name: '2. Details', value: 'Please explain your concern or request in full.', inline: false },

@@ -6,10 +6,77 @@
 const { EmbedBuilder } = require('discord.js');
 const emojis = require('./emojis');
 
+// Premium role ID for custom embed colors
+const PREMIUM_ROLE_ID = '1463405789241802895';
+
 // Get embed color from environment or use default
 const getEmbedColor = () => {
     const color = process.env.EMBED_COLOR || '#2B2D31';
     return parseInt(color.replace('#', ''), 16);
+};
+
+/**
+ * Get embed color for a member - uses their custom role color if premium
+ * @param {GuildMember} member - Discord guild member
+ * @returns {number} Color as integer
+ */
+const getMemberEmbedColor = async (member) => {
+    if (!member) return getEmbedColor();
+    
+    // Check if member has premium role
+    if (!member.roles || !member.roles.cache.has(PREMIUM_ROLE_ID)) {
+        return getEmbedColor();
+    }
+    
+    // Try to find their custom role (created by custom role system)
+    // Custom roles are positioned under the premium role
+    try {
+        const CustomRole = require('../database/models/CustomRole');
+        const customRole = await CustomRole.findOne({ 
+            userId: member.id, 
+            status: 'approved',
+            roleId: { $exists: true, $ne: null }
+        });
+        
+        if (customRole && customRole.roleColor) {
+            return parseInt(customRole.roleColor.replace('#', ''), 16);
+        }
+    } catch (e) {
+        // CustomRole model may not exist yet, fall back to default
+    }
+    
+    // Fall back to their highest colored role
+    const coloredRole = member.roles.cache
+        .filter(r => r.color !== 0)
+        .sort((a, b) => b.position - a.position)
+        .first();
+    
+    if (coloredRole) {
+        return coloredRole.color;
+    }
+    
+    return getEmbedColor();
+};
+
+/**
+ * Get embed color synchronously for a member - uses display color
+ * @param {GuildMember} member - Discord guild member
+ * @returns {number} Color as integer
+ */
+const getMemberEmbedColorSync = (member) => {
+    if (!member) return getEmbedColor();
+    
+    // Check if member has premium role
+    if (!member.roles || !member.roles.cache.has(PREMIUM_ROLE_ID)) {
+        return getEmbedColor();
+    }
+    
+    // Use their display color (highest colored role)
+    if (member.displayColor && member.displayColor !== 0) {
+        return member.displayColor;
+    }
+    
+    return getEmbedColor();
 };
 
 /**
@@ -538,5 +605,8 @@ module.exports = {
     createFineEmbed,
     createFineDMEmbed,
     createFineLogEmbed,
-    getEmbedColor
+    getEmbedColor,
+    getMemberEmbedColor,
+    getMemberEmbedColorSync,
+    PREMIUM_ROLE_ID
 };

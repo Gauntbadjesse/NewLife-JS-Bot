@@ -467,6 +467,14 @@ client.on('interactionCreate', async (interaction) => {
             } catch (e) {
                 if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: suggestions', e, { customId: interaction.customId, user: interaction.user.tag });
             }
+
+            // Try customRoles cog
+            try {
+                const customRolesCog = require('./cogs/customRoles');
+                if (customRolesCog.handleButton) await customRolesCog.handleButton(interaction);
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: customRoles', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
         } catch (error) {
             await logError('Button Handler', error, { customId: interaction.customId, user: interaction.user.tag });
             if (!interaction.replied && !interaction.deferred) {

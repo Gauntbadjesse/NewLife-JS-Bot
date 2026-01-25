@@ -21,6 +21,16 @@ const {
 const mongoose = require('mongoose');
 const { isAdmin, isOwner } = require('../utils/permissions');
 
+// Premium role ID - gets soundboard access in temp VCs
+const PREMIUM_ROLE_ID = '1463405789241802895';
+
+/**
+ * Check if a member has premium role
+ */
+function hasPremiumRole(member) {
+    return member && member.roles && member.roles.cache.has(PREMIUM_ROLE_ID);
+}
+
 // Schema for temp VC hub configuration
 const tempVCHubSchema = new mongoose.Schema({
     guildId: { type: String, required: true },
@@ -55,12 +65,17 @@ const TempChannel = mongoose.models.TempChannel || mongoose.model('TempChannel',
 async function createTempChannel(member, hub, client) {
     try {
         const guild = member.guild;
+        const isPremium = hasPremiumRole(member);
         
-        // Generate channel name
-        const channelName = hub.defaultName
+        // Generate channel name (premium members get a star)
+        let channelName = hub.defaultName
             .replace('{user}', member.displayName)
             .replace('{username}', member.user.username)
             .substring(0, 100);
+        
+        if (isPremium) {
+            channelName = `⭐ ${channelName}`;
+        }
 
         // Determine parent category
         let parentId = hub.categoryId;
@@ -68,6 +83,22 @@ async function createTempChannel(member, hub, client) {
             // Use same category as hub channel
             const hubChannel = await guild.channels.fetch(hub.hubChannelId).catch(() => null);
             if (hubChannel) parentId = hubChannel.parentId;
+        }
+
+        // Base permissions for the owner
+        const ownerPermissions = [
+            PermissionFlagsBits.ManageChannels,
+            PermissionFlagsBits.MuteMembers,
+            PermissionFlagsBits.DeafenMembers,
+            PermissionFlagsBits.MoveMembers,
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak
+        ];
+        
+        // Premium members get soundboard permissions
+        if (isPremium) {
+            ownerPermissions.push(PermissionFlagsBits.UseSoundboard);
+            ownerPermissions.push(PermissionFlagsBits.UseExternalSounds);
         }
 
         // Create the channel
@@ -79,14 +110,7 @@ async function createTempChannel(member, hub, client) {
             permissionOverwrites: [
                 {
                     id: member.id,
-                    allow: [
-                        PermissionFlagsBits.ManageChannels,
-                        PermissionFlagsBits.MuteMembers,
-                        PermissionFlagsBits.DeafenMembers,
-                        PermissionFlagsBits.MoveMembers,
-                        PermissionFlagsBits.Connect,
-                        PermissionFlagsBits.Speak
-                    ]
+                    allow: ownerPermissions
                 },
                 {
                     id: guild.id,
@@ -97,7 +121,7 @@ async function createTempChannel(member, hub, client) {
                     ]
                 }
             ],
-            reason: `Temp VC created for ${member.user.tag}`
+            reason: `Temp VC created for ${member.user.tag}${isPremium ? ' (Premium)' : ''}`
         });
 
         // Save to database
@@ -114,36 +138,42 @@ async function createTempChannel(member, hub, client) {
         // Send control panel message
         try {
             const controlEmbed = new EmbedBuilder()
-                .setTitle('Your Temporary Voice Channel')
-                .setDescription(`Welcome to your temporary channel, ${member}!\n\nYou have full control over this channel. Use the buttons below or these commands:`)
-                .setColor(0x5865F2)
+                .setTitle(`${isPremium ? '⭐  ' : '🎤  '}Your Voice Channel`)
+                .setDescription(isPremium 
+                    ? `Welcome ${member}!\\n\\n**✨ Premium Perks Active**\\n> 🔊 Soundboard & external sounds enabled\\n> ⭐ Priority channel styling`
+                    : `Welcome ${member}!`)
+                .setColor(isPremium ? 0xFFD700 : 0x5865F2)
                 .addFields(
-                    { name: 'Rename', value: '`/tempvc rename <name>`', inline: true },
-                    { name: 'Set Limit', value: '`/tempvc limit <number>`', inline: true },
-                    { name: 'Lock/Unlock', value: '`/tempvc lock` / `unlock`', inline: true },
-                    { name: 'Kick User', value: '`/tempvc kick <user>`', inline: true },
-                    { name: 'Ban/Unban', value: '`/tempvc ban/unban <user>`', inline: true },
-                    { name: 'Transfer', value: '`/tempvc transfer <user>`', inline: true }
+                    { name: '✏️  Rename', value: '`/tempvc rename`', inline: true },
+                    { name: '👥  Limit', value: '`/tempvc limit`', inline: true },
+                    { name: '🔒  Lock', value: '`/tempvc lock`', inline: true },
+                    { name: '👢  Kick', value: '`/tempvc kick`', inline: true },
+                    { name: '🚫  Ban', value: '`/tempvc ban`', inline: true },
+                    { name: '🔄  Transfer', value: '`/tempvc transfer`', inline: true }
                 )
-                .setFooter({ text: 'Channel will be deleted when empty' });
+                .setFooter({ text: isPremium ? 'NewLife+ • Channel deletes when empty' : 'Channel deletes when empty' });
 
             const controlButtons = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`tempvc_lock_${tempChannel.id}`)
                     .setLabel('Lock')
-                    .setStyle(ButtonStyle.Secondary),
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('🔒'),
                 new ButtonBuilder()
                     .setCustomId(`tempvc_unlock_${tempChannel.id}`)
                     .setLabel('Unlock')
-                    .setStyle(ButtonStyle.Secondary),
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('🔓'),
                 new ButtonBuilder()
                     .setCustomId(`tempvc_hide_${tempChannel.id}`)
                     .setLabel('Hide')
-                    .setStyle(ButtonStyle.Secondary),
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('👁'),
                 new ButtonBuilder()
                     .setCustomId(`tempvc_reveal_${tempChannel.id}`)
                     .setLabel('Reveal')
                     .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('👀')
             );
 
             await tempChannel.send({ embeds: [controlEmbed], components: [controlButtons] });
