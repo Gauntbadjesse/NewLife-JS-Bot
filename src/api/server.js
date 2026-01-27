@@ -832,7 +832,7 @@ app.get('/viewer/warnings', viewerAuth, async (req, res) => {
         let query = {};
         if (status === 'active') query.active = true;
         else if (status === 'removed') query.active = false;
-        if (cat && ['behavior', 'chat', 'cheating', 'griefing', 'other'].includes(cat)) query.category = cat;
+        if (cat && ['behavior', 'chat', 'cheating', 'griefing', 'pvp', 'other'].includes(cat)) query.category = cat;
         
         let conditions = [];
         if (search) {
@@ -899,7 +899,7 @@ ${getHeader('warnings', req.session)}
         </div>
         <div class="filter-group" style="min-width:120px">
             <label>Category</label>
-            <select name="category"><option value="">All</option><option value="behavior" ${cat === 'behavior' ? 'selected' : ''}>Behavior</option><option value="chat" ${cat === 'chat' ? 'selected' : ''}>Chat</option><option value="cheating" ${cat === 'cheating' ? 'selected' : ''}>Cheating</option><option value="griefing" ${cat === 'griefing' ? 'selected' : ''}>Griefing</option><option value="other" ${cat === 'other' ? 'selected' : ''}>Other</option></select>
+            <select name="category"><option value="">All</option><option value="behavior" ${cat === 'behavior' ? 'selected' : ''}>Behavior</option><option value="chat" ${cat === 'chat' ? 'selected' : ''}>Chat</option><option value="cheating" ${cat === 'cheating' ? 'selected' : ''}>Cheating</option><option value="griefing" ${cat === 'griefing' ? 'selected' : ''}>Griefing</option><option value="pvp" ${cat === 'pvp' ? 'selected' : ''}>PVP</option><option value="other" ${cat === 'other' ? 'selected' : ''}>Other</option></select>
         </div>
         <div class="filter-group" style="min-width:120px">
             <label>Status</label>

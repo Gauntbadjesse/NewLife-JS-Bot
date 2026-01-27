@@ -1371,6 +1371,7 @@ const slashCommands = [
                     { name: 'Chat', value: 'chat' },
                     { name: 'Cheating', value: 'cheating' },
                     { name: 'Griefing', value: 'griefing' },
+                    { name: 'PVP', value: 'pvp' },
                     { name: 'Other', value: 'other' }
                 )
             ),

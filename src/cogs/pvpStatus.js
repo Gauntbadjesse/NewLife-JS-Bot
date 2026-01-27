@@ -8,7 +8,10 @@ const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const PvpLog = require('../database/models/PvpLog');
 const { isStaff } = require('../utils/permissions');
 
-const PVP_LOG_CHANNEL_ID = '1439438975151505419';
+// Channel for good stuff (status changes, consensual kills)
+const PVP_GOOD_CHANNEL_ID = '1442649468586561616';
+// Channel for alerts/investigations (damage sessions, combat logs, invalid pvp, non-consensual kills)
+const PVP_ALERT_CHANNEL_ID = '1439438975151505419';
 
 /**
  * Initialize PvP logging listener
@@ -28,13 +31,38 @@ function initPvpLogger(client) {
 }
 
 /**
+ * Determine which channel to use based on log type
+ */
+function getChannelForLogType(logData) {
+    switch (logData.type) {
+        case 'status_change':
+            // Status changes go to good channel
+            return PVP_GOOD_CHANNEL_ID;
+        case 'pvp_kill':
+            // Consensual kills go to good channel, non-consensual to alert channel
+            return logData.consensual ? PVP_GOOD_CHANNEL_ID : PVP_ALERT_CHANNEL_ID;
+        case 'invalid_pvp':
+        case 'pvp_damage_session':
+        case 'combat_log':
+            // All alerts/issues go to alert channel
+            return PVP_ALERT_CHANNEL_ID;
+        case 'death':
+            // Regular deaths go to good channel
+            return PVP_GOOD_CHANNEL_ID;
+        default:
+            return PVP_ALERT_CHANNEL_ID;
+    }
+}
+
+/**
  * Handle incoming PvP log event
  */
 async function handlePvpLog(client, logData) {
-    const channel = client.channels.cache.get(PVP_LOG_CHANNEL_ID);
+    const channelId = getChannelForLogType(logData);
+    const channel = client.channels.cache.get(channelId);
     
     if (!channel) {
-        console.error('[PvP Logger] Log channel not found:', PVP_LOG_CHANNEL_ID);
+        console.error('[PvP Logger] Log channel not found:', channelId);
         return;
     }
     
@@ -80,14 +108,18 @@ async function handlePvpLog(client, logData) {
  */
 function createStatusChangeEmbed(data) {
     const embed = new EmbedBuilder()
-        .setColor(data.enabled ? 0x10b981 : 0x6b7280)
-        .setTitle(data.enabled ? '🟩 PvP Enabled' : '⬜ PvP Disabled')
+        .setColor(data.enabled ? 0x10b981 : 0x2B2D31)
+        .setAuthor({ name: 'PvP Status Change', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setDescription(data.enabled 
+            ? `🟢 **${data.username}** has **enabled** PvP` 
+            : `⚫ **${data.username}** has **disabled** PvP`)
         .addFields(
             { name: 'Player', value: `\`${data.username}\``, inline: true },
+            { name: 'Status', value: data.enabled ? '`PvP ON`' : '`PvP OFF`', inline: true },
             { name: 'UUID', value: `\`${data.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife PvP' });
+        .setFooter({ text: 'NewLife SMP • PvP System' });
     
     return embed;
 }
@@ -102,28 +134,34 @@ function createPvpKillEmbed(data) {
     const victimRecording = data.victim.status === 'recording';
     const victimStreaming = data.victim.status === 'streaming';
     
-    // Grey if both have PvP on (consensual), Red if one or both have PvP off
-    const embedColor = consensual ? 0x6b7280 : 0xef4444;
+    // Green if consensual, Red if non-consensual
+    const embedColor = consensual ? 0x10b981 : 0xef4444;
     
     const embed = new EmbedBuilder()
         .setColor(embedColor)
-        .setTitle('╔═══════════════════════════════════════╗')
-        .setDescription(
-            `**║        ⚔️ PVP KILL LOGGED            ║**\n` +
-            `**╠═══════════════════════════════════════╣**\n` +
-            `**║** Killer: **${data.killer.username}** ${data.killer.pvp_enabled ? '🟩' : '⬜'}                      **║**\n` +
-            `**║** Victim: **${data.victim.username}** ${data.victim.pvp_enabled ? '🟩' : '⬜'}                       **║**\n` +
-            `**║** Both Consented: ${consensual ? '✅ YES' : '❌ NO'}                **║**\n` +
-            `**║** Killer Recording: ${killerRecording ? '🔴 YES' : killerStreaming ? '🟪 STREAMING' : '⬜ NO'}              **║**\n` +
-            `**║** Victim Recording: ${victimRecording ? '🔴 YES' : victimStreaming ? '🟪 STREAMING' : '⬜ NO'}               **║**\n` +
-            `**╚═══════════════════════════════════════╝**`
-        )
+        .setAuthor({ name: 'PvP Kill Logged', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setDescription(`⚔️ **${data.killer.username}** killed **${data.victim.username}**`)
         .addFields(
+            { 
+                name: 'Killer', 
+                value: `**${data.killer.username}**\n${data.killer.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}${killerRecording ? ' • 🔴 Recording' : killerStreaming ? ' • 🟣 Streaming' : ''}`, 
+                inline: true 
+            },
+            { 
+                name: 'Victim', 
+                value: `**${data.victim.username}**\n${data.victim.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}${victimRecording ? ' • 🔴 Recording' : victimStreaming ? ' • 🟣 Streaming' : ''}`, 
+                inline: true 
+            },
+            { 
+                name: 'Consensual', 
+                value: consensual ? '✅ Yes' : '❌ No', 
+                inline: true 
+            },
             { name: 'Killer UUID', value: `\`${data.killer.uuid}\``, inline: false },
             { name: 'Victim UUID', value: `\`${data.victim.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife PvP' });
+        .setFooter({ text: 'NewLife SMP • PvP System' });
     
     return embed;
 }
@@ -133,24 +171,30 @@ function createPvpKillEmbed(data) {
  */
 function createInvalidPvpEmbed(data) {
     const embed = new EmbedBuilder()
-        .setColor(0xfbbf24)
-        .setTitle('╔═══════════════════════════════════════╗')
-        .setDescription(
-            `**║     ⚠️ INVALID PVP DETECTED          ║**\n` +
-            `**╠═══════════════════════════════════════╣**\n` +
-            `**║** Attacker: **${data.attacker.username}** ${data.attacker.pvp_enabled ? '🟩' : '⬜'}                **║**\n` +
-            `**║** Victim: **${data.victim.username}** ${data.victim.pvp_enabled ? '🟩' : '⬜'}                   **║**\n` +
-            `**║** Damage Dealt: **${data.damage.toFixed(2)} HP**               **║**\n` +
-            `**║** Consensual: ❌ NO                     **║**\n` +
-            `**║** Action: Damage allowed                **║**\n` +
-            `**╚═══════════════════════════════════════╝**`
-        )
+        .setColor(0xf59e0b)
+        .setAuthor({ name: '⚠️ Invalid PvP Detected', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setDescription(`**${data.attacker.username}** attacked **${data.victim.username}** without mutual consent`)
         .addFields(
+            { 
+                name: 'Attacker', 
+                value: `**${data.attacker.username}**\n${data.attacker.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}`, 
+                inline: true 
+            },
+            { 
+                name: 'Victim', 
+                value: `**${data.victim.username}**\n${data.victim.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}`, 
+                inline: true 
+            },
+            { 
+                name: 'Damage Dealt', 
+                value: `\`${data.damage.toFixed(2)} HP\``, 
+                inline: true 
+            },
             { name: 'Attacker UUID', value: `\`${data.attacker.uuid}\``, inline: false },
             { name: 'Victim UUID', value: `\`${data.victim.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife PvP' });
+        .setFooter({ text: 'NewLife SMP • PvP System' });
     
     return embed;
 }
@@ -160,15 +204,16 @@ function createInvalidPvpEmbed(data) {
  */
 function createDeathEmbed(data) {
     const embed = new EmbedBuilder()
-        .setColor(0x6b7280)
-        .setTitle('💀 Player Death')
+        .setColor(0x2B2D31)
+        .setAuthor({ name: 'Player Death', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setDescription(`💀 **${data.username}** died`)
         .addFields(
             { name: 'Player', value: `\`${data.username}\``, inline: true },
             { name: 'Cause', value: data.cause || 'Unknown', inline: true },
             { name: 'UUID', value: `\`${data.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife PvP' });
+        .setFooter({ text: 'NewLife SMP • PvP System' });
     
     return embed;
 }
@@ -177,38 +222,46 @@ function createDeathEmbed(data) {
  * Create embed for damage session
  */
 function createDamageSessionEmbed(data) {
-    const { player1, player2, total_hits, total_damage, duration_ms, damage_events } = data;
+    const { player1, player2, total_hits, total_damage, duration_ms } = data;
     
-    // Only log if at least one player had PvP disabled
     const bothPvpEnabled = player1.pvp_enabled && player2.pvp_enabled;
-    const embedColor = bothPvpEnabled ? 0x6b7280 : 0xef4444;
+    const embedColor = bothPvpEnabled ? 0x2B2D31 : 0xef4444;
     
     const durationSeconds = (duration_ms / 1000).toFixed(1);
     
+    // Determine who initiated (first attacker)
+    const initiator = player1.hits_dealt > 0 ? player1 : player2;
+    
     const embed = new EmbedBuilder()
         .setColor(embedColor)
-        .setTitle('╔═══════════════════════════════════════╗')
-        .setDescription(
-            `**║     ⚔️ PVP DAMAGE SESSION            ║**\n` +
-            `**╠═══════════════════════════════════════╣**\n` +
-            `**║** Player 1: **${player1.username}** ${player1.pvp_enabled ? '🟩' : '⬜'}            **║**\n` +
-            `**║** • Dealt: **${player1.damage_dealt.toFixed(1)} HP** (**${player1.hits_dealt}** hits)    **║**\n` +
-            `**║**                                        **║**\n` +
-            `**║** Player 2: **${player2.username}** ${player2.pvp_enabled ? '🟩' : '⬜'}            **║**\n` +
-            `**║** • Dealt: **${player2.damage_dealt.toFixed(1)} HP** (**${player2.hits_dealt}** hits)    **║**\n` +
-            `**║**                                        **║**\n` +
-            `**║** Total Damage: **${total_damage.toFixed(1)} HP**             **║**\n` +
-            `**║** Total Hits: **${total_hits}**                      **║**\n` +
-            `**║** Duration: **${durationSeconds}s**                       **║**\n` +
-            `**║** Consensual: ${bothPvpEnabled ? '✅ YES' : '❌ NO'}                    **║**\n` +
-            `**╚═══════════════════════════════════════╝**`
-        )
+        .setAuthor({ name: '⚔️ PvP Damage Session', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setDescription(`Combat between **${player1.username}** and **${player2.username}**`)
         .addFields(
-            { name: 'Player 1 UUID', value: `\`${player1.uuid}\``, inline: false },
-            { name: 'Player 2 UUID', value: `\`${player2.uuid}\``, inline: false }
+            { 
+                name: player1.username, 
+                value: `${player1.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}\n**${player1.damage_dealt.toFixed(1)} HP** dealt\n**${player1.hits_dealt}** hits`, 
+                inline: true 
+            },
+            { 
+                name: 'vs', 
+                value: '⚔️', 
+                inline: true 
+            },
+            { 
+                name: player2.username, 
+                value: `${player2.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}\n**${player2.damage_dealt.toFixed(1)} HP** dealt\n**${player2.hits_dealt}** hits`, 
+                inline: true 
+            },
+            { 
+                name: 'Session Stats', 
+                value: `**Total Damage:** ${total_damage.toFixed(1)} HP\n**Total Hits:** ${total_hits}\n**Duration:** ${durationSeconds}s\n**Consensual:** ${bothPvpEnabled ? '✅ Yes' : '❌ No'}`, 
+                inline: false 
+            },
+            { name: `${player1.username} UUID`, value: `\`${player1.uuid}\``, inline: false },
+            { name: `${player2.username} UUID`, value: `\`${player2.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: `NewLife PvP • ${total_hits} hits in ${durationSeconds}s` });
+        .setFooter({ text: `NewLife SMP • ${total_hits} hits in ${durationSeconds}s` });
     
     return embed;
 }
@@ -221,23 +274,33 @@ function createCombatLogEmbed(data) {
     
     const embed = new EmbedBuilder()
         .setColor(0xdc2626)
-        .setTitle('╔═══════════════════════════════════════╗')
-        .setDescription(
-            `**║     ☠️ COMBAT LOG DETECTED          ║**\n` +
-            `**╠═══════════════════════════════════════╣**\n` +
-            `**║** Player: **${player.username}** 🟩                  **║**\n` +
-            `**║** Action: Logged out during combat     **║**\n` +
-            `**║** Status: Player killed & items dropped **║**\n` +
-            `**║** PvP: Enabled at disconnect           **║**\n` +
-            `**╚═══════════════════════════════════════╝**`
-        )
+        .setAuthor({ name: '☠️ Combat Log Detected', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setDescription(`**${player.username}** logged out during combat with PvP enabled`)
         .addFields(
+            { 
+                name: 'Player', 
+                value: `**${player.username}**\n🟢 PvP was enabled`, 
+                inline: true 
+            },
+            { 
+                name: 'Action Taken', 
+                value: `☠️ Player killed\n📦 Items dropped`, 
+                inline: true 
+            },
+            { 
+                name: 'Location', 
+                value: `**World:** ${location.world}\n**Coords:** ${location.x.toFixed(0)}, ${location.y.toFixed(0)}, ${location.z.toFixed(0)}`, 
+                inline: true 
+            },
             { name: 'Player UUID', value: `\`${player.uuid}\``, inline: false },
-            { name: 'Location', value: `\`${location.world}\` (${location.x.toFixed(0)}, ${location.y.toFixed(0)}, ${location.z.toFixed(0)})`, inline: false },
-            { name: '⚠️ Action Taken', value: 'Player was killed before disconnect. Items dropped at logout location. Player has been notified via DM.', inline: false }
+            { 
+                name: '📨 Notification', 
+                value: 'Player has been notified via Discord DM about the combat log penalty.', 
+                inline: false 
+            }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife PvP • Combat Logging Prevention' });
+        .setFooter({ text: 'NewLife SMP • Combat Logging Prevention' });
     
     return embed;
 }

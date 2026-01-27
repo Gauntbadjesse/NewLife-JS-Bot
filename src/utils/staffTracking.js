@@ -10,8 +10,10 @@ const ServerBan = require('../database/models/ServerBan');
 const Kick = require('../database/models/Kick');
 const Warning = require('../database/models/Warning');
 const Mute = require('../database/models/Mute');
+const { sendDm } = require('./dm');
 
-const OWNER_ID = process.env.OWNER_ID || '1215431991893872751'; // Your Discord ID
+// Use OWNER_ID from env (no fallback - must be configured)
+const getOwnerId = () => process.env.OWNER_ID || process.env.OWNER_USER_ID;
 const STAFF_ROLE_ID = process.env.STAFF_TEAM || '1372672239245459498';
 const GUILD_ID = process.env.GUILD_ID || '1372672239245459498';
 
@@ -96,14 +98,16 @@ async function sendWeeklyStaffReport(client) {
     try {
         console.log('[StaffTracking] Generating weekly staff report...');
         
-        const activity = await getStaffActivity();
-        const owner = await client.users.fetch(OWNER_ID).catch(() => null);
+        const OWNER_ID = getOwnerId();
         
-        if (!owner) {
-            console.error('[StaffTracking] Could not find owner user');
+        if (!OWNER_ID) {
+            console.error('[StaffTracking] OWNER_ID not configured in environment variables');
             return;
         }
         
+        console.log(`[StaffTracking] Sending report to owner: ${OWNER_ID}`);
+        
+        const activity = await getStaffActivity();
         const guild = await client.guilds.fetch(GUILD_ID).catch(() => null);
         
         // Build embed
@@ -151,10 +155,19 @@ async function sendWeeklyStaffReport(client) {
             });
         }
         
-        await owner.send({ embeds: [embed] });
-        console.log('[StaffTracking] Weekly report sent to owner');
+        // Use sendDm utility for better error handling and logging
+        const result = await sendDm(client, OWNER_ID, { embeds: [embed] });
+        
+        if (result.success) {
+            console.log('[StaffTracking] Weekly report sent to owner successfully');
+        } else {
+            console.error('[StaffTracking] Failed to send weekly report:', result.error);
+        }
+        
+        return result;
     } catch (error) {
         console.error('[StaffTracking] Error sending weekly report:', error);
+        return { success: false, error: error.message };
     }
 }
 
@@ -165,7 +178,14 @@ async function sendWeeklyStaffReport(client) {
  */
 function initStaffTracking(client) {
     console.log('[StaffTracking] Initializing staff tracking system...');
-    console.log(`[StaffTracking] Weekly reports will be sent to: ${OWNER_ID}`);
+    
+    const OWNER_ID = getOwnerId();
+    if (!OWNER_ID) {
+        console.error('[StaffTracking] WARNING: OWNER_ID not set in environment variables!');
+        console.error('[StaffTracking] Weekly reports will not be sent until OWNER_ID is configured.');
+    } else {
+        console.log(`[StaffTracking] Weekly reports will be sent to: ${OWNER_ID}`);
+    }
     
     // Schedule weekly report every Monday at 9:00 AM UTC
     cron.schedule('0 9 * * 1', async () => {

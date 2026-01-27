@@ -69,7 +69,7 @@ const warningSchema = new mongoose.Schema({
     },
     category: {
         type: String,
-        enum: ['behavior', 'chat', 'cheating', 'griefing', 'other'],
+        enum: ['behavior', 'chat', 'cheating', 'griefing', 'pvp', 'other'],
         default: 'other'
     },
     // Timestamps
