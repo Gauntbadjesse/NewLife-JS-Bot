@@ -3482,7 +3482,7 @@ app.get('/api/bans/active', async (req, res) => {
 // PVP STATUS API ENDPOINTS
 // =====================================================
 
-const PvpLog = require('../database/models/PvpLog');
+// PvpLog already imported at top of file
 
 // API Key validation middleware
 function validateApiKey(req, res, next) {
