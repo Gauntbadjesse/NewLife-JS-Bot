@@ -666,23 +666,47 @@ async function closeTicket(channel, closedBy, reason, client) {
         else if (channel.name.includes('-report-')) ticketType = 'report';
         else if (channel.name.includes('-management-')) ticketType = 'management';
 
-        // Find ticket owner from permissions
+        // Find ticket owner from permissions - look for user overwrites that have VIEW_CHANNEL
         let ownerId = null;
         let ownerTag = 'Unknown';
         let ownerAvatar = null;
         
+        // Get all user permission overwrites (type 1 = member)
         const userOverwrites = channel.permissionOverwrites.cache.filter(
-            po => po.type === 1 && po.id !== closedBy?.id && po.id !== client.user.id
+            po => po.type === 1 && po.id !== client.user.id
         );
         
+        // Try to find the ticket owner - prefer non-staff members with VIEW_CHANNEL
         if (userOverwrites.size > 0) {
-            const ownerOverwrite = userOverwrites.first();
-            ownerId = ownerOverwrite.id;
-            try {
-                const owner = await client.users.fetch(ownerId);
-                ownerTag = owner.tag;
-                ownerAvatar = owner.displayAvatarURL({ size: 64 });
-            } catch (e) {}
+            // First, try to extract owner from channel name (e.g., "general-username-123")
+            const channelNameParts = channel.name.split('-');
+            if (channelNameParts.length >= 2) {
+                // Try to find matching user from overwrites
+                for (const [id, overwrite] of userOverwrites) {
+                    try {
+                        const user = await client.users.fetch(id);
+                        const username = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        // Check if username appears in channel name
+                        if (channel.name.toLowerCase().includes(username)) {
+                            ownerId = id;
+                            ownerTag = user.tag;
+                            ownerAvatar = user.displayAvatarURL({ size: 64 });
+                            break;
+                        }
+                    } catch (e) {}
+                }
+            }
+            
+            // If still no owner found, use the first user overwrite
+            if (!ownerId) {
+                const ownerOverwrite = userOverwrites.first();
+                ownerId = ownerOverwrite.id;
+                try {
+                    const owner = await client.users.fetch(ownerId);
+                    ownerTag = owner.tag;
+                    ownerAvatar = owner.displayAvatarURL({ size: 64 });
+                } catch (e) {}
+            }
         }
 
         // Generate rich transcript for database

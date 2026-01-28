@@ -1787,7 +1787,12 @@ app.get('/viewer/transcripts', staffAuth, async (req, res) => {
             <td>${t.messageCount || 0}</td>
             <td>${t.closedByTag || '—'}</td>
             <td>${t.closedAt ? new Date(t.closedAt).toLocaleDateString() : '—'}</td>
-            <td><a href="/viewer/transcript/${t.ticketId}" class="btn-edit">View</a></td>
+            <td style="display:flex;gap:6px">
+                <a href="/viewer/transcript/${t.ticketId}" class="btn-edit">View</a>
+                <form method="POST" action="/viewer/transcript/${t.ticketId}/delete" style="display:inline" onsubmit="return confirm('Delete this transcript?')">
+                    <button type="submit" class="btn-edit" style="background:rgba(239,68,68,.15);color:#f87171;border-color:rgba(239,68,68,.2)">Delete</button>
+                </form>
+            </td>
         </tr>`).join('');
         
         if (!rows) rows = '<tr><td colspan="8" class="empty">No transcripts found</td></tr>';
@@ -2030,8 +2035,34 @@ ${getHeader('transcripts', req.session)}
             <h3>Participants</h3>
             ${participantsHtml || '<p style="color:#64748b">No participants recorded</p>'}
         </div>
+        
+        <div style="margin-top:24px;padding-top:24px;border-top:1px solid rgba(255,255,255,.06);display:flex;justify-content:flex-end">
+            <form method="POST" action="/viewer/transcript/${ticketId}/delete" onsubmit="return confirm('Are you sure you want to delete this transcript? This cannot be undone.')">
+                <button type="submit" class="btn" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.2)">Delete Transcript</button>
+            </form>
+        </div>
     </div>
 </div></body></html>`);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error: ' + e.message);
+    }
+});
+
+// =====================================================
+// DELETE TRANSCRIPT (Admin)
+// =====================================================
+app.post('/viewer/transcript/:ticketId/delete', staffAuth, async (req, res) => {
+    try {
+        const { ticketId } = req.params;
+        const result = await Transcript.deleteOne({ ticketId });
+        
+        if (result.deletedCount === 0) {
+            return res.status(404).send('Transcript not found');
+        }
+        
+        console.log(`[Transcripts] Admin ${req.session.username} deleted transcript ${ticketId}`);
+        res.redirect('/viewer/transcripts?deleted=1');
     } catch (e) {
         console.error(e);
         res.status(500).send('Error: ' + e.message);
@@ -2254,8 +2285,37 @@ ${getUserHeader('my-transcripts', req.session)}
         <div class="messages-container">
             ${messagesHtml || '<div style="padding:20px;text-align:center;color:#72767d">No messages in this transcript</div>'}
         </div>
+        
+        <div style="margin-top:24px;padding-top:24px;border-top:1px solid rgba(255,255,255,.06);display:flex;justify-content:flex-end">
+            <form method="POST" action="/viewer/my-transcript/${ticketId}/delete" onsubmit="return confirm('Are you sure you want to delete this transcript? This cannot be undone.')">
+                <button type="submit" class="btn" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.2)">Delete Transcript</button>
+            </form>
+        </div>
     </div>
 </div></body></html>`);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error: ' + e.message);
+    }
+});
+
+// =====================================================
+// DELETE TRANSCRIPT (User - own transcripts only)
+// =====================================================
+app.post('/viewer/my-transcript/:ticketId/delete', userAuth, async (req, res) => {
+    try {
+        const { ticketId } = req.params;
+        const discordId = req.session.discordId;
+        
+        // Only allow deleting own transcripts
+        const result = await Transcript.deleteOne({ ticketId, ownerId: discordId });
+        
+        if (result.deletedCount === 0) {
+            return res.status(404).send('Transcript not found or you do not have permission to delete it');
+        }
+        
+        console.log(`[Transcripts] User ${req.session.username} deleted their transcript ${ticketId}`);
+        res.redirect('/viewer/my-transcripts?deleted=1');
     } catch (e) {
         console.error(e);
         res.status(500).send('Error: ' + e.message);
