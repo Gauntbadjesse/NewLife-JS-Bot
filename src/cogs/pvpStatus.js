@@ -18,8 +18,11 @@ const PVP_ALERT_CHANNEL_ID = '1439438975151505419';
  */
 function initPvpLogger(client) {
     console.log('[PvP Logger] Initializing PvP event logger...');
+    console.log(`[PvP Logger] Good channel: ${PVP_GOOD_CHANNEL_ID}`);
+    console.log(`[PvP Logger] Alert channel: ${PVP_ALERT_CHANNEL_ID}`);
     
     client.on('pvpLog', async (logData) => {
+        console.log('[PvP Logger] Received pvpLog event:', JSON.stringify(logData, null, 2));
         try {
             await handlePvpLog(client, logData);
         } catch (error) {
@@ -58,18 +61,24 @@ function getChannelForLogType(logData) {
  * Handle incoming PvP log event
  */
 async function handlePvpLog(client, logData) {
+    console.log('[PvP Logger] Processing log type:', logData.type);
+    
     const channelId = getChannelForLogType(logData);
     const channel = client.channels.cache.get(channelId);
     
     if (!channel) {
         console.error('[PvP Logger] Log channel not found:', channelId);
+        console.log('[PvP Logger] Available channels:', client.channels.cache.map(c => c.id).join(', ').substring(0, 200) + '...');
         return;
     }
+    
+    console.log('[PvP Logger] Using channel:', channel.name, channelId);
     
     let embed;
     
     switch (logData.type) {
         case 'status_change':
+            console.log('[PvP Logger] Creating status_change embed for:', logData.username, 'enabled:', logData.enabled);
             embed = createStatusChangeEmbed(logData);
             break;
         case 'pvp_kill':
@@ -93,7 +102,9 @@ async function handlePvpLog(client, logData) {
     }
     
     if (embed) {
+        console.log('[PvP Logger] Sending embed to channel...');
         const message = await channel.send({ embeds: [embed] });
+        console.log('[PvP Logger] Message sent:', message.id);
         
         // Update database with message ID
         await PvpLog.findByIdAndUpdate(logData._id, {

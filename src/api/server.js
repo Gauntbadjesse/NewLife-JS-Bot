@@ -1610,8 +1610,10 @@ function validateApiKey(req, res, next) {
 app.post('/api/pvp/log', validateApiKey, async (req, res) => {
     try {
         const { type, timestamp, ...data } = req.body;
+        console.log('[PvP API] Received log request:', { type, ...data });
         
         if (!type || !['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'combat_log'].includes(type)) {
+            console.log('[PvP API] Invalid type:', type);
             return res.status(400).json({ success: false, error: 'Invalid or missing type' });
         }
         
@@ -1623,10 +1625,14 @@ app.post('/api/pvp/log', validateApiKey, async (req, res) => {
         });
         
         await log.save();
+        console.log('[PvP API] Log saved with ID:', log._id);
         
         // Emit event for Discord logging (handled by pvpStatus cog)
         if (global.discordClient) {
+            console.log('[PvP API] Emitting pvpLog event to Discord client');
             global.discordClient.emit('pvpLog', log.toObject());
+        } else {
+            console.log('[PvP API] WARNING: Discord client not available!');
         }
         
         return res.json({ success: true, logId: log._id });
