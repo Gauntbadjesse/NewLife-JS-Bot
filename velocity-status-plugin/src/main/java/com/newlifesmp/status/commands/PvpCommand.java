@@ -78,8 +78,9 @@ public class PvpCommand implements CommandExecutor, TabCompleter {
         data.setPvpCooldownUntil(0);
         plugin.getDataManager().savePlayerData(data);
         plugin.getTabListManager().updatePlayer(player);
+        plugin.getNametagManager().updatePlayer(player);
 
-        player.sendMessage(Component.text("✓ PvP Enabled", NamedTextColor.GREEN)
+        player.sendMessage(Component.text("PvP Enabled", NamedTextColor.GREEN)
             .append(Component.newline())
             .append(Component.text("You can now be attacked by other players", NamedTextColor.GRAY)));
 
@@ -117,8 +118,9 @@ public class PvpCommand implements CommandExecutor, TabCompleter {
         data.setPvpCooldownUntil(cooldownEnd);
         plugin.getDataManager().savePlayerData(data);
         plugin.getTabListManager().updatePlayer(player);
+        plugin.getNametagManager().updatePlayer(player);
 
-        player.sendMessage(Component.text("⚠ PvP Disabling...", NamedTextColor.YELLOW)
+        player.sendMessage(Component.text("PvP Disabling...", NamedTextColor.YELLOW)
             .append(Component.newline())
             .append(Component.text("PvP will stay ON for " + plugin.getStatusConfig().getPvpCooldown() + " seconds", NamedTextColor.GRAY))
             .append(Component.newline())
@@ -134,7 +136,8 @@ public class PvpCommand implements CommandExecutor, TabCompleter {
                 
                 if (player.isOnline()) {
                     plugin.getTabListManager().updatePlayer(player);
-                    player.sendMessage(Component.text("✓ PvP is now OFF", NamedTextColor.GREEN)
+                    plugin.getNametagManager().updatePlayer(player);
+                    player.sendMessage(Component.text("PvP is now OFF", NamedTextColor.GREEN)
                         .append(Component.newline())
                         .append(Component.text("You can no longer be attacked", NamedTextColor.GRAY)));
                 }

@@ -20,6 +20,7 @@ public class NewLifeStatus extends JavaPlugin {
     private StatusConfig config;
     private PlayerDataManager dataManager;
     private TabListManager tabListManager;
+    private NametagManager nametagManager;
     private ApiClient apiClient;
     private DamageTracker damageTracker;
     private CombatLogListener combatLogListener;
@@ -46,6 +47,8 @@ public class NewLifeStatus extends JavaPlugin {
         Path dataPath = getDataFolder().toPath().resolve("playerdata");
         this.dataManager = new PlayerDataManager(dataPath, getLogger());
         this.tabListManager = new TabListManager(dataManager);
+        this.nametagManager = new NametagManager(dataManager);
+        getLogger().info("Nametag manager initialized (Bedrock-compatible)");
         
         // Initialize API client if enabled
         if (config.isDiscordEnabled()) {
@@ -100,6 +103,7 @@ public class NewLifeStatus extends JavaPlugin {
                 PlayerDataManager.PlayerData data = dataManager.getPlayerData(player.getUniqueId());
                 if (data != null && data.hasPvpCooldown()) {
                     tabListManager.updatePlayer(player);
+                    nametagManager.updatePlayer(player);
                 }
             });
         }, 20L, 20L); // 20 ticks = 1 second
@@ -150,6 +154,10 @@ public class NewLifeStatus extends JavaPlugin {
 
     public TabListManager getTabListManager() {
         return tabListManager;
+    }
+
+    public NametagManager getNametagManager() {
+        return nametagManager;
     }
 
     public ApiClient getApiClient() {

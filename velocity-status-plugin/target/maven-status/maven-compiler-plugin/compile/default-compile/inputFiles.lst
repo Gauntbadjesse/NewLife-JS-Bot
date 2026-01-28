@@ -1,12 +1,13 @@
 /Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/DamageTracker.java
 /Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/ApiClient.java
+/Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/listeners/PlayerDamageListener.java
+/Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/NewLifeStatus.java
+/Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/listeners/CombatLogListener.java
 /Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/commands/PvpCommand.java
 /Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/listeners/PlayerDeathListener.java
 /Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/commands/StatusCommand.java
 /Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/TabListManager.java
-/Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/listeners/PlayerDamageListener.java
 /Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/listeners/PlayerConnectionListener.java
 /Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/PlayerDataManager.java
-/Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/NewLifeStatus.java
 /Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/StatusConfig.java
-/Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/listeners/CombatLogListener.java
+/Users/jessebutler/Documents/NewLife-JS-Bot/velocity-status-plugin/src/main/java/com/newlifesmp/status/NametagManager.java

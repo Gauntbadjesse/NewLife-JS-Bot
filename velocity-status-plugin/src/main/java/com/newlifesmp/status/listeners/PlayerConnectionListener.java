@@ -52,7 +52,8 @@ public class PlayerConnectionListener implements Listener {
                             
                             if (player.isOnline()) {
                                 plugin.getTabListManager().updatePlayer(player);
-                                player.sendMessage(net.kyori.adventure.text.Component.text("✓ Your PvP has been turned off after the cooldown period.", net.kyori.adventure.text.format.NamedTextColor.GREEN));
+                                plugin.getNametagManager().updatePlayer(player);
+                                player.sendMessage(net.kyori.adventure.text.Component.text("Your PvP has been turned off after the cooldown period.", net.kyori.adventure.text.format.NamedTextColor.GREEN));
                             }
                         }
                     }, remainingMs / 50); // Convert milliseconds to ticks (1 tick = 50ms)
@@ -65,14 +66,18 @@ public class PlayerConnectionListener implements Listener {
             }
         }
 
-        // Update TAB list
+        // Update TAB list and nametag
         plugin.getTabListManager().updatePlayer(player);
+        plugin.getNametagManager().updatePlayer(player);
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
+        
+        // Remove player from nametag teams
+        plugin.getNametagManager().removePlayer(player);
         
         // Ensure latest data is saved before disconnect
         PlayerDataManager.PlayerData data = plugin.getDataManager().getPlayerData(uuid);

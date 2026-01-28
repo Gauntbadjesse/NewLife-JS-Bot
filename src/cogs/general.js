@@ -29,6 +29,147 @@ const {
 const { isStaff, isAdmin, isModerator, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
 
 /**
+ * Create comprehensive history embeds with all moderation data
+ * @param {string} displayName - Display name for the player
+ * @param {Object} data - Object containing all history data
+ * @returns {Array<EmbedBuilder>} Array of embeds
+ */
+function createComprehensiveHistoryEmbeds(displayName, data) {
+    const { warnings, serverBans, legacyBans, kicks, mutes, notes, linkedAccount } = data;
+    const embeds = [];
+    
+    // Combine all bans
+    const allBans = [...serverBans, ...legacyBans];
+    
+    // Calculate totals
+    const activeWarnings = warnings.filter(w => w.active !== false).length;
+    const activeBans = allBans.filter(b => b.active !== false).length;
+    const activeMutes = mutes.filter(m => m.active !== false).length;
+    
+    // Main summary embed
+    const summaryEmbed = new EmbedBuilder()
+        .setColor(activeBans > 0 ? 0xef4444 : activeWarnings > 0 ? 0xf59e0b : 0x10b981)
+        .setTitle(`Moderation History: ${displayName}`)
+        .setDescription(linkedAccount 
+            ? `**Minecraft:** ${linkedAccount.primaryUsername} (${linkedAccount.primaryPlatform})\n**Discord:** <@${linkedAccount.discordId}>\n**UUID:** \`${linkedAccount.primaryUuid}\``
+            : 'No linked account found')
+        .addFields(
+            { name: 'Warnings', value: `**Total:** ${warnings.length}\n**Active:** ${activeWarnings}`, inline: true },
+            { name: 'Bans', value: `**Total:** ${allBans.length}\n**Active:** ${activeBans}`, inline: true },
+            { name: 'Kicks', value: `**Total:** ${kicks.length}`, inline: true },
+            { name: 'Mutes', value: `**Total:** ${mutes.length}\n**Active:** ${activeMutes}`, inline: true },
+            { name: 'Staff Notes', value: `**Total:** ${notes.length}`, inline: true },
+            { name: '\u200b', value: '\u200b', inline: true }
+        )
+        .setFooter({ text: 'NewLife SMP | Full Moderation History' })
+        .setTimestamp();
+    
+    embeds.push(summaryEmbed);
+    
+    // Warnings detail embed (if any)
+    if (warnings.length > 0) {
+        const warningsEmbed = new EmbedBuilder()
+            .setColor(0xf59e0b)
+            .setTitle('Warnings')
+            .setDescription(`Showing ${Math.min(warnings.length, 10)} of ${warnings.length} warnings`);
+        
+        const warningsList = warnings.slice(0, 10).map((w, i) => {
+            const date = w.createdAt ? `<t:${Math.floor(new Date(w.createdAt).getTime() / 1000)}:R>` : 'Unknown';
+            const staffTag = w.staffName || w.staffTag || 'Unknown Staff';
+            const reason = w.reason ? (w.reason.length > 50 ? w.reason.substring(0, 50) + '...' : w.reason) : 'No reason';
+            const caseNum = w.caseNumber ? `#${w.caseNumber}` : '';
+            const status = w.active === false ? ' [Removed]' : '';
+            return `**${i + 1}. ${caseNum}${status}** ${date}\n- **Reason:** ${reason}\n- **By:** ${staffTag}`;
+        }).join('\n\n');
+        
+        warningsEmbed.addFields({ name: '\u200b', value: warningsList || 'None', inline: false });
+        embeds.push(warningsEmbed);
+    }
+    
+    // Bans detail embed (if any)
+    if (allBans.length > 0) {
+        const bansEmbed = new EmbedBuilder()
+            .setColor(0xef4444)
+            .setTitle('Bans')
+            .setDescription(`Showing ${Math.min(allBans.length, 10)} of ${allBans.length} bans`);
+        
+        const bansList = allBans.slice(0, 10).map((b, i) => {
+            const date = (b.bannedAt || b.createdAt) ? `<t:${Math.floor(new Date(b.bannedAt || b.createdAt).getTime() / 1000)}:R>` : 'Unknown';
+            const staffTag = b.staffTag || 'Unknown Staff';
+            const reason = b.reason ? (b.reason.length > 50 ? b.reason.substring(0, 50) + '...' : b.reason) : 'No reason';
+            const duration = b.isPermanent ? 'Permanent' : (b.duration || 'Unknown');
+            const caseNum = b.caseNumber ? `#${b.caseNumber}` : '';
+            const status = b.active === false ? ' [Unbanned]' : ' [Active]';
+            return `**${i + 1}. ${caseNum}${status}** ${date}\n- **Reason:** ${reason}\n- **Duration:** ${duration}\n- **By:** ${staffTag}`;
+        }).join('\n\n');
+        
+        bansEmbed.addFields({ name: '\u200b', value: bansList || 'None', inline: false });
+        embeds.push(bansEmbed);
+    }
+    
+    // Kicks detail embed (if any)
+    if (kicks.length > 0) {
+        const kicksEmbed = new EmbedBuilder()
+            .setColor(0x3b82f6)
+            .setTitle('Kicks')
+            .setDescription(`Showing ${Math.min(kicks.length, 10)} of ${kicks.length} kicks`);
+        
+        const kicksList = kicks.slice(0, 10).map((k, i) => {
+            const date = k.kickedAt ? `<t:${Math.floor(new Date(k.kickedAt).getTime() / 1000)}:R>` : 'Unknown';
+            const staffTag = k.staffTag || 'Unknown Staff';
+            const reason = k.reason ? (k.reason.length > 50 ? k.reason.substring(0, 50) + '...' : k.reason) : 'No reason';
+            const caseNum = k.caseNumber ? `#${k.caseNumber}` : '';
+            return `**${i + 1}. ${caseNum}** ${date}\n- **Reason:** ${reason}\n- **By:** ${staffTag}`;
+        }).join('\n\n');
+        
+        kicksEmbed.addFields({ name: '\u200b', value: kicksList || 'None', inline: false });
+        embeds.push(kicksEmbed);
+    }
+    
+    // Mutes detail embed (if any)
+    if (mutes.length > 0) {
+        const mutesEmbed = new EmbedBuilder()
+            .setColor(0x8b5cf6)
+            .setTitle('Mutes')
+            .setDescription(`Showing ${Math.min(mutes.length, 10)} of ${mutes.length} mutes`);
+        
+        const mutesList = mutes.slice(0, 10).map((m, i) => {
+            const date = m.createdAt ? `<t:${Math.floor(new Date(m.createdAt).getTime() / 1000)}:R>` : 'Unknown';
+            const staffTag = m.staffName || m.staffTag || 'Unknown Staff';
+            const reason = m.reason ? (m.reason.length > 50 ? m.reason.substring(0, 50) + '...' : m.reason) : 'No reason';
+            const duration = m.duration || 'Unknown';
+            const caseNum = m.caseNumber ? `#${m.caseNumber}` : '';
+            const status = m.active === false ? ' [Unmuted]' : ' [Active]';
+            return `**${i + 1}. ${caseNum}${status}** ${date}\n- **Reason:** ${reason}\n- **Duration:** ${duration}\n- **By:** ${staffTag}`;
+        }).join('\n\n');
+        
+        mutesEmbed.addFields({ name: '\u200b', value: mutesList || 'None', inline: false });
+        embeds.push(mutesEmbed);
+    }
+    
+    // Staff notes embed (if any)
+    if (notes.length > 0) {
+        const notesEmbed = new EmbedBuilder()
+            .setColor(0x6b7280)
+            .setTitle('Staff Notes')
+            .setDescription(`Showing ${Math.min(notes.length, 10)} of ${notes.length} notes`);
+        
+        const notesList = notes.slice(0, 10).map((n, i) => {
+            const date = n.createdAt ? `<t:${Math.floor(new Date(n.createdAt).getTime() / 1000)}:R>` : 'Unknown';
+            const staffName = n.staffName || 'Unknown Staff';
+            const content = n.content ? (n.content.length > 100 ? n.content.substring(0, 100) + '...' : n.content) : 'No content';
+            return `**${i + 1}.** ${date}\n- ${content}\n- **By:** ${staffName}`;
+        }).join('\n\n');
+        
+        notesEmbed.addFields({ name: '\u200b', value: notesList || 'None', inline: false });
+        embeds.push(notesEmbed);
+    }
+    
+    // Limit to max 10 embeds (Discord limit)
+    return embeds.slice(0, 10);
+}
+
+/**
  * Prefix Commands
  */
 const commands = {
@@ -191,8 +332,8 @@ const commands = {
     // !history <player_name> - Show full player history
     history: {
         name: 'history',
-        description: 'Show a player\'s full punishment history',
-        usage: '!history <player_name>',
+        description: 'Show a player\'s full punishment and moderation history',
+        usage: '!history <player_name or @user>',
         async execute(message, args, client) {
             // Check staff permissions
             if (!isStaff(message.member)) {
@@ -204,31 +345,113 @@ const commands = {
 
             if (!args[0]) {
                 return message.reply({
-                    embeds: [createErrorEmbed('Missing Argument', 'Please provide a player name.\n\n**Usage:** `!history <player_name>`')],
+                    embeds: [createErrorEmbed('Missing Argument', 'Please provide a player name or mention a user.\n\n**Usage:** `!history <player_name or @user>`')],
                     allowedMentions: { repliedUser: false }
                 });
             }
 
-            const playerName = args[0];
+            // Import additional models
+            const ServerBan = require('../database/models/ServerBan');
+            const Kick = require('../database/models/Kick');
+            const Mute = require('../database/models/Mute');
+            const Note = require('../database/models/Note');
+            const LinkedAccount = require('../database/models/LinkedAccount');
 
             try {
-                const warnings = await Warning.find({ 
-                    playerName: { $regex: new RegExp(`^${playerName}$`, 'i') }
-                }).sort({ createdAt: -1 });
+                let playerName = args[0];
+                let discordId = null;
+                let linkedAccount = null;
+                let displayName = playerName;
 
-                const bans = await Ban.find({ 
-                    playerName: { $regex: new RegExp(`^${playerName}$`, 'i') }
-                }).sort({ createdAt: -1 });
+                // Check if it's a Discord mention
+                const mentionMatch = args[0].match(/^<@!?(\d+)>$/);
+                if (mentionMatch) {
+                    discordId = mentionMatch[1];
+                    linkedAccount = await LinkedAccount.findOne({ discordId });
+                    if (linkedAccount) {
+                        playerName = linkedAccount.primaryUsername;
+                        displayName = `${linkedAccount.primaryUsername} (<@${discordId}>)`;
+                    } else {
+                        const user = await client.users.fetch(discordId).catch(() => null);
+                        displayName = user ? user.tag : `<@${discordId}>`;
+                    }
+                } else {
+                    // Try to find linked account by username
+                    linkedAccount = await LinkedAccount.findOne({ 
+                        primaryUsername: { $regex: new RegExp(`^${playerName}$`, 'i') }
+                    });
+                    if (linkedAccount) {
+                        discordId = linkedAccount.discordId;
+                        playerName = linkedAccount.primaryUsername;
+                        displayName = `${playerName} (<@${discordId}>)`;
+                    }
+                }
 
-                if (warnings.length === 0 && bans.length === 0) {
+                // Build queries for all record types
+                const queries = [];
+                
+                // By player name (case insensitive)
+                if (playerName) {
+                    queries.push({ primaryUsername: { $regex: new RegExp(`^${playerName}$`, 'i') } });
+                    queries.push({ playerName: { $regex: new RegExp(`^${playerName}$`, 'i') } });
+                }
+                
+                // By Discord ID
+                if (discordId) {
+                    queries.push({ discordId });
+                }
+                
+                // By linked UUIDs
+                if (linkedAccount) {
+                    queries.push({ primaryUuid: linkedAccount.primaryUuid });
+                    if (linkedAccount.linkedAccounts?.length > 0) {
+                        queries.push({ primaryUuid: { $in: linkedAccount.linkedAccounts.map(a => a.uuid) } });
+                    }
+                }
+
+                const queryOr = queries.length > 0 ? { $or: queries } : {};
+
+                // Fetch all records in parallel
+                const [warnings, serverBans, kicks, mutes, notes] = await Promise.all([
+                    Warning.find(queryOr).sort({ createdAt: -1 }).lean(),
+                    ServerBan.find(queryOr).sort({ bannedAt: -1 }).lean(),
+                    Kick.find(queryOr).sort({ kickedAt: -1 }).lean(),
+                    Mute.find(queryOr).sort({ createdAt: -1 }).lean(),
+                    Note.find({ 
+                        $or: [
+                            { playerName: { $regex: new RegExp(`^${playerName}$`, 'i') } },
+                            ...(linkedAccount ? [{ uuid: linkedAccount.primaryUuid }] : [])
+                        ]
+                    }).sort({ createdAt: -1 }).lean()
+                ]);
+
+                // Also check old Ban model for legacy bans
+                const legacyBans = await Ban.find({ 
+                    playerName: { $regex: new RegExp(`^${playerName}$`, 'i') }
+                }).sort({ createdAt: -1 }).lean();
+
+                const totalRecords = warnings.length + serverBans.length + kicks.length + mutes.length + legacyBans.length;
+
+                if (totalRecords === 0 && notes.length === 0) {
                     return message.reply({
-                        embeds: [createErrorEmbed('No History', `No punishment history found for player: \`${playerName}\``)],
+                        embeds: [createErrorEmbed('No History', `No moderation history found for: ${displayName}`)],
                         allowedMentions: { repliedUser: false }
                     });
                 }
 
+                // Build comprehensive history embeds
+                const embeds = await createComprehensiveHistoryEmbeds(displayName, {
+                    warnings,
+                    serverBans,
+                    legacyBans,
+                    kicks,
+                    mutes,
+                    notes,
+                    linkedAccount
+                });
+
                 return message.reply({
-                    embeds: [createHistoryEmbed(playerName, warnings, bans)],
+                    embeds: embeds,
                     allowedMentions: { repliedUser: false }
                 });
             } catch (error) {
