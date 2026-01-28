@@ -26,31 +26,50 @@ jobs:
 
       - name: Update Pterodactyl BOT_VERSION
         env:
-          PANEL_URL: "https://panel.newlifesmp.com/api"
+          PANEL_URL: "https://panel.newlifesmp.com"
           API_KEY: ${{ secrets.PTERODACTYL_API_KEY }}
           SERVER_ID: "0b7ac013-ba3f-40f7-bd16-d3cf448461fe"
           BOT_VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          if [ -z "$PANEL_URL" ] || [ -z "$API_KEY" ] || [ -z "$SERVER_ID" ]; then
-            echo "Missing required values: ensure API key secret PTERODACTYL_API_KEY is set"
+          if [ -z "$API_KEY" ]; then
+            echo "Missing PTERODACTYL_API_KEY secret"
             exit 1
           fi
 
           echo "Setting BOT_VERSION=$BOT_VERSION on server $SERVER_ID"
 
-          # Fetch current environment payload from panel. Endpoint may vary by panel version.
-          # Common pattern: GET <PANEL_URL>/servers/<SERVER_ID>/environment
-          curl -s -H "Authorization: Bearer $API_KEY" -H "Accept: application/json" "$PANEL_URL/servers/$SERVER_ID/environment" -o env.json
+          # Use Pterodactyl Client API to update startup variable
+          # First, get the list of startup variables to find BOT_VERSION's env_variable key
+          VARS=$(curl -s -H "Authorization: Bearer $API_KEY" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            "$PANEL_URL/api/client/servers/$SERVER_ID/startup")
 
-          # Build new environment payload by merging BOT_VERSION into existing environment map.
-            # Build payload using jq to avoid heredoc YAML parsing issues
-            jq --arg ver "$BOT_VERSION" \
-            'if (.attributes and .attributes.environment) then {environment: (.attributes.environment + {BOT_VERSION:$ver})} \
-             elif (.environment) then {environment: (.environment + {BOT_VERSION:$ver})} \
-             else {environment: (. + {BOT_VERSION:$ver})} end' env.json > payload.json
+          # Find the BOT_VERSION variable key
+          VAR_KEY=$(echo "$VARS" | jq -r '.data[] | select(.attributes.env_variable == "BOT_VERSION") | .attributes.env_variable' 2>/dev/null || echo "BOT_VERSION")
 
-          # Send update request (PATCH). The exact endpoint may differ on your panel; adjust if necessary.
-          curl -s -X PATCH -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" -d @payload.json "$PANEL_URL/servers/$SERVER_ID/environment" -o /dev/null -w "%{http_code}\n" | { read code; if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then echo "Updated"; else echo "Failed (HTTP $code)"; exit 1; fi }
+          if [ -z "$VAR_KEY" ]; then
+            VAR_KEY="BOT_VERSION"
+          fi
+
+          # Update the startup variable via Client API
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
+            -H "Authorization: Bearer $API_KEY" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d "{\"key\": \"BOT_VERSION\", \"value\": \"$BOT_VERSION\"}" \
+            "$PANEL_URL/api/client/servers/$SERVER_ID/startup/variable")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Successfully updated BOT_VERSION to $BOT_VERSION"
+          else
+            echo "❌ Failed to update (HTTP $HTTP_CODE)"
+            echo "$BODY"
+            exit 1
+          fi
 
       - name: Done
         run: echo "Pterodactyl BOT_VERSION set to ${{ steps.ver.outputs.version }}"

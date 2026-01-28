@@ -20,8 +20,8 @@ public class DamageTracker {
     private final Map<String, DamageSession> activeSessions;
     private final long sessionTimeoutMs;
     
-    // Low HP threshold (4 HP = 2 hearts)
-    private static final double LOW_HP_THRESHOLD = 4.0;
+    // Low HP threshold (5 HP = 2.5 hearts)
+    private static final double LOW_HP_THRESHOLD = 5.0;
     
     // Track recent low HP alerts to prevent spam (UUID -> last alert time)
     private final Map<UUID, Long> recentLowHpAlerts;

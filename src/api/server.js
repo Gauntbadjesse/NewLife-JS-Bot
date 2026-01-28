@@ -885,6 +885,7 @@ function getHeader(active, session = null) {
         <a href="/viewer/warnings" class="${active === 'warnings' ? 'active' : ''}">Warnings</a>
         <a href="/viewer/mutes" class="${active === 'mutes' ? 'active' : ''}">Mutes</a>
         <a href="/viewer/transcripts" class="${active === 'transcripts' ? 'active' : ''}">Transcripts</a>
+        <a href="/viewer/pvp-logs" class="${active === 'pvp-logs' ? 'active' : ''}">PvP Logs</a>
     </nav>
     <div style="display:flex;align-items:center;gap:12px">
         ${switchToUser}
@@ -2741,6 +2742,371 @@ app.post('/viewer/transcript/:ticketId/delete', staffAuth, async (req, res) => {
         
         console.log(`[Transcripts] Admin ${req.session.username} deleted transcript ${ticketId}`);
         res.redirect('/viewer/transcripts?deleted=1');
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error: ' + e.message);
+    }
+});
+
+// =====================================================
+// PVP LOGS PAGE (Admin Only)
+// =====================================================
+const PvpLog = require('../database/models/PvpLog');
+
+app.get('/viewer/pvp-logs', staffAuth, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = 50;
+        const skip = (page - 1) * limit;
+        const search = req.query.search || '';
+        const type = req.query.type || '';
+        const dateFrom = req.query.from || '';
+        const dateTo = req.query.to || '';
+        
+        let query = {};
+        
+        // Type filter
+        if (type && ['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'combat_log', 'low_hp_alert'].includes(type)) {
+            query.type = type;
+        }
+        
+        // Date filter
+        if (dateFrom || dateTo) {
+            query.timestamp = {};
+            if (dateFrom) query.timestamp.$gte = new Date(dateFrom);
+            if (dateTo) query.timestamp.$lte = new Date(dateTo + 'T23:59:59');
+        }
+        
+        // Search filter - search by player names/UUIDs
+        if (search) {
+            query.$or = [
+                { username: { $regex: search, $options: 'i' } },
+                { uuid: { $regex: search, $options: 'i' } },
+                { 'killer.username': { $regex: search, $options: 'i' } },
+                { 'victim.username': { $regex: search, $options: 'i' } },
+                { 'attacker.username': { $regex: search, $options: 'i' } },
+                { 'player.username': { $regex: search, $options: 'i' } },
+                { 'player1.username': { $regex: search, $options: 'i' } },
+                { 'player2.username': { $regex: search, $options: 'i' } }
+            ];
+        }
+        
+        const [total, logs] = await Promise.all([
+            PvpLog.countDocuments(query),
+            PvpLog.find(query)
+                .sort({ timestamp: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+        
+        const totalPages = Math.ceil(total / limit);
+        
+        // Get type counts
+        const [statusCount, killCount, damageCount, lowHpCount, combatLogCount] = await Promise.all([
+            PvpLog.countDocuments({ type: 'status_change' }),
+            PvpLog.countDocuments({ type: 'pvp_kill' }),
+            PvpLog.countDocuments({ type: 'pvp_damage_session' }),
+            PvpLog.countDocuments({ type: 'low_hp_alert' }),
+            PvpLog.countDocuments({ type: 'combat_log' })
+        ]);
+        
+        // Get type tag
+        const getTypeTag = (logType) => {
+            switch(logType) {
+                case 'status_change': return '<span class="tag tag-b">Status</span>';
+                case 'pvp_kill': return '<span class="tag tag-r">Kill</span>';
+                case 'invalid_pvp': return '<span class="tag tag-o">Invalid</span>';
+                case 'death': return '<span class="tag tag-g">Death</span>';
+                case 'pvp_damage_session': return '<span class="tag tag-y">Damage</span>';
+                case 'combat_log': return '<span class="tag tag-p">Combat Log</span>';
+                case 'low_hp_alert': return '<span class="tag tag-r">Low HP</span>';
+                default: return '<span class="tag tag-g">' + (logType || 'Unknown') + '</span>';
+            }
+        };
+        
+        // Get summary for log
+        const getLogSummary = (log) => {
+            switch(log.type) {
+                case 'status_change':
+                    return `<strong>${log.username}</strong> turned PvP <strong>${log.enabled ? 'ON' : 'OFF'}</strong>`;
+                case 'pvp_kill':
+                    return `<strong>${log.killer?.username || '?'}</strong> killed <strong>${log.victim?.username || '?'}</strong>`;
+                case 'invalid_pvp':
+                    return `<strong>${log.attacker?.username || '?'}</strong> attacked <strong>${log.victim?.username || '?'}</strong> (invalid)`;
+                case 'death':
+                    return `<strong>${log.username}</strong> died: ${log.cause || 'unknown'}`;
+                case 'pvp_damage_session':
+                    return `<strong>${log.player1?.username || '?'}</strong> vs <strong>${log.player2?.username || '?'}</strong> - ${log.total_damage?.toFixed(1) || 0} HP`;
+                case 'combat_log':
+                    return `<strong>${log.player?.username || '?'}</strong> combat logged`;
+                case 'low_hp_alert':
+                    return `<strong>${log.victim?.username || '?'}</strong> dropped to ${log.health_remaining?.toFixed(1) || '?'} HP (attacker: ${log.attacker?.username || '?'})`;
+                default:
+                    return 'Unknown event';
+            }
+        };
+        
+        // Get players involved
+        const getPlayers = (log) => {
+            const players = [];
+            if (log.username) players.push(log.username);
+            if (log.killer?.username) players.push(log.killer.username);
+            if (log.victim?.username) players.push(log.victim.username);
+            if (log.attacker?.username) players.push(log.attacker.username);
+            if (log.player?.username) players.push(log.player.username);
+            if (log.player1?.username) players.push(log.player1.username);
+            if (log.player2?.username) players.push(log.player2.username);
+            return [...new Set(players)].join(', ') || '—';
+        };
+        
+        let rows = logs.map(log => `<tr>
+            <td>${getTypeTag(log.type)}</td>
+            <td>${getLogSummary(log)}</td>
+            <td class="hide">${getPlayers(log)}</td>
+            <td>${log.timestamp ? new Date(log.timestamp).toLocaleString() : '—'}</td>
+            <td><a href="/viewer/pvp-log/${log._id}" class="btn-edit">View</a></td>
+        </tr>`).join('');
+        
+        if (!rows) rows = '<tr><td colspan="5" class="empty">No PvP logs found</td></tr>';
+        
+        let pag = '';
+        if (totalPages > 1) {
+            const url = (p) => `/viewer/pvp-logs?page=${p}&search=${encodeURIComponent(search)}&type=${type}&from=${dateFrom}&to=${dateTo}`;
+            if (page > 1) pag += `<a href="${url(page - 1)}">Previous</a>`;
+            pag += `<span>Page ${page} of ${totalPages}</span>`;
+            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next</a>`;
+        }
+        
+        res.setHeader('Content-Type', 'text/html');
+        res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>PvP Logs</title><style>${viewerStyles}${transcriptStyles}</style></head><body>
+${getHeader('pvp-logs', req.session)}
+<div class="main">
+    <h1 class="title">PvP Combat Logs</h1>
+    <p class="subtitle">All PvP-related events including damage sessions, kills, status changes, and alerts</p>
+    
+    <div class="stats">
+        <div class="stat"><div class="num">${total}</div><div class="lbl">Total</div></div>
+        <div class="stat"><div class="num">${killCount}</div><div class="lbl">Kills</div></div>
+        <div class="stat"><div class="num">${damageCount}</div><div class="lbl">Damage</div></div>
+        <div class="stat"><div class="num">${lowHpCount}</div><div class="lbl">Low HP</div></div>
+        <div class="stat"><div class="num">${combatLogCount}</div><div class="lbl">Combat Logs</div></div>
+    </div>
+    
+    <div class="filter-card">
+        <h3>Search & Filter</h3>
+        <form method="GET">
+            <div class="filter-grid">
+                <div class="filter-group">
+                    <label>Search</label>
+                    <input type="text" name="search" placeholder="Player name or UUID..." value="${search}">
+                </div>
+                <div class="filter-group">
+                    <label>Type</label>
+                    <select name="type">
+                        <option value="">All Types</option>
+                        <option value="status_change" ${type === 'status_change' ? 'selected' : ''}>Status Changes</option>
+                        <option value="pvp_kill" ${type === 'pvp_kill' ? 'selected' : ''}>Kills</option>
+                        <option value="pvp_damage_session" ${type === 'pvp_damage_session' ? 'selected' : ''}>Damage Sessions</option>
+                        <option value="low_hp_alert" ${type === 'low_hp_alert' ? 'selected' : ''}>Low HP Alerts</option>
+                        <option value="combat_log" ${type === 'combat_log' ? 'selected' : ''}>Combat Logs</option>
+                        <option value="invalid_pvp" ${type === 'invalid_pvp' ? 'selected' : ''}>Invalid PvP</option>
+                        <option value="death" ${type === 'death' ? 'selected' : ''}>Deaths</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>From Date</label>
+                    <input type="date" name="from" value="${dateFrom}">
+                </div>
+                <div class="filter-group">
+                    <label>To Date</label>
+                    <input type="date" name="to" value="${dateTo}">
+                </div>
+            </div>
+            <div class="filter-actions">
+                <button class="btn btn-go" type="submit">Apply Filters</button>
+                <a class="btn btn-clr" href="/viewer/pvp-logs">Clear All</a>
+            </div>
+        </form>
+    </div>
+    
+    <div class="tbl"><table>
+        <thead><tr><th>Type</th><th>Summary</th><th class="hide">Players</th><th>Time</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+    </table></div>
+    <div class="pages">${pag}</div>
+</div></body></html>`);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error: ' + e.message);
+    }
+});
+
+// =====================================================
+// PVP LOG DETAIL PAGE (Admin Only)
+// =====================================================
+app.get('/viewer/pvp-log/:id', staffAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const log = await PvpLog.findById(id).lean();
+        
+        if (!log) {
+            return res.status(404).send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Log Not Found</title><style>${viewerStyles}</style></head><body>
+${getHeader('pvp-logs', req.session)}
+<div class="main">
+    <a href="/viewer/pvp-logs" class="back-link">Back to PvP Logs</a>
+    <h1 class="title">Log Not Found</h1>
+    <p style="color:var(--text-secondary)">The requested PvP log was not found.</p>
+</div></body></html>`);
+        }
+        
+        // Get type tag
+        const getTypeTag = (logType) => {
+            switch(logType) {
+                case 'status_change': return '<span class="tag tag-b">Status Change</span>';
+                case 'pvp_kill': return '<span class="tag tag-r">PvP Kill</span>';
+                case 'invalid_pvp': return '<span class="tag tag-o">Invalid PvP</span>';
+                case 'death': return '<span class="tag tag-g">Death</span>';
+                case 'pvp_damage_session': return '<span class="tag tag-y">Damage Session</span>';
+                case 'combat_log': return '<span class="tag tag-p">Combat Log</span>';
+                case 'low_hp_alert': return '<span class="tag tag-r">Low HP Alert</span>';
+                default: return '<span class="tag tag-g">' + (logType || 'Unknown') + '</span>';
+            }
+        };
+        
+        // Build detail content based on log type
+        let detailHtml = '';
+        
+        switch(log.type) {
+            case 'status_change':
+                detailHtml = `
+                    <div class="info-grid">
+                        <div class="info-item"><label>Player</label><span>${log.username}</span></div>
+                        <div class="info-item"><label>UUID</label><span style="font-family:monospace;font-size:0.85em">${log.uuid}</span></div>
+                        <div class="info-item"><label>New Status</label><span class="${log.enabled ? 'status-active' : 'status-inactive'}">${log.enabled ? 'PvP ON' : 'PvP OFF'}</span></div>
+                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                    </div>`;
+                break;
+                
+            case 'pvp_kill':
+                detailHtml = `
+                    <div class="info-grid">
+                        <div class="info-item"><label>Killer</label><span>${log.killer?.username || 'Unknown'}</span></div>
+                        <div class="info-item"><label>Killer UUID</label><span style="font-family:monospace;font-size:0.85em">${log.killer?.uuid || '—'}</span></div>
+                        <div class="info-item"><label>Killer PvP</label><span>${log.killer?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
+                        <div class="info-item"><label>Victim</label><span>${log.victim?.username || 'Unknown'}</span></div>
+                        <div class="info-item"><label>Victim UUID</label><span style="font-family:monospace;font-size:0.85em">${log.victim?.uuid || '—'}</span></div>
+                        <div class="info-item"><label>Victim PvP</label><span>${log.victim?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
+                        <div class="info-item"><label>Consensual</label><span class="${log.consensual ? 'status-inactive' : 'status-active'}">${log.consensual ? 'Yes' : 'No'}</span></div>
+                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                    </div>`;
+                break;
+                
+            case 'pvp_damage_session':
+                detailHtml = `
+                    <div class="info-grid">
+                        <div class="info-item"><label>Player 1</label><span>${log.player1?.username || 'Unknown'}</span></div>
+                        <div class="info-item"><label>P1 Damage Dealt</label><span>${log.player1?.damage_dealt?.toFixed(1) || 0} HP</span></div>
+                        <div class="info-item"><label>P1 Hits</label><span>${log.player1?.hits_dealt || 0}</span></div>
+                        <div class="info-item"><label>P1 PvP Status</label><span>${log.player1?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
+                        <div class="info-item"><label>Player 2</label><span>${log.player2?.username || 'Unknown'}</span></div>
+                        <div class="info-item"><label>P2 Damage Dealt</label><span>${log.player2?.damage_dealt?.toFixed(1) || 0} HP</span></div>
+                        <div class="info-item"><label>P2 Hits</label><span>${log.player2?.hits_dealt || 0}</span></div>
+                        <div class="info-item"><label>P2 PvP Status</label><span>${log.player2?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
+                        <div class="info-item"><label>Total Damage</label><span>${log.total_damage?.toFixed(1) || 0} HP</span></div>
+                        <div class="info-item"><label>Total Hits</label><span>${log.total_hits || 0}</span></div>
+                        <div class="info-item"><label>Duration</label><span>${log.duration_ms ? (log.duration_ms / 1000).toFixed(1) + 's' : '—'}</span></div>
+                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                    </div>
+                    ${log.initiator ? `<div class="info-item" style="margin-top:16px"><label>Fight Initiator</label><span>${log.initiator.username}</span></div>` : ''}`;
+                break;
+                
+            case 'low_hp_alert':
+                detailHtml = `
+                    <div class="info-grid">
+                        <div class="info-item"><label>Victim</label><span>${log.victim?.username || 'Unknown'}</span></div>
+                        <div class="info-item"><label>Health Remaining</label><span class="status-active">${log.health_remaining?.toFixed(1) || '?'} HP</span></div>
+                        <div class="info-item"><label>Victim PvP</label><span>${log.victim?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
+                        <div class="info-item"><label>Attacker</label><span>${log.attacker?.username || 'Unknown'}</span></div>
+                        <div class="info-item"><label>Attacker Damage</label><span>${log.attacker?.total_damage_dealt?.toFixed(1) || 0} HP</span></div>
+                        <div class="info-item"><label>Attacker PvP</label><span>${log.attacker?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
+                        ${log.initiator ? `<div class="info-item"><label>Fight Initiator</label><span>${log.initiator.username}${log.initiator.is_current_attacker ? ' (attacker)' : ''}</span></div>` : ''}
+                        ${log.session ? `
+                            <div class="info-item"><label>Session Damage</label><span>${log.session.total_damage?.toFixed(1) || 0} HP</span></div>
+                            <div class="info-item"><label>Session Hits</label><span>${log.session.total_hits || 0}</span></div>
+                            <div class="info-item"><label>Consensual</label><span class="${log.session.consensual ? 'status-inactive' : 'status-active'}">${log.session.consensual ? 'Yes' : 'No'}</span></div>
+                        ` : ''}
+                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                    </div>
+                    ${log.location ? `
+                        <div class="info-item" style="margin-top:16px">
+                            <label>Location</label>
+                            <span>${log.location.world} (${log.location.x?.toFixed(0)}, ${log.location.y?.toFixed(0)}, ${log.location.z?.toFixed(0)})</span>
+                        </div>` : ''}`;
+                break;
+                
+            case 'combat_log':
+                detailHtml = `
+                    <div class="info-grid">
+                        <div class="info-item"><label>Player</label><span>${log.player?.username || 'Unknown'}</span></div>
+                        <div class="info-item"><label>UUID</label><span style="font-family:monospace;font-size:0.85em">${log.player?.uuid || '—'}</span></div>
+                        <div class="info-item"><label>PvP Status</label><span>${log.player?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
+                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                    </div>
+                    ${log.location ? `
+                        <div class="info-item" style="margin-top:16px">
+                            <label>Location</label>
+                            <span>${log.location.world} (${log.location.x?.toFixed(0)}, ${log.location.y?.toFixed(0)}, ${log.location.z?.toFixed(0)})</span>
+                        </div>` : ''}`;
+                break;
+                
+            case 'invalid_pvp':
+                detailHtml = `
+                    <div class="info-grid">
+                        <div class="info-item"><label>Attacker</label><span>${log.attacker?.username || 'Unknown'}</span></div>
+                        <div class="info-item"><label>Attacker PvP</label><span>${log.attacker?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
+                        <div class="info-item"><label>Victim</label><span>${log.victim?.username || 'Unknown'}</span></div>
+                        <div class="info-item"><label>Victim PvP</label><span>${log.victim?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
+                        <div class="info-item"><label>Damage Attempted</label><span>${log.damage?.toFixed(1) || 0} HP</span></div>
+                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                    </div>`;
+                break;
+                
+            case 'death':
+                detailHtml = `
+                    <div class="info-grid">
+                        <div class="info-item"><label>Player</label><span>${log.username}</span></div>
+                        <div class="info-item"><label>UUID</label><span style="font-family:monospace;font-size:0.85em">${log.uuid}</span></div>
+                        <div class="info-item"><label>Cause</label><span>${log.cause || 'Unknown'}</span></div>
+                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                    </div>`;
+                break;
+                
+            default:
+                detailHtml = `<p style="color:var(--text-secondary)">No additional details available for this log type.</p>`;
+        }
+        
+        // Raw JSON for debugging
+        const rawJson = JSON.stringify(log, null, 2);
+        
+        res.setHeader('Content-Type', 'text/html');
+        res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>PvP Log Detail</title><style>${viewerStyles}${transcriptStyles}</style></head><body>
+${getHeader('pvp-logs', req.session)}
+<div class="main">
+    <a href="/viewer/pvp-logs" class="back-link">Back to PvP Logs</a>
+    
+    <h1 class="title">${getTypeTag(log.type)} PvP Log</h1>
+    
+    <div class="case-detail">
+        <h2>Event Details</h2>
+        ${detailHtml}
+    </div>
+    
+    <div class="evidence-section">
+        <h3>Raw Data</h3>
+        <pre style="background:var(--bg-darker);padding:18px;border-radius:var(--radius-md);overflow-x:auto;font-size:0.85em;color:var(--text-secondary);border:1px solid var(--border-light)"><code>${escapeHtml(rawJson)}</code></pre>
+    </div>
+</div></body></html>`);
     } catch (e) {
         console.error(e);
         res.status(500).send('Error: ' + e.message);

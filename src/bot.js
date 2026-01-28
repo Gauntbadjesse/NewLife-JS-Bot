@@ -100,11 +100,13 @@ async function registerSlashCommands() {
 
 // Event: Bot is ready
 client.once('ready', async () => {
+    const startupVersion = process.env.BOT_VERSION || require('../package.json').version || '1.0.0';
     console.log('');
     console.log('       NewLife Management Bot           ');
     console.log('            Now Online!                 ');
     console.log('');
     console.log(` Bot: ${client.user.tag.padEnd(32)} `);
+    console.log(` Version: ${('v' + startupVersion).padEnd(29)} `);
     console.log(` Servers: ${String(client.guilds.cache.size).padEnd(28)} `);
     console.log(` Commands: ${String(client.commands.size).padEnd(27)} `);
     console.log(` Slash Commands: ${String(client.slashCommands.size).padEnd(21)} `);
@@ -118,7 +120,9 @@ client.once('ready', async () => {
 
     await initWatcher(client);
 
-    client.user.setActivity('NewLife SMP | !help', { type: 3 });
+    // Set activity with version
+    const botVersion = process.env.BOT_VERSION || require('../package.json').version || '1.0.0';
+    client.user.setActivity(`v${botVersion} | NewLife SMP`, { type: 3 });
 
     // Initialize timed close processor for tickets
     try {

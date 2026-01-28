@@ -4,7 +4,7 @@ const pvpLogSchema = new mongoose.Schema({
     type: {
         type: String,
         required: true,
-        enum: ['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'combat_log']
+        enum: ['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'combat_log', 'low_hp_alert']
     },
     timestamp: {
         type: Date,

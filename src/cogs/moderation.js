@@ -535,6 +535,148 @@ const commands = {
                 try { await message.delete(); } catch (e) { /* ignore */ }
             }
         }
+    },
+
+    // !purge <number> - bulk delete messages (Admin+)
+    purge: {
+        name: 'purge',
+        description: 'Bulk delete messages from the channel (Admin+)',
+        usage: '!purge <number> [@user]',
+        async execute(message, args, client) {
+            if (!isAdmin(message.member)) {
+                return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'You do not have permission to use this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            const amount = parseInt(args[0], 10);
+
+            if (!amount || isNaN(amount) || amount < 1 || amount > 100) {
+                return message.reply({ embeds: [createErrorEmbed('Invalid Amount', 'Please provide a number between 1 and 100.')], allowedMentions: { repliedUser: false } });
+            }
+
+            // Check if filtering by user
+            const targetUser = message.mentions.users.first();
+
+            try {
+                // Delete the command message first
+                await message.delete().catch(() => {});
+
+                let deleted;
+                if (targetUser) {
+                    // Fetch messages and filter by user
+                    const messages = await message.channel.messages.fetch({ limit: 100 });
+                    const userMessages = messages.filter(m => m.author.id === targetUser.id).first(amount);
+                    deleted = await message.channel.bulkDelete(userMessages, true);
+                } else {
+                    // Delete specified amount of messages
+                    deleted = await message.channel.bulkDelete(amount, true);
+                }
+
+                const confirmMsg = await message.channel.send({
+                    embeds: [createSuccessEmbed(
+                        'Messages Purged',
+                        `Successfully deleted **${deleted.size}** message${deleted.size !== 1 ? 's' : ''}${targetUser ? ` from ${targetUser.tag}` : ''}.`
+                    )]
+                });
+
+                // Auto-delete confirmation after 3 seconds
+                setTimeout(() => {
+                    confirmMsg.delete().catch(() => {});
+                }, 3000);
+
+            } catch (error) {
+                console.error('Error purging messages:', error);
+                
+                if (error.code === 50034) {
+                    return message.channel.send({ embeds: [createErrorEmbed('Error', 'Cannot delete messages older than 14 days.')], allowedMentions: { repliedUser: false } });
+                }
+                
+                return message.channel.send({ embeds: [createErrorEmbed('Error', 'Failed to purge messages. ' + error.message)], allowedMentions: { repliedUser: false } });
+            }
+        }
+    },
+
+    // !role <@user> <role> - give a role to a user (Admin+)
+    role: {
+        name: 'role',
+        description: 'Give or remove a role from a user (Admin+)',
+        usage: '!role <@user> <role name or ID>',
+        async execute(message, args, client) {
+            if (!isAdmin(message.member)) {
+                return message.reply({ embeds: [createErrorEmbed('Permission Denied', 'You do not have permission to use this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            // Get target user
+            const targetMember = message.mentions.members?.first();
+            if (!targetMember) {
+                return message.reply({ embeds: [createErrorEmbed('Invalid Usage', 'Please mention a user.\nUsage: `!role @user <role name or ID>`')], allowedMentions: { repliedUser: false } });
+            }
+
+            // Get role argument (everything after the mention)
+            const roleArg = args.slice(1).join(' ');
+            if (!roleArg) {
+                return message.reply({ embeds: [createErrorEmbed('Invalid Usage', 'Please provide a role name or ID.\nUsage: `!role @user <role name or ID>`')], allowedMentions: { repliedUser: false } });
+            }
+
+            // Find the role by ID or name
+            let role = message.guild.roles.cache.get(roleArg);
+            if (!role) {
+                // Try to find by name (case-insensitive)
+                role = message.guild.roles.cache.find(r => r.name.toLowerCase() === roleArg.toLowerCase());
+            }
+
+            if (!role) {
+                return message.reply({ embeds: [createErrorEmbed('Role Not Found', `Could not find a role matching: \`${roleArg}\``)], allowedMentions: { repliedUser: false } });
+            }
+
+            // Blocked roles from env (staff roles + premium)
+            const blockedRoleIds = [
+                process.env.MODERATOR_ROLE_ID,
+                process.env.SR_MOD_ROLE_ID,
+                process.env.ADMIN_ROLE_ID,
+                process.env.SUPERVISOR_ROLE_ID,
+                process.env.MANAGEMENT_ROLE_ID,
+                process.env.OWNER_ROLE_ID,
+                process.env.STAFF_TEAM,
+                process.env.WHITELIST_GURU_ROLE_ID,
+                '1463405789241802895' // NewLife+ Premium role
+            ].filter(Boolean);
+
+            if (blockedRoleIds.includes(role.id)) {
+                return message.reply({ embeds: [createErrorEmbed('Restricted Role', 'You cannot assign staff roles or NewLife+ through this command.')], allowedMentions: { repliedUser: false } });
+            }
+
+            // Check if bot can manage this role (role hierarchy)
+            if (role.position >= message.guild.members.me.roles.highest.position) {
+                return message.reply({ embeds: [createErrorEmbed('Role Too High', 'I cannot manage this role as it is higher than or equal to my highest role.')], allowedMentions: { repliedUser: false } });
+            }
+
+            // Check if the user's highest role is above the target role
+            if (role.position >= message.member.roles.highest.position && message.author.id !== message.guild.ownerId) {
+                return message.reply({ embeds: [createErrorEmbed('Role Too High', 'You cannot assign a role that is higher than or equal to your highest role.')], allowedMentions: { repliedUser: false } });
+            }
+
+            try {
+                // Toggle role - add if they don't have it, remove if they do
+                const hasRole = targetMember.roles.cache.has(role.id);
+                
+                if (hasRole) {
+                    await targetMember.roles.remove(role);
+                    return message.reply({ 
+                        embeds: [createSuccessEmbed('Role Removed', `Removed **${role.name}** from ${targetMember.user.tag}.`)], 
+                        allowedMentions: { repliedUser: false } 
+                    });
+                } else {
+                    await targetMember.roles.add(role);
+                    return message.reply({ 
+                        embeds: [createSuccessEmbed('Role Added', `Added **${role.name}** to ${targetMember.user.tag}.`)], 
+                        allowedMentions: { repliedUser: false } 
+                    });
+                }
+            } catch (error) {
+                console.error('Error managing role:', error);
+                return message.reply({ embeds: [createErrorEmbed('Error', 'Failed to manage role: ' + error.message)], allowedMentions: { repliedUser: false } });
+            }
+        }
     }
 };
 

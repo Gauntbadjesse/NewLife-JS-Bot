@@ -1637,6 +1637,35 @@ const slashCommands = [
                 });
             }
         }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('version')
+            .setDescription('Show bot version and system info'),
+        async execute(interaction, client) {
+            const version = process.env.BOT_VERSION || require('../../package.json').version || 'Unknown';
+            const nodeVersion = process.version;
+            const discordJsVersion = require('discord.js').version;
+            const uptime = formatUptime(client.uptime);
+            const memUsage = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+
+            const embed = new EmbedBuilder()
+                .setColor(getEmbedColor())
+                .setTitle('NewLife Management Bot')
+                .setThumbnail(client.user.displayAvatarURL({ size: 128 }))
+                .addFields(
+                    { name: 'Bot Version', value: `\`v${version}\``, inline: true },
+                    { name: 'Node.js', value: `\`${nodeVersion}\``, inline: true },
+                    { name: 'Discord.js', value: `\`v${discordJsVersion}\``, inline: true },
+                    { name: 'Uptime', value: `\`${uptime}\``, inline: true },
+                    { name: 'Memory', value: `\`${memUsage} MB\``, inline: true },
+                    { name: 'Ping', value: `\`${client.ws.ping}ms\``, inline: true }
+                )
+                .setFooter({ text: 'NewLife SMP' })
+                .setTimestamp();
+
+            return interaction.reply({ embeds: [embed] });
+        }
     }
 ];
 
