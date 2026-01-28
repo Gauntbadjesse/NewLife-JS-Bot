@@ -35,6 +35,7 @@ const {
 const { createErrorEmbed, createSuccessEmbed, getEmbedColor } = require('../utils/embeds');
 const Application = require('../database/models/Application');
 const TimedClose = require('../database/models/TimedClose');
+const Transcript = require('../database/models/Transcript');
 const { randomUUID } = require('crypto');
 const { getNextCaseNumber } = require('../database/caseCounter');
 
@@ -182,7 +183,103 @@ async function uploadTranscript(content) {
 }
 
 /**
- * Generate ticket transcript
+ * Generate rich transcript data for MongoDB storage
+ * @param {TextChannel} channel - Ticket channel
+ * @returns {Promise<Object>} Transcript data with messages and metadata
+ */
+async function generateRichTranscript(channel) {
+    const messages = [];
+    let lastId;
+
+    // Fetch all messages
+    while (true) {
+        const options = { limit: 100 };
+        if (lastId) options.before = lastId;
+
+        const fetched = await channel.messages.fetch(options);
+        if (fetched.size === 0) break;
+
+        messages.push(...fetched.values());
+        lastId = fetched.last().id;
+    }
+
+    // Reverse to get chronological order
+    messages.reverse();
+
+    // Track participants
+    const participantMap = new Map();
+
+    // Process messages into rich format
+    const richMessages = messages.map(msg => {
+        // Track participant
+        if (!participantMap.has(msg.author.id)) {
+            participantMap.set(msg.author.id, {
+                id: msg.author.id,
+                tag: msg.author.tag,
+                avatar: msg.author.displayAvatarURL({ size: 64 }),
+                messageCount: 0
+            });
+        }
+        participantMap.get(msg.author.id).messageCount++;
+
+        // Process attachments
+        const attachments = msg.attachments.map(att => ({
+            url: att.url,
+            name: att.name,
+            contentType: att.contentType,
+            size: att.size
+        }));
+
+        // Process embeds
+        const embeds = msg.embeds.map(embed => ({
+            title: embed.title,
+            description: embed.description,
+            color: embed.color,
+            fields: embed.fields?.map(f => ({
+                name: f.name,
+                value: f.value,
+                inline: f.inline
+            })) || [],
+            footer: embed.footer?.text,
+            timestamp: embed.timestamp,
+            thumbnail: embed.thumbnail?.url,
+            image: embed.image?.url,
+            author: embed.author ? {
+                name: embed.author.name,
+                iconUrl: embed.author.iconURL
+            } : null
+        }));
+
+        // Process reactions
+        const reactions = msg.reactions?.cache?.map(r => ({
+            emoji: r.emoji.name,
+            count: r.count
+        })) || [];
+
+        return {
+            id: msg.id,
+            authorId: msg.author.id,
+            authorTag: msg.author.tag,
+            authorAvatar: msg.author.displayAvatarURL({ size: 64 }),
+            authorBot: msg.author.bot,
+            content: msg.content,
+            timestamp: msg.createdAt,
+            attachments,
+            embeds,
+            reactions,
+            replyTo: msg.reference?.messageId || null
+        };
+    });
+
+    return {
+        messages: richMessages,
+        participants: Array.from(participantMap.values()),
+        messageCount: richMessages.length
+    };
+}
+
+/**
+ * Generate ticket transcript (plain text for paste.rs backup)
  * @param {TextChannel} channel - Ticket channel
  * @returns {Promise<string>} Transcript content
  */
@@ -563,9 +660,62 @@ async function createApplicationTicket(guild, user, application, client) {
  */
 async function closeTicket(channel, closedBy, reason, client) {
     try {
-        // Generate transcript
+        // Determine ticket type from channel name
+        let ticketType = 'general';
+        if (channel.name.includes('-apply-')) ticketType = 'apply';
+        else if (channel.name.includes('-report-')) ticketType = 'report';
+        else if (channel.name.includes('-management-')) ticketType = 'management';
+
+        // Find ticket owner from permissions
+        let ownerId = null;
+        let ownerTag = 'Unknown';
+        let ownerAvatar = null;
+        
+        const userOverwrites = channel.permissionOverwrites.cache.filter(
+            po => po.type === 1 && po.id !== closedBy?.id && po.id !== client.user.id
+        );
+        
+        if (userOverwrites.size > 0) {
+            const ownerOverwrite = userOverwrites.first();
+            ownerId = ownerOverwrite.id;
+            try {
+                const owner = await client.users.fetch(ownerId);
+                ownerTag = owner.tag;
+                ownerAvatar = owner.displayAvatarURL({ size: 64 });
+            } catch (e) {}
+        }
+
+        // Generate rich transcript for database
+        const richData = await generateRichTranscript(channel);
+        
+        // Generate plain text transcript for paste.rs backup
         const transcript = await generateTranscript(channel);
         const transcriptUrl = await uploadTranscript(transcript);
+
+        // Save transcript to MongoDB
+        try {
+            const transcriptDoc = new Transcript({
+                ticketId: channel.id,
+                ticketName: channel.name,
+                ticketType,
+                guildId: channel.guild.id,
+                ownerId: ownerId || 'unknown',
+                ownerTag,
+                ownerAvatar,
+                closedById: closedBy?.id,
+                closedByTag: closedBy?.tag || 'Unknown',
+                closeReason: reason,
+                createdAt: channel.createdAt,
+                closedAt: new Date(),
+                messages: richData.messages,
+                messageCount: richData.messageCount,
+                participants: richData.participants
+            });
+            await transcriptDoc.save();
+            console.log(`[Tickets] Saved transcript for ${channel.name} to database`);
+        } catch (err) {
+            console.error('[Tickets] Failed to save transcript to database:', err);
+        }
 
         // Get transcript channel
         const transcriptChannelId = process.env.TRANSCRIPT_CHANNEL_ID;
@@ -581,18 +731,42 @@ async function closeTicket(channel, closedBy, reason, client) {
             .setTitle('Ticket Closed')
             .addFields(
                 { name: 'Ticket', value: channel.name, inline: true },
-                { name: 'Closed By', value: closedBy.tag, inline: true },
+                { name: 'Closed By', value: closedBy?.tag || 'Unknown', inline: true },
                 { name: 'Reason', value: reason, inline: false }
             )
             .setTimestamp();
 
         if (transcriptUrl) {
-            closeEmbed.addFields({ name: 'Transcript', value: transcriptUrl, inline: false });
+            closeEmbed.addFields({ name: 'Text Transcript', value: transcriptUrl, inline: false });
         }
+        
+        // Add link to web transcript
+        closeEmbed.addFields({ 
+            name: 'View Transcript', 
+            value: `[View on Staff Panel](https://staff.newlifesmp.com/viewer/transcript/${channel.id})`, 
+            inline: false 
+        });
 
         // Send to transcript channel
         if (transcriptChannel) {
             await transcriptChannel.send({ embeds: [closeEmbed] });
+        }
+
+        // DM the ticket owner with transcript link
+        if (ownerId) {
+            try {
+                const { sendDm } = require('../utils/dm');
+                const dmEmbed = new EmbedBuilder()
+                    .setColor(0x10b981)
+                    .setTitle('Ticket Closed')
+                    .setDescription(`Your ticket **${channel.name}** has been closed.`)
+                    .addFields(
+                        { name: 'Reason', value: reason, inline: false },
+                        { name: 'View Transcript', value: `[Click here to view](https://staff.newlifesmp.com/viewer/my-transcripts)`, inline: false }
+                    )
+                    .setTimestamp();
+                await sendDm(client, ownerId, { embeds: [dmEmbed] });
+            } catch (e) {}
         }
 
         // Notify in ticket before closing
@@ -714,16 +888,24 @@ const slashCommands = [
     {
         data: new SlashCommandBuilder()
             .setName('tclose')
-            .setDescription('Close the ticket after a specified time')
-            .addStringOption(option =>
-                option.setName('time')
-                    .setDescription('Time until close (e.g., 30s, 5m, 1h)')
-                    .setRequired(true)
+            .setDescription('Manage timed ticket closures')
+            .addSubcommand(sub => sub
+                .setName('set')
+                .setDescription('Close the ticket after a specified time')
+                .addStringOption(option =>
+                    option.setName('time')
+                        .setDescription('Time until close (e.g., 30s, 5m, 1h)')
+                        .setRequired(true)
+                )
+                .addStringOption(option =>
+                    option.setName('reason')
+                        .setDescription('Reason for closing the ticket')
+                        .setRequired(true)
+                )
             )
-            .addStringOption(option =>
-                option.setName('reason')
-                    .setDescription('Reason for closing the ticket')
-                    .setRequired(true)
+            .addSubcommand(sub => sub
+                .setName('cancel')
+                .setDescription('Cancel a scheduled ticket closure')
             ),
         async execute(interaction, client) {
             // Check if this is a ticket channel
@@ -741,11 +923,50 @@ const slashCommands = [
             
             if (!hasPermission) {
                 return interaction.reply({
-                    embeds: [createErrorEmbed('Permission Denied', 'Only staff members can close tickets.')],
+                    embeds: [createErrorEmbed('Permission Denied', 'Only staff members can manage timed closures.')],
                     ephemeral: true
                 });
             }
 
+            const subcommand = interaction.options.getSubcommand();
+
+            // CANCEL SUBCOMMAND
+            if (subcommand === 'cancel') {
+                try {
+                    const existing = await TimedClose.findOne({ channelId: interaction.channel.id });
+                    
+                    if (!existing) {
+                        return interaction.reply({
+                            embeds: [createErrorEmbed('No Scheduled Close', 'There is no scheduled closure for this ticket.')],
+                            ephemeral: true
+                        });
+                    }
+                    
+                    await TimedClose.deleteOne({ channelId: interaction.channel.id });
+                    
+                    return interaction.reply({
+                        embeds: [new EmbedBuilder()
+                            .setColor(0x10b981)
+                            .setTitle('Scheduled Close Cancelled')
+                            .setDescription(`The scheduled closure has been cancelled.`)
+                            .addFields(
+                                { name: 'Originally Scheduled By', value: existing.scheduledByTag || 'Unknown', inline: true },
+                                { name: 'Was Set To Close', value: `<t:${Math.floor(existing.closeAt.getTime() / 1000)}:R>`, inline: true },
+                                { name: 'Cancelled By', value: interaction.user.tag, inline: true }
+                            )
+                            .setTimestamp()
+                        ]
+                    });
+                } catch (err) {
+                    console.error('Failed to cancel timed close:', err);
+                    return interaction.reply({
+                        embeds: [createErrorEmbed('Error', 'Failed to cancel the scheduled closure.')],
+                        ephemeral: true
+                    });
+                }
+            }
+
+            // SET SUBCOMMAND
             const timeStr = interaction.options.getString('time');
             const reason = interaction.options.getString('reason');
             const ms = parseTime(timeStr);
@@ -787,6 +1008,7 @@ const slashCommands = [
                         { name: 'Reason', value: reason, inline: false },
                         { name: 'Scheduled By', value: interaction.user.tag, inline: true }
                     )
+                    .setFooter({ text: 'Use /tclose cancel to cancel this closure' })
                     .setTimestamp()
                 ]
             });

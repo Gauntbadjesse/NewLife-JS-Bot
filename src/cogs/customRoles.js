@@ -27,7 +27,7 @@ const emojis = require('../utils/emojis');
 const PREMIUM_ROLE_ID = '1463405789241802895';
 
 // Role that custom roles will be positioned under
-const CUSTOM_ROLE_POSITION_REFERENCE = '1463405789241802895';
+const CUSTOM_ROLE_POSITION_REFERENCE = '1462501136673280011';
 
 // Owner ID for approval DMs
 const getOwnerId = () => process.env.OWNER_ID || process.env.OWNER_USER_ID;
@@ -37,6 +37,51 @@ const getOwnerId = () => process.env.OWNER_ID || process.env.OWNER_USER_ID;
  */
 function hasPremiumRole(member) {
     return member && member.roles && member.roles.cache.has(PREMIUM_ROLE_ID);
+}
+
+/**
+ * Parse emoji input and return the actual displayable emoji
+ * Handles:
+ * - Unicode emoji (✨, 🎮, etc) - returns as-is
+ * - Custom emoji format (<:name:id> or <a:name:id>) - extracts the actual emoji for display
+ * - Just an emoji ID - tries to format it
+ */
+function parseEmoji(emojiInput, guild) {
+    if (!emojiInput) return null;
+    
+    const input = emojiInput.trim();
+    
+    // Check if it's already a Unicode emoji (most common case)
+    // Unicode emoji are 1-4 characters and contain emoji codepoints
+    const emojiRegex = /^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2300}-\u{23FF}\u{2B50}\u{2B55}\u{3030}\u{303D}\u{3297}\u{3299}\u{200D}\u{FE0F}\u{20E3}]+$/u;
+    if (emojiRegex.test(input)) {
+        return input; // Already a Unicode emoji, return as-is
+    }
+    
+    // Check for custom emoji format: <:name:id> or <a:name:id>
+    const customEmojiMatch = input.match(/^<(a?):(\w+):(\d+)>$/);
+    if (customEmojiMatch) {
+        const [, animated, name, id] = customEmojiMatch;
+        // For role names, custom emojis won't render as images
+        // Return the full format so it can be used in messages/embeds that support it
+        return input; // Return the full custom emoji format
+    }
+    
+    // Check if it's just a numeric ID
+    if (/^\d+$/.test(input)) {
+        // Try to find the emoji in the guild
+        if (guild) {
+            const emoji = guild.emojis.cache.get(input);
+            if (emoji) {
+                return emoji.animated ? `<a:${emoji.name}:${emoji.id}>` : `<:${emoji.name}:${emoji.id}>`;
+            }
+        }
+        // Can't resolve, return null
+        return null;
+    }
+    
+    // Return the input as-is (might be an emoji name or text)
+    return input;
 }
 
 /**
@@ -135,20 +180,43 @@ async function createDiscordRole(guild, customRole) {
         const roleColor = pendingData.roleColor || customRole.roleColor;
         const roleEmoji = pendingData.roleEmoji || customRole.roleEmoji;
 
-        // Include emoji in role name if provided
-        const finalRoleName = roleEmoji ? `${roleEmoji} ${roleName}` : roleName;
+        // Parse the emoji - for role names, only Unicode emojis will display properly
+        const parsedEmoji = parseEmoji(roleEmoji, guild);
+        
+        // Check if it's a Unicode emoji (not a custom emoji format)
+        const isUnicodeEmoji = parsedEmoji && !parsedEmoji.startsWith('<');
+        
+        // Only include Unicode emojis in role name (custom emojis won't render in role names)
+        const finalRoleName = (parsedEmoji && isUnicodeEmoji) ? `${parsedEmoji} ${roleName}` : roleName;
         
         // Get the reference role to position new role under
         const referenceRole = guild.roles.cache.get(CUSTOM_ROLE_POSITION_REFERENCE);
         const position = referenceRole ? referenceRole.position - 1 : 1;
 
-        const role = await guild.roles.create({
+        // Build role options
+        const roleOptions = {
             name: finalRoleName,
             color: roleColor ? parseInt(roleColor.replace('#', ''), 16) : null,
             permissions: [],
             reason: `Custom role for premium member ${customRole.userTag}`,
             position: Math.max(1, position)
-        });
+        };
+
+        // If it's a custom emoji, try to set it as the role icon (requires boost level 2+)
+        if (parsedEmoji && !isUnicodeEmoji) {
+            const customEmojiMatch = parsedEmoji.match(/^<a?:\w+:(\d+)>$/);
+            if (customEmojiMatch) {
+                const emojiId = customEmojiMatch[1];
+                const emoji = guild.emojis.cache.get(emojiId);
+                if (emoji) {
+                    // Set the unicodeEmoji field if it's a server emoji
+                    roleOptions.unicodeEmoji = null;
+                    roleOptions.icon = emoji.url;
+                }
+            }
+        }
+
+        const role = await guild.roles.create(roleOptions);
 
         return role;
     } catch (error) {
@@ -172,14 +240,35 @@ async function updateDiscordRole(guild, customRole) {
         const roleColor = pendingData.roleColor || customRole.roleColor;
         const roleEmoji = pendingData.roleEmoji || customRole.roleEmoji;
 
-        // Include emoji in role name if provided
-        const finalRoleName = roleEmoji ? `${roleEmoji} ${roleName}` : roleName;
+        // Parse the emoji - for role names, only Unicode emojis will display properly
+        const parsedEmoji = parseEmoji(roleEmoji, guild);
+        
+        // Check if it's a Unicode emoji (not a custom emoji format)
+        const isUnicodeEmoji = parsedEmoji && !parsedEmoji.startsWith('<');
+        
+        // Only include Unicode emojis in role name (custom emojis won't render in role names)
+        const finalRoleName = (parsedEmoji && isUnicodeEmoji) ? `${parsedEmoji} ${roleName}` : roleName;
 
-        await role.edit({
+        // Build edit options
+        const editOptions = {
             name: finalRoleName,
             color: roleColor ? parseInt(roleColor.replace('#', ''), 16) : null,
             reason: `Custom role edit for premium member ${customRole.userTag}`
-        });
+        };
+
+        // If it's a custom emoji, try to set it as the role icon (requires boost level 2+)
+        if (parsedEmoji && !isUnicodeEmoji) {
+            const customEmojiMatch = parsedEmoji.match(/^<a?:\w+:(\d+)>$/);
+            if (customEmojiMatch) {
+                const emojiId = customEmojiMatch[1];
+                const emoji = guild.emojis.cache.get(emojiId);
+                if (emoji) {
+                    editOptions.icon = emoji.url;
+                }
+            }
+        }
+
+        await role.edit(editOptions);
 
         return role;
     } catch (error) {

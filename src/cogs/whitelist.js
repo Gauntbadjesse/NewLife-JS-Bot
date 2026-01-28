@@ -310,6 +310,96 @@ const slashCommands = [
             
             return interaction.reply({ content: 'Unknown subcommand', ephemeral: true });
         }
+    },
+    // Unwhitelist command - removes from whitelist and unlinks
+    {
+        data: new SlashCommandBuilder()
+            .setName('unwhitelist')
+            .setDescription('Remove a player from the whitelist and unlink their account')
+            .addUserOption(o => o.setName('discord').setDescription('Discord user to unwhitelist').setRequired(true)),
+
+        async execute(interaction, client) {
+            if (!canUseWhitelistCommands(interaction.member)) {
+                return interaction.reply({ content: 'Permission denied.', ephemeral: true });
+            }
+            
+            await interaction.deferReply({ ephemeral: false });
+            
+            try {
+                const discordUser = interaction.options.getUser('discord');
+                
+                // Find all linked accounts for this user
+                const linkedAccounts = await LinkedAccount.find({ discordId: String(discordUser.id) });
+                
+                if (linkedAccounts.length === 0) {
+                    return interaction.editReply({ content: `No linked accounts found for <@${discordUser.id}>.` });
+                }
+                
+                const results = [];
+                
+                // Process each linked account
+                for (const account of linkedAccounts) {
+                    try {
+                        // Remove from whitelist
+                        if (account.platform === 'java') {
+                            await sendRconCommand(`whitelist remove ${account.minecraftUsername}`);
+                        } else {
+                            await sendRconCommand(`fwhitelist remove ${account.uuid}`);
+                        }
+                        results.push(`Removed **${account.minecraftUsername}** (${account.platform}) from whitelist`);
+                    } catch (err) {
+                        results.push(`Failed to remove **${account.minecraftUsername}** from whitelist: ${err.message}`);
+                    }
+                }
+                
+                // Delete all linked accounts from database
+                const deleteResult = await LinkedAccount.deleteMany({ discordId: String(discordUser.id) });
+                
+                // Remove roles from user
+                try {
+                    const guild = interaction.guild;
+                    if (guild) {
+                        const member = await guild.members.fetch(discordUser.id).catch(() => null);
+                        if (member) {
+                            if (WHITELIST_ROLE_ID) {
+                                try { await member.roles.remove(WHITELIST_ROLE_ID, 'Unwhitelisted'); } catch (e) {}
+                            }
+                            try { await member.roles.remove(WHITELISTED_ROLE_ID, 'User unwhitelisted'); } catch (e) {}
+                        }
+                    }
+                } catch (err) { console.error('Failed to remove roles:', err); }
+                
+                // Log to whitelist channel
+                try {
+                    const WHITELIST_LOG_CHANNEL_ID = process.env.WHITELIST_LOG_CHANNEL_ID || '1442648914204295168';
+                    const ch = await client.channels.fetch(WHITELIST_LOG_CHANNEL_ID).catch(() => null);
+                    if (ch) {
+                        const logEmbed = new EmbedBuilder()
+                            .setTitle('Whitelist Removed')
+                            .setColor(0xE74C3C)
+                            .addFields(
+                                { name: 'Discord', value: `${discordUser.tag} (${discordUser.id})`, inline: true },
+                                { name: 'Accounts Removed', value: `${linkedAccounts.length}`, inline: true },
+                                { name: 'Removed By', value: `${interaction.user.tag}`, inline: true },
+                                { name: 'Accounts', value: linkedAccounts.map(a => `${a.minecraftUsername} (${a.platform})`).join('\n') || 'None', inline: false }
+                            )
+                            .setTimestamp();
+                        await ch.send({ embeds: [logEmbed] }).catch(() => null);
+                    }
+                } catch (e) { console.error('Failed to send log:', e); }
+                
+                const summary = [
+                    ...results,
+                    `Unlinked **${deleteResult.deletedCount}** account(s) from database`,
+                    `Removed whitelist roles from <@${discordUser.id}>`
+                ].join('\n');
+                
+                return interaction.editReply({ content: summary });
+            } catch (err) {
+                console.error('Unwhitelist execute error:', err);
+                return interaction.editReply({ content: 'An unexpected error occurred.' });
+            }
+        }
     }
 ];
 

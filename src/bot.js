@@ -708,6 +708,64 @@ client.on('guildMemberRemove', async (member) => {
     }
 });
 
+// Detect when user gains NewLife+ role and send welcome DM
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+    try {
+        const PREMIUM_ROLE_ID = '1463405789241802895';
+        
+        // Check if user gained the NewLife+ role (didn't have before, has now)
+        const hadPremium = oldMember.roles.cache.has(PREMIUM_ROLE_ID);
+        const hasPremium = newMember.roles.cache.has(PREMIUM_ROLE_ID);
+        
+        if (!hadPremium && hasPremium) {
+            console.log(`[NewLife+] ${newMember.user.tag} gained NewLife+ role, sending welcome DM`);
+            
+            // Send welcome DM with perks explanation
+            const { sendDm } = require('./utils/dm');
+            const { EmbedBuilder } = require('discord.js');
+            
+            const welcomeEmbed = new EmbedBuilder()
+                .setColor(0xFFD700)
+                .setTitle('Welcome to NewLife+')
+                .setDescription('Thank you for supporting NewLife SMP!\nYou now have access to exclusive premium perks.')
+                .addFields(
+                    { 
+                        name: '🎨 Custom Role', 
+                        value: 'Create your own role with a custom name, color, and emoji.\n`/customrole create <name> [color] [emoji]`', 
+                        inline: false 
+                    },
+                    { 
+                        name: '⚡ Priority Support', 
+                        value: 'Your tickets are highlighted and marked as priority for faster responses.', 
+                        inline: false 
+                    },
+                    { 
+                        name: '🎁 2x Giveaway Entries', 
+                        value: 'Double your chances in all server giveaways automatically.', 
+                        inline: false 
+                    },
+                    { 
+                        name: '🔊 Soundboard Access', 
+                        value: 'Use soundboard and external sounds in your temporary voice channels.', 
+                        inline: false 
+                    }
+                )
+                .setFooter({ text: 'NewLife+ | Premium Membership' })
+                .setTimestamp();
+
+            const dmResult = await sendDm(client, newMember.user.id, { embeds: [welcomeEmbed] });
+            
+            if (dmResult.success) {
+                console.log(`[NewLife+] Successfully sent welcome DM to ${newMember.user.tag}`);
+            } else {
+                console.log(`[NewLife+] Failed to send welcome DM to ${newMember.user.tag}: ${dmResult.error || 'Unknown error'}`);
+            }
+        }
+    } catch (e) {
+        console.error('[NewLife+] Error handling role update:', e);
+    }
+});
+
 // Discord Logger Events - Message Delete
 client.on('messageDelete', async (message) => {
     try {

@@ -12,6 +12,7 @@ const Kick = require('../database/models/Kick');
 const Warning = require('../database/models/Warning');
 const Mute = require('../database/models/Mute');
 const Evidence = require('../database/models/Evidence');
+const Transcript = require('../database/models/Transcript');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -157,14 +158,14 @@ tr:hover{background:rgba(255,255,255,.02)}
 function loginPage(error = '') {
     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&response_type=code&scope=identify%20guilds.members.read`;
     
-    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Staff Panel - Login</title><style>${viewerStyles}</style></head>
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>NewLife SMP - Dashboard</title><style>${viewerStyles}</style></head>
 <body><div class="login-wrap"><div class="login-box">
-<h2>Staff Panel</h2>
-<p>Sign in with Discord to access the moderation dashboard.<br>Only staff members can access this panel.</p>
+<h2>NewLife SMP</h2>
+<p>Login to view your dashboard.<br>See your moderation history, tickets, and more.</p>
 ${error ? `<div class="err">${error}</div>` : ''}
 <a href="${discordAuthUrl}" class="btn-discord">
 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-Sign in with Discord
+Login with Discord
 </a>
 </div></div></body></html>`;
 }
@@ -183,8 +184,9 @@ function accessDeniedPage(username, avatar) {
 // Login route - redirect to Discord OAuth
 app.get('/viewer/login', (req, res) => {
     const session = getSession(req);
-    if (session && session.isStaff) {
-        return res.redirect('/viewer/search');
+    if (session) {
+        // Already logged in, redirect to dashboard
+        return res.redirect('/viewer/dashboard');
     }
     res.setHeader('Content-Type', 'text/html');
     res.send(loginPage());
@@ -265,24 +267,19 @@ app.get('/home', async (req, res) => {
             username: username,
             avatar: avatar,
             isStaff: isStaff,
+            adminMode: false, // Start in user mode, staff can toggle to admin
             createdAt: Date.now()
         });
         
         // Set session cookie (24 hour expiry)
         res.setHeader('Set-Cookie', `session_id=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=86400`);
         
-        if (!isStaff) {
-            // Non-staff users can view their own moderation history
-            // Check if there's a redirect query param (from DM link)
-            const redirectCase = req.query.case;
-            if (redirectCase) {
-                return res.redirect(`/viewer/my-cases?highlight=${encodeURIComponent(redirectCase)}`);
-            }
-            return res.redirect('/viewer/my-cases');
+        // Everyone goes to the unified dashboard
+        const redirectCase = req.query.case;
+        if (redirectCase) {
+            return res.redirect(`/viewer/dashboard?highlight=${encodeURIComponent(redirectCase)}`);
         }
-        
-        // Redirect to dashboard
-        res.redirect('/viewer/search');
+        return res.redirect('/viewer/dashboard');
         
     } catch (error) {
         console.error('OAuth error:', error);
@@ -302,16 +299,56 @@ app.get('/viewer/logout', (req, res) => {
     res.redirect('/viewer/login');
 });
 
-// Auth middleware
+// Auth middleware - for any logged in user
 function viewerAuth(req, res, next) {
     const session = getSession(req);
-    if (!session || !session.isStaff) {
+    if (!session) {
         return res.redirect('/viewer/login');
     }
     req.session = session;
     next();
 }
 
+// Auth middleware - for staff admin pages only
+function staffAuth(req, res, next) {
+    const session = getSession(req);
+    if (!session) {
+        return res.redirect('/viewer/login');
+    }
+    if (!session.isStaff || !session.adminMode) {
+        return res.redirect('/viewer/dashboard');
+    }
+    req.session = session;
+    next();
+}
+
+// User header (for dashboard/my pages)
+function getUserHeader(active, session) {
+    const staffToggle = session.isStaff ? `
+        <a href="/viewer/toggle-mode" class="btn-mode" style="background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%);color:#fff;padding:8px 16px;border-radius:8px;font-size:.8em;font-weight:500;text-decoration:none;margin-right:12px;display:flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(139,92,246,.25)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Switch to Admin
+        </a>` : '';
+    
+    return `<div class="header">
+    <div class="logo">NewLife SMP</div>
+    <nav class="nav">
+        <a href="/viewer/dashboard" class="${active === 'dashboard' ? 'active' : ''}">Dashboard</a>
+        <a href="/viewer/my-cases" class="${active === 'my-cases' ? 'active' : ''}">My Cases</a>
+        <a href="/viewer/my-transcripts" class="${active === 'my-transcripts' ? 'active' : ''}">My Tickets</a>
+    </nav>
+    <div style="display:flex;align-items:center;gap:12px">
+        ${staffToggle}
+        <div class="user-info">
+            <img src="${session.avatar}" alt="">
+            <span>${session.username}</span>
+        </div>
+        <a href="/viewer/logout" class="logout">Logout</a>
+    </div>
+</div>`;
+}
+
+// Admin header (for staff pages)
 function getHeader(active, session = null) {
     const userInfo = session ? `
     <div class="user-info">
@@ -319,16 +356,24 @@ function getHeader(active, session = null) {
         <span>${session.username}</span>
     </div>` : '';
     
+    const switchToUser = session ? `
+        <a href="/viewer/toggle-mode" class="btn-mode" style="background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;padding:8px 16px;border-radius:8px;font-size:.8em;font-weight:500;text-decoration:none;margin-right:12px;display:flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(16,185,129,.25)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.38 8.38 0 0 1 13 0"/></svg>
+            My Dashboard
+        </a>` : '';
+    
     return `<div class="header">
-    <div class="logo">NewLife SMP</div>
+    <div class="logo">NewLife SMP <span style="font-size:.7em;color:#8b5cf6;margin-left:4px">ADMIN</span></div>
     <nav class="nav">
         <a href="/viewer/search" class="${active === 'search' ? 'active' : ''}">Search All</a>
         <a href="/viewer/bans" class="${active === 'bans' ? 'active' : ''}">Bans</a>
         <a href="/viewer/kicks" class="${active === 'kicks' ? 'active' : ''}">Kicks</a>
         <a href="/viewer/warnings" class="${active === 'warnings' ? 'active' : ''}">Warnings</a>
         <a href="/viewer/mutes" class="${active === 'mutes' ? 'active' : ''}">Mutes</a>
+        <a href="/viewer/transcripts" class="${active === 'transcripts' ? 'active' : ''}">Transcripts</a>
     </nav>
     <div style="display:flex;align-items:center;gap:12px">
+        ${switchToUser}
         ${userInfo}
         <a href="/viewer/logout" class="logout">Logout</a>
     </div>
@@ -336,9 +381,163 @@ function getHeader(active, session = null) {
 }
 
 // =====================================================
-// UNIFIED SEARCH PAGE - Search All Logs
+// TOGGLE MODE - Switch between user and admin mode
 // =====================================================
-app.get('/viewer/search', viewerAuth, async (req, res) => {
+app.get('/viewer/toggle-mode', viewerAuth, (req, res) => {
+    const session = req.session;
+    
+    // Only staff can toggle
+    if (!session.isStaff) {
+        return res.redirect('/viewer/dashboard');
+    }
+    
+    // Toggle the mode
+    session.adminMode = !session.adminMode;
+    
+    // Redirect to appropriate page
+    if (session.adminMode) {
+        res.redirect('/viewer/search');
+    } else {
+        res.redirect('/viewer/dashboard');
+    }
+});
+
+// =====================================================
+// UNIFIED DASHBOARD - Landing page for all users
+// =====================================================
+app.get('/viewer/dashboard', viewerAuth, async (req, res) => {
+    const session = req.session;
+    const userId = session.discordId;
+    
+    try {
+        // Get user's case counts
+        const [bans, kicks, warnings, mutes] = await Promise.all([
+            ServerBan.countDocuments({ discordId: userId }),
+            Kick.countDocuments({ discordId: userId }),
+            Warning.countDocuments({ discordId: userId }),
+            Mute.countDocuments({ discordId: userId })
+        ]);
+        
+        // Get recent cases
+        const recentBans = await ServerBan.find({ discordId: userId }).sort({ createdAt: -1 }).limit(3).lean();
+        const recentKicks = await Kick.find({ discordId: userId }).sort({ createdAt: -1 }).limit(3).lean();
+        const recentWarnings = await Warning.find({ discordId: userId }).sort({ createdAt: -1 }).limit(3).lean();
+        
+        // Get user's transcripts count
+        const transcriptCount = await Transcript.countDocuments({ 
+            $or: [
+                { 'opener.id': userId },
+                { 'participants.id': userId }
+            ]
+        });
+        
+        // Calculate total cases
+        const totalCases = bans + kicks + warnings + mutes;
+        
+        // Build recent activity
+        let recentActivity = [
+            ...recentBans.map(c => ({ ...c, type: 'Ban', color: 'tag-r' })),
+            ...recentKicks.map(c => ({ ...c, type: 'Kick', color: 'tag-o' })),
+            ...recentWarnings.map(c => ({ ...c, type: 'Warning', color: 'tag-y' }))
+        ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
+
+        const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Dashboard - NewLife SMP</title><style>${viewerStyles}
+.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:32px}
+.dashboard-card{background:rgba(255,255,255,.02);padding:24px;border-radius:12px;border:1px solid rgba(255,255,255,.06)}
+.dashboard-card h3{color:#f1f5f9;margin-bottom:16px;font-size:1em;font-weight:600;display:flex;align-items:center;gap:8px}
+.dashboard-card h3 svg{width:18px;height:18px;opacity:.7}
+.welcome-card{background:linear-gradient(135deg,rgba(16,185,129,.1) 0%,rgba(16,185,129,.02) 100%);border-color:rgba(16,185,129,.2)}
+.welcome-card h2{color:#f8fafc;font-size:1.5em;margin-bottom:8px}
+.welcome-card p{color:#94a3b8;line-height:1.6}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.stat-item{background:rgba(0,0,0,.2);padding:16px;border-radius:8px;text-align:center}
+.stat-item .value{font-size:1.75em;font-weight:700;background:linear-gradient(135deg,#10b981 0%,#34d399 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat-item .label{font-size:.7em;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.activity-item{display:flex;align-items:center;gap:12px;padding:12px;background:rgba(0,0,0,.15);border-radius:8px;margin-bottom:8px}
+.activity-item:last-child{margin-bottom:0}
+.activity-item .type{font-size:.7em;font-weight:600;padding:4px 8px;border-radius:4px}
+.activity-item .details{flex:1}
+.activity-item .reason{color:#e2e8f0;font-size:.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.activity-item .date{color:#64748b;font-size:.75em;margin-top:2px}
+.empty-state{color:#4b5563;text-align:center;padding:32px;font-size:.9em}
+.quick-links{display:flex;gap:12px;flex-wrap:wrap}
+.quick-link{padding:12px 20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:#e2e8f0;text-decoration:none;font-size:.85em;font-weight:500;transition:all .2s}
+.quick-link:hover{background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3);color:#10b981}
+.status-clean{background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.2)}
+.status-clean h2{color:#10b981}
+        </style></head>
+<body>
+${getUserHeader('dashboard', session)}
+<div class="main">
+    <div class="dashboard-grid">
+        <div class="dashboard-card welcome-card ${totalCases === 0 ? 'status-clean' : ''}">
+            <h2>Welcome, ${session.username}!</h2>
+            <p>${totalCases === 0 
+                ? 'Your record is clean! Keep up the great work. 🎉' 
+                : `You have ${totalCases} moderation case${totalCases === 1 ? '' : 's'} on record.`}</p>
+        </div>
+        
+        <div class="dashboard-card">
+            <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Quick Stats</h3>
+            <div class="stat-grid">
+                <div class="stat-item">
+                    <div class="value">${totalCases}</div>
+                    <div class="label">Total Cases</div>
+                </div>
+                <div class="stat-item">
+                    <div class="value">${transcriptCount}</div>
+                    <div class="label">Tickets</div>
+                </div>
+                <div class="stat-item">
+                    <div class="value">${bans}</div>
+                    <div class="label">Bans</div>
+                </div>
+                <div class="stat-item">
+                    <div class="value">${warnings}</div>
+                    <div class="label">Warnings</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Recent Activity</h3>
+            ${recentActivity.length > 0 ? recentActivity.map(item => `
+                <div class="activity-item">
+                    <span class="tag type ${item.color}">${item.type}</span>
+                    <div class="details">
+                        <div class="reason">${item.reason || 'No reason provided'}</div>
+                        <div class="date">${item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown date'}</div>
+                    </div>
+                </div>
+            `).join('') : '<div class="empty-state">No recent activity</div>'}
+        </div>
+        
+        <div class="dashboard-card">
+            <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Quick Links</h3>
+            <div class="quick-links">
+                <a href="/viewer/my-cases" class="quick-link">View All Cases</a>
+                <a href="/viewer/my-transcripts" class="quick-link">View Tickets</a>
+                ${session.isStaff ? '<a href="/viewer/toggle-mode" class="quick-link" style="background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.2);color:#a78bfa">Admin Panel</a>' : ''}
+            </div>
+        </div>
+    </div>
+</div>
+</body></html>`;
+
+        res.setHeader('Content-Type', 'text/html');
+        res.send(html);
+    } catch (error) {
+        console.error('Dashboard error:', error);
+        res.status(500).send('Error loading dashboard');
+    }
+});
+
+// =====================================================
+// UNIFIED SEARCH PAGE - Search All Logs (Staff Only)
+// =====================================================
+app.get('/viewer/search', staffAuth, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = 50;
@@ -618,7 +817,7 @@ ${getHeader('search', req.session)}
 });
 
 // Bans Page
-app.get('/viewer/bans', viewerAuth, async (req, res) => {
+app.get('/viewer/bans', staffAuth, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = 50;
@@ -728,7 +927,7 @@ ${getHeader('bans', req.session)}
 });
 
 // Kicks Page
-app.get('/viewer/kicks', viewerAuth, async (req, res) => {
+app.get('/viewer/kicks', staffAuth, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = 50;
@@ -819,7 +1018,7 @@ ${getHeader('kicks', req.session)}
 });
 
 // Warnings Page
-app.get('/viewer/warnings', viewerAuth, async (req, res) => {
+app.get('/viewer/warnings', staffAuth, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = 50;
@@ -931,7 +1130,7 @@ app.get('/', (req, res) => res.redirect('/viewer/login'));
 // =====================================================
 // MUTES PAGE
 // =====================================================
-app.get('/viewer/mutes', viewerAuth, async (req, res) => {
+app.get('/viewer/mutes', staffAuth, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = 50;
@@ -1033,7 +1232,7 @@ ${getHeader('mutes', req.session)}
 // =====================================================
 // CASE DETAIL PAGE (Staff View with Evidence)
 // =====================================================
-app.get('/viewer/case/:type/:caseNumber', viewerAuth, async (req, res) => {
+app.get('/viewer/case/:type/:caseNumber', staffAuth, async (req, res) => {
     try {
         const { type, caseNumber } = req.params;
         let caseData = null;
@@ -1230,7 +1429,7 @@ async function submitEvidence(payload) {
 });
 
 // Add evidence API endpoint
-app.post('/viewer/evidence/add', viewerAuth, async (req, res) => {
+app.post('/viewer/evidence/add', staffAuth, async (req, res) => {
     try {
         const { caseType, caseNumber, items } = req.body;
         
@@ -1437,18 +1636,8 @@ app.get('/viewer/my-cases', userAuth, async (req, res) => {
         const activeCases = allCases.filter(c => c.status === 'Active').length;
         
         res.setHeader('Content-Type', 'text/html');
-        res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>My Moderation History</title><style>${viewerStyles}</style></head><body>
-<div class="header">
-    <div class="logo">NewLife SMP</div>
-    <nav class="nav"></nav>
-    <div style="display:flex;align-items:center;gap:12px">
-        <div class="user-info">
-            <img src="${req.session.avatar}" alt="">
-            <span>${req.session.username}</span>
-        </div>
-        <a href="/viewer/logout" class="logout">Logout</a>
-    </div>
-</div>
+        res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>My Moderation History</title><style>${viewerStyles}${transcriptStyles}</style></head><body>
+${getUserHeader('my-cases', req.session)}
 <div class="main">
     <div class="user-cases-section">
         <h2>Your Moderation History</h2>
@@ -1481,6 +1670,642 @@ window.addEventListener('DOMContentLoaded', function() {
         res.status(500).send('Error: ' + e.message);
     }
 });
+
+// =====================================================
+// TRANSCRIPT VIEWER STYLES (Discord-like formatting)
+// =====================================================
+
+const transcriptStyles = `
+/* Discord-style message rendering */
+.transcript-container{max-width:900px;margin:0 auto}
+.transcript-header{background:rgba(255,255,255,.02);padding:24px;border-radius:12px;border:1px solid rgba(255,255,255,.06);margin-bottom:24px}
+.transcript-header h2{margin:0 0 16px 0;color:#f8fafc;font-size:1.25em}
+.transcript-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.transcript-meta-item{padding:12px;background:rgba(0,0,0,.2);border-radius:8px}
+.transcript-meta-item label{font-size:.7em;color:#64748b;display:block;margin-bottom:4px;text-transform:uppercase}
+.transcript-meta-item span{color:#f1f5f9;font-size:.9em}
+.messages-container{background:#36393f;border-radius:8px;padding:16px 0;max-height:70vh;overflow-y:auto}
+.message-group{padding:8px 16px;display:flex;gap:16px}
+.message-group:hover{background:rgba(4,4,5,.07)}
+.message-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;background:#5865f2}
+.message-content{flex:1;min-width:0}
+.message-header{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+.message-author{font-weight:500;color:#fff;font-size:.9375em}
+.message-author.bot{color:#5865f2}
+.message-author.bot::after{content:'BOT';margin-left:4px;font-size:.625em;padding:1px 4px;border-radius:3px;background:#5865f2;color:#fff;vertical-align:middle;font-weight:500}
+.message-timestamp{font-size:.75em;color:#72767d}
+.message-text{color:#dcddde;font-size:.9375em;line-height:1.375;word-wrap:break-word;white-space:pre-wrap}
+.message-text a{color:#00aff4;text-decoration:none}
+.message-text a:hover{text-decoration:underline}
+.message-attachment{margin-top:8px}
+.message-attachment img{max-width:400px;max-height:300px;border-radius:4px}
+.message-attachment a{color:#00aff4;font-size:.875em}
+.message-embed{margin-top:8px;max-width:520px;background:#2f3136;border-radius:4px;overflow:hidden;display:flex}
+.embed-color-bar{width:4px;flex-shrink:0}
+.embed-content{padding:8px 16px 16px 12px;flex:1}
+.embed-author{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.embed-author-icon{width:24px;height:24px;border-radius:50%}
+.embed-author-name{font-size:.875em;font-weight:600;color:#fff}
+.embed-title{font-size:1em;font-weight:600;color:#00aff4;margin-bottom:8px}
+.embed-description{font-size:.875em;color:#dcddde;line-height:1.375;white-space:pre-wrap}
+.embed-fields{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.embed-field{min-width:0}
+.embed-field.full{grid-column:1/-1}
+.embed-field-name{font-size:.875em;font-weight:600;color:#fff;margin-bottom:2px}
+.embed-field-value{font-size:.875em;color:#dcddde;white-space:pre-wrap}
+.embed-thumbnail{width:80px;height:80px;border-radius:4px;margin:8px 16px 0 0;object-fit:cover}
+.embed-image{max-width:100%;border-radius:4px;margin-top:16px}
+.embed-footer{margin-top:8px;font-size:.75em;color:#72767d}
+.message-reply{font-size:.8125em;color:#72767d;margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.message-reply::before{content:'↩';font-size:1em}
+.continuation-message{padding:2px 16px 2px 72px}
+.continuation-message .message-text{margin-top:0}
+.date-divider{display:flex;align-items:center;justify-content:center;margin:16px 0;padding:0 16px}
+.date-divider span{background:#36393f;padding:0 8px;font-size:.75em;color:#72767d}
+.date-divider::before,.date-divider::after{content:'';flex:1;height:1px;background:#4f545c}
+.participants-list{margin-top:24px}
+.participants-list h3{color:#f1f5f9;margin-bottom:16px;font-size:1em}
+.participant{display:flex;align-items:center;gap:12px;padding:8px 12px;background:rgba(255,255,255,.02);border-radius:8px;margin-bottom:8px}
+.participant img{width:32px;height:32px;border-radius:50%}
+.participant-info{flex:1}
+.participant-name{color:#f1f5f9;font-size:.9em}
+.participant-count{color:#64748b;font-size:.8em}
+.ticket-type-tag{display:inline-block;padding:4px 10px;border-radius:6px;font-size:.7em;font-weight:600;letter-spacing:.3px;margin-left:8px}
+.ticket-type-apply{background:rgba(16,185,129,.15);color:#10b981}
+.ticket-type-general{background:rgba(59,130,246,.15);color:#60a5fa}
+.ticket-type-report{background:rgba(251,146,60,.15);color:#fb923c}
+.ticket-type-management{background:rgba(168,85,247,.15);color:#c084fc}
+`;
+
+// =====================================================
+// TRANSCRIPT LIST PAGE (Staff View)
+// =====================================================
+app.get('/viewer/transcripts', staffAuth, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = 50;
+        const skip = (page - 1) * limit;
+        const search = req.query.search || '';
+        const type = req.query.type || '';
+        
+        let query = {};
+        if (type && ['apply', 'general', 'report', 'management'].includes(type)) {
+            query.ticketType = type;
+        }
+        
+        if (search) {
+            query.$or = [
+                { ticketName: { $regex: search, $options: 'i' } },
+                { ownerTag: { $regex: search, $options: 'i' } },
+                { closedByTag: { $regex: search, $options: 'i' } },
+                { closeReason: { $regex: search, $options: 'i' } }
+            ];
+        }
+        
+        const [total, transcripts] = await Promise.all([
+            Transcript.countDocuments(query),
+            Transcript.find(query)
+                .select('ticketId ticketName ticketType ownerTag closedByTag closedAt messageCount closeReason')
+                .sort({ closedAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+        
+        const totalPages = Math.ceil(total / limit);
+        
+        const getTypeTag = (ticketType) => {
+            switch(ticketType) {
+                case 'apply': return '<span class="tag ticket-type-apply">Apply</span>';
+                case 'general': return '<span class="tag ticket-type-general">General</span>';
+                case 'report': return '<span class="tag ticket-type-report">Report</span>';
+                case 'management': return '<span class="tag ticket-type-management">Management</span>';
+                default: return '<span class="tag tag-g">' + (ticketType || 'Unknown') + '</span>';
+            }
+        };
+        
+        let rows = transcripts.map(t => `<tr>
+            <td>${getTypeTag(t.ticketType)}</td>
+            <td>${t.ticketName || '—'}</td>
+            <td>${t.ownerTag || '—'}</td>
+            <td>${(t.closeReason || '').substring(0, 40)}${(t.closeReason || '').length > 40 ? '...' : ''}</td>
+            <td>${t.messageCount || 0}</td>
+            <td>${t.closedByTag || '—'}</td>
+            <td>${t.closedAt ? new Date(t.closedAt).toLocaleDateString() : '—'}</td>
+            <td><a href="/viewer/transcript/${t.ticketId}" class="btn-edit">View</a></td>
+        </tr>`).join('');
+        
+        if (!rows) rows = '<tr><td colspan="8" class="empty">No transcripts found</td></tr>';
+        
+        let pag = '';
+        if (totalPages > 1) {
+            const url = (p) => `/viewer/transcripts?page=${p}&search=${encodeURIComponent(search)}&type=${type}`;
+            if (page > 1) pag += `<a href="${url(page - 1)}">Previous</a>`;
+            pag += `<span>Page ${page} of ${totalPages}</span>`;
+            if (page < totalPages) pag += `<a href="${url(page + 1)}">Next</a>`;
+        }
+        
+        // Stats
+        const [applyCount, generalCount, reportCount] = await Promise.all([
+            Transcript.countDocuments({ ticketType: 'apply' }),
+            Transcript.countDocuments({ ticketType: 'general' }),
+            Transcript.countDocuments({ ticketType: 'report' })
+        ]);
+        
+        res.setHeader('Content-Type', 'text/html');
+        res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transcripts</title><style>${viewerStyles}${transcriptStyles}</style></head><body>
+${getHeader('transcripts', req.session)}
+<div class="main">
+    <h1 class="title">Ticket Transcripts</h1>
+    <div class="stats">
+        <div class="stat"><div class="num">${total}</div><div class="lbl">Total</div></div>
+        <div class="stat"><div class="num">${applyCount}</div><div class="lbl">Apply</div></div>
+        <div class="stat"><div class="num">${generalCount}</div><div class="lbl">General</div></div>
+        <div class="stat"><div class="num">${reportCount}</div><div class="lbl">Report</div></div>
+    </div>
+    <form class="filters" method="GET">
+        <div class="filter-group" style="flex:1;min-width:200px">
+            <label>Search</label>
+            <input type="text" name="search" placeholder="Ticket name, user, reason..." value="${search}">
+        </div>
+        <div class="filter-group" style="min-width:150px">
+            <label>Type</label>
+            <select name="type">
+                <option value="">All Types</option>
+                <option value="apply" ${type === 'apply' ? 'selected' : ''}>Apply</option>
+                <option value="general" ${type === 'general' ? 'selected' : ''}>General</option>
+                <option value="report" ${type === 'report' ? 'selected' : ''}>Report</option>
+                <option value="management" ${type === 'management' ? 'selected' : ''}>Management</option>
+            </select>
+        </div>
+        <div class="filter-group" style="justify-content:flex-end">
+            <label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-go" type="submit">Filter</button>
+                <a class="btn btn-clr" href="/viewer/transcripts">Clear</a>
+            </div>
+        </div>
+    </form>
+    <div class="tbl"><table>
+        <thead><tr><th>Type</th><th>Ticket</th><th>Owner</th><th>Close Reason</th><th>Messages</th><th>Closed By</th><th>Date</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+    </table></div>
+    <div class="pages">${pag}</div>
+</div></body></html>`);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error: ' + e.message);
+    }
+});
+
+// =====================================================
+// TRANSCRIPT DETAIL PAGE (Discord-style rendering)
+// =====================================================
+app.get('/viewer/transcript/:ticketId', staffAuth, async (req, res) => {
+    try {
+        const { ticketId } = req.params;
+        const transcript = await Transcript.findOne({ ticketId }).lean();
+        
+        if (!transcript) {
+            return res.status(404).send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transcript Not Found</title><style>${viewerStyles}</style></head><body>
+${getHeader('transcripts', req.session)}
+<div class="main">
+    <a href="/viewer/transcripts" class="back-link">Back to Transcripts</a>
+    <h1 class="title">Transcript Not Found</h1>
+    <p style="color:#94a3b8">The requested transcript was not found.</p>
+</div></body></html>`);
+        }
+        
+        // Render messages in Discord style
+        let messagesHtml = '';
+        let lastAuthorId = null;
+        let lastDate = null;
+        
+        for (const msg of transcript.messages) {
+            const msgDate = new Date(msg.timestamp);
+            const dateStr = msgDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            
+            // Add date divider if new day
+            if (dateStr !== lastDate) {
+                messagesHtml += `<div class="date-divider"><span>${dateStr}</span></div>`;
+                lastDate = dateStr;
+                lastAuthorId = null; // Reset author grouping on new day
+            }
+            
+            const timeStr = msgDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            const isBot = msg.authorBot;
+            const isContinuation = lastAuthorId === msg.authorId && !msg.replyTo;
+            
+            // Build reply preview if this is a reply
+            let replyHtml = '';
+            if (msg.replyTo) {
+                const repliedMsg = transcript.messages.find(m => m.id === msg.replyTo);
+                if (repliedMsg) {
+                    const replyContent = (repliedMsg.content || '[Embed or attachment]').substring(0, 50) + (repliedMsg.content?.length > 50 ? '...' : '');
+                    replyHtml = `<div class="message-reply">Replying to <strong>${repliedMsg.authorTag}</strong>: ${escapeHtml(replyContent)}</div>`;
+                }
+            }
+            
+            // Build attachments
+            let attachmentsHtml = '';
+            if (msg.attachments && msg.attachments.length > 0) {
+                for (const att of msg.attachments) {
+                    if (att.contentType?.startsWith('image/')) {
+                        attachmentsHtml += `<div class="message-attachment"><img src="${att.url}" alt="${att.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><a href="${att.url}" target="_blank" style="display:none">${att.name}</a></div>`;
+                    } else {
+                        attachmentsHtml += `<div class="message-attachment"><a href="${att.url}" target="_blank">${att.name || 'Attachment'}</a></div>`;
+                    }
+                }
+            }
+            
+            // Build embeds
+            let embedsHtml = '';
+            if (msg.embeds && msg.embeds.length > 0) {
+                for (const embed of msg.embeds) {
+                    const colorBar = embed.color ? `style="background:#${embed.color.toString(16).padStart(6, '0')}"` : 'style="background:#202225"';
+                    
+                    let fieldsHtml = '';
+                    if (embed.fields && embed.fields.length > 0) {
+                        fieldsHtml = '<div class="embed-fields">';
+                        for (const field of embed.fields) {
+                            fieldsHtml += `<div class="embed-field${field.inline ? '' : ' full'}">
+                                <div class="embed-field-name">${escapeHtml(field.name)}</div>
+                                <div class="embed-field-value">${escapeHtml(field.value)}</div>
+                            </div>`;
+                        }
+                        fieldsHtml += '</div>';
+                    }
+                    
+                    let authorHtml = '';
+                    if (embed.author) {
+                        authorHtml = `<div class="embed-author">
+                            ${embed.author.iconUrl ? `<img class="embed-author-icon" src="${embed.author.iconUrl}">` : ''}
+                            <span class="embed-author-name">${escapeHtml(embed.author.name)}</span>
+                        </div>`;
+                    }
+                    
+                    embedsHtml += `<div class="message-embed">
+                        <div class="embed-color-bar" ${colorBar}></div>
+                        <div class="embed-content">
+                            ${authorHtml}
+                            ${embed.title ? `<div class="embed-title">${escapeHtml(embed.title)}</div>` : ''}
+                            ${embed.description ? `<div class="embed-description">${escapeHtml(embed.description)}</div>` : ''}
+                            ${fieldsHtml}
+                            ${embed.image ? `<img class="embed-image" src="${embed.image}" onerror="this.style.display='none'">` : ''}
+                            ${embed.footer ? `<div class="embed-footer">${escapeHtml(embed.footer)}</div>` : ''}
+                        </div>
+                        ${embed.thumbnail ? `<img class="embed-thumbnail" src="${embed.thumbnail}" onerror="this.style.display='none'">` : ''}
+                    </div>`;
+                }
+            }
+            
+            // Render message
+            if (isContinuation && !msg.replyTo) {
+                messagesHtml += `<div class="continuation-message">
+                    ${replyHtml}
+                    ${msg.content ? `<div class="message-text">${formatMessageContent(msg.content)}</div>` : ''}
+                    ${attachmentsHtml}
+                    ${embedsHtml}
+                </div>`;
+            } else {
+                messagesHtml += `<div class="message-group">
+                    <img class="message-avatar" src="${msg.authorAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" alt="" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                    <div class="message-content">
+                        ${replyHtml}
+                        <div class="message-header">
+                            <span class="message-author${isBot ? ' bot' : ''}">${escapeHtml(msg.authorTag)}</span>
+                            <span class="message-timestamp">${timeStr}</span>
+                        </div>
+                        ${msg.content ? `<div class="message-text">${formatMessageContent(msg.content)}</div>` : ''}
+                        ${attachmentsHtml}
+                        ${embedsHtml}
+                    </div>
+                </div>`;
+            }
+            
+            lastAuthorId = msg.authorId;
+        }
+        
+        // Build participants list
+        let participantsHtml = '';
+        if (transcript.participants && transcript.participants.length > 0) {
+            for (const p of transcript.participants) {
+                participantsHtml += `<div class="participant">
+                    <img src="${p.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" alt="" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                    <div class="participant-info">
+                        <div class="participant-name">${escapeHtml(p.tag)}</div>
+                        <div class="participant-count">${p.messageCount} message${p.messageCount !== 1 ? 's' : ''}</div>
+                    </div>
+                </div>`;
+            }
+        }
+        
+        // Get type tag
+        const typeTagClass = {
+            'apply': 'ticket-type-apply',
+            'general': 'ticket-type-general',
+            'report': 'ticket-type-report',
+            'management': 'ticket-type-management'
+        }[transcript.ticketType] || 'tag-g';
+        
+        res.setHeader('Content-Type', 'text/html');
+        res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transcript - ${transcript.ticketName}</title><style>${viewerStyles}${transcriptStyles}</style></head><body>
+${getHeader('transcripts', req.session)}
+<div class="main">
+    <a href="/viewer/transcripts" class="back-link">Back to Transcripts</a>
+    
+    <div class="transcript-container">
+        <div class="transcript-header">
+            <h2>${escapeHtml(transcript.ticketName)} <span class="ticket-type-tag ${typeTagClass}">${transcript.ticketType || 'Unknown'}</span></h2>
+            <div class="transcript-meta">
+                <div class="transcript-meta-item"><label>Owner</label><span>${escapeHtml(transcript.ownerTag)}</span></div>
+                <div class="transcript-meta-item"><label>Closed By</label><span>${escapeHtml(transcript.closedByTag || 'Unknown')}</span></div>
+                <div class="transcript-meta-item"><label>Created</label><span>${transcript.createdAt ? new Date(transcript.createdAt).toLocaleString() : '—'}</span></div>
+                <div class="transcript-meta-item"><label>Closed</label><span>${transcript.closedAt ? new Date(transcript.closedAt).toLocaleString() : '—'}</span></div>
+                <div class="transcript-meta-item"><label>Messages</label><span>${transcript.messageCount || 0}</span></div>
+                <div class="transcript-meta-item"><label>Close Reason</label><span>${escapeHtml(transcript.closeReason || 'Not specified')}</span></div>
+            </div>
+        </div>
+        
+        <div class="messages-container">
+            ${messagesHtml || '<div style="padding:20px;text-align:center;color:#72767d">No messages in this transcript</div>'}
+        </div>
+        
+        <div class="participants-list">
+            <h3>Participants</h3>
+            ${participantsHtml || '<p style="color:#64748b">No participants recorded</p>'}
+        </div>
+    </div>
+</div></body></html>`);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error: ' + e.message);
+    }
+});
+
+// =====================================================
+// USER TRANSCRIPTS PAGE (Users view their own transcripts)
+// =====================================================
+app.get('/viewer/my-transcripts', userAuth, async (req, res) => {
+    try {
+        const discordId = req.session.discordId;
+        
+        // Fetch transcripts where user is the owner
+        const transcripts = await Transcript.find({ ownerId: discordId })
+            .select('ticketId ticketName ticketType closedByTag closedAt messageCount closeReason')
+            .sort({ closedAt: -1 })
+            .lean();
+        
+        let transcriptsHtml = '';
+        if (transcripts.length === 0) {
+            transcriptsHtml = '<p class="no-evidence">You have no ticket transcripts.</p>';
+        } else {
+            const getTypeTag = (ticketType) => {
+                switch(ticketType) {
+                    case 'apply': return '<span class="tag ticket-type-apply">Apply</span>';
+                    case 'general': return '<span class="tag ticket-type-general">General</span>';
+                    case 'report': return '<span class="tag ticket-type-report">Report</span>';
+                    case 'management': return '<span class="tag ticket-type-management">Management</span>';
+                    default: return '<span class="tag tag-g">' + (ticketType || 'Unknown') + '</span>';
+                }
+            };
+            
+            for (const t of transcripts) {
+                transcriptsHtml += `<div class="case-detail" style="margin-bottom:16px">
+                    <h2>${getTypeTag(t.ticketType)} ${escapeHtml(t.ticketName || 'Untitled')}</h2>
+                    <div class="info-grid">
+                        <div class="info-item"><label>Closed</label><span>${t.closedAt ? new Date(t.closedAt).toLocaleString() : '—'}</span></div>
+                        <div class="info-item"><label>Closed By</label><span>${escapeHtml(t.closedByTag || 'Unknown')}</span></div>
+                        <div class="info-item"><label>Messages</label><span>${t.messageCount || 0}</span></div>
+                    </div>
+                    <div class="info-item" style="margin-top:12px"><label>Close Reason</label><span>${escapeHtml(t.closeReason || 'Not specified')}</span></div>
+                    <a href="/viewer/my-transcript/${t.ticketId}" class="btn btn-go" style="margin-top:16px">View Transcript</a>
+                </div>`;
+            }
+        }
+        
+        res.setHeader('Content-Type', 'text/html');
+        res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>My Transcripts</title><style>${viewerStyles}${transcriptStyles}</style></head><body>
+${getUserHeader('my-transcripts', req.session)}
+<div class="main">
+    <div class="user-cases-section">
+        <h2>Your Ticket Transcripts</h2>
+        <p>This page shows transcripts from tickets you've opened.</p>
+    </div>
+    
+    <div class="stats">
+        <div class="stat"><div class="num">${transcripts.length}</div><div class="lbl">Total Tickets</div></div>
+    </div>
+    
+    ${transcriptsHtml}
+</div></body></html>`);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error: ' + e.message);
+    }
+});
+
+// =====================================================
+// USER TRANSCRIPT DETAIL PAGE
+// =====================================================
+app.get('/viewer/my-transcript/:ticketId', userAuth, async (req, res) => {
+    try {
+        const { ticketId } = req.params;
+        const discordId = req.session.discordId;
+        
+        // Only allow viewing own transcripts
+        const transcript = await Transcript.findOne({ ticketId, ownerId: discordId }).lean();
+        
+        if (!transcript) {
+            return res.status(404).send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transcript Not Found</title><style>${viewerStyles}</style></head><body>
+${getUserHeader('my-transcripts', req.session)}
+<div class="main">
+    <a href="/viewer/my-transcripts" class="back-link">Back to My Transcripts</a>
+    <h1 class="title">Transcript Not Found</h1>
+    <p style="color:#94a3b8">The requested transcript was not found or you don't have permission to view it.</p>
+</div></body></html>`);
+        }
+        
+        // Render messages (same as staff view)
+        let messagesHtml = '';
+        let lastAuthorId = null;
+        let lastDate = null;
+        
+        for (const msg of transcript.messages) {
+            const msgDate = new Date(msg.timestamp);
+            const dateStr = msgDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            
+            if (dateStr !== lastDate) {
+                messagesHtml += `<div class="date-divider"><span>${dateStr}</span></div>`;
+                lastDate = dateStr;
+                lastAuthorId = null;
+            }
+            
+            const timeStr = msgDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            const isBot = msg.authorBot;
+            const isContinuation = lastAuthorId === msg.authorId && !msg.replyTo;
+            
+            let replyHtml = '';
+            if (msg.replyTo) {
+                const repliedMsg = transcript.messages.find(m => m.id === msg.replyTo);
+                if (repliedMsg) {
+                    const replyContent = (repliedMsg.content || '[Embed or attachment]').substring(0, 50) + (repliedMsg.content?.length > 50 ? '...' : '');
+                    replyHtml = `<div class="message-reply">Replying to <strong>${repliedMsg.authorTag}</strong>: ${escapeHtml(replyContent)}</div>`;
+                }
+            }
+            
+            let attachmentsHtml = '';
+            if (msg.attachments && msg.attachments.length > 0) {
+                for (const att of msg.attachments) {
+                    if (att.contentType?.startsWith('image/')) {
+                        attachmentsHtml += `<div class="message-attachment"><img src="${att.url}" alt="${att.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><a href="${att.url}" target="_blank" style="display:none">${att.name}</a></div>`;
+                    } else {
+                        attachmentsHtml += `<div class="message-attachment"><a href="${att.url}" target="_blank">${att.name || 'Attachment'}</a></div>`;
+                    }
+                }
+            }
+            
+            let embedsHtml = '';
+            if (msg.embeds && msg.embeds.length > 0) {
+                for (const embed of msg.embeds) {
+                    const colorBar = embed.color ? `style="background:#${embed.color.toString(16).padStart(6, '0')}"` : 'style="background:#202225"';
+                    
+                    let fieldsHtml = '';
+                    if (embed.fields && embed.fields.length > 0) {
+                        fieldsHtml = '<div class="embed-fields">';
+                        for (const field of embed.fields) {
+                            fieldsHtml += `<div class="embed-field${field.inline ? '' : ' full'}">
+                                <div class="embed-field-name">${escapeHtml(field.name)}</div>
+                                <div class="embed-field-value">${escapeHtml(field.value)}</div>
+                            </div>`;
+                        }
+                        fieldsHtml += '</div>';
+                    }
+                    
+                    let authorHtml = '';
+                    if (embed.author) {
+                        authorHtml = `<div class="embed-author">
+                            ${embed.author.iconUrl ? `<img class="embed-author-icon" src="${embed.author.iconUrl}">` : ''}
+                            <span class="embed-author-name">${escapeHtml(embed.author.name)}</span>
+                        </div>`;
+                    }
+                    
+                    embedsHtml += `<div class="message-embed">
+                        <div class="embed-color-bar" ${colorBar}></div>
+                        <div class="embed-content">
+                            ${authorHtml}
+                            ${embed.title ? `<div class="embed-title">${escapeHtml(embed.title)}</div>` : ''}
+                            ${embed.description ? `<div class="embed-description">${escapeHtml(embed.description)}</div>` : ''}
+                            ${fieldsHtml}
+                            ${embed.image ? `<img class="embed-image" src="${embed.image}" onerror="this.style.display='none'">` : ''}
+                            ${embed.footer ? `<div class="embed-footer">${escapeHtml(embed.footer)}</div>` : ''}
+                        </div>
+                        ${embed.thumbnail ? `<img class="embed-thumbnail" src="${embed.thumbnail}" onerror="this.style.display='none'">` : ''}
+                    </div>`;
+                }
+            }
+            
+            if (isContinuation && !msg.replyTo) {
+                messagesHtml += `<div class="continuation-message">
+                    ${replyHtml}
+                    ${msg.content ? `<div class="message-text">${formatMessageContent(msg.content)}</div>` : ''}
+                    ${attachmentsHtml}
+                    ${embedsHtml}
+                </div>`;
+            } else {
+                messagesHtml += `<div class="message-group">
+                    <img class="message-avatar" src="${msg.authorAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" alt="" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                    <div class="message-content">
+                        ${replyHtml}
+                        <div class="message-header">
+                            <span class="message-author${isBot ? ' bot' : ''}">${escapeHtml(msg.authorTag)}</span>
+                            <span class="message-timestamp">${timeStr}</span>
+                        </div>
+                        ${msg.content ? `<div class="message-text">${formatMessageContent(msg.content)}</div>` : ''}
+                        ${attachmentsHtml}
+                        ${embedsHtml}
+                    </div>
+                </div>`;
+            }
+            
+            lastAuthorId = msg.authorId;
+        }
+        
+        const typeTagClass = {
+            'apply': 'ticket-type-apply',
+            'general': 'ticket-type-general',
+            'report': 'ticket-type-report',
+            'management': 'ticket-type-management'
+        }[transcript.ticketType] || 'tag-g';
+        
+        res.setHeader('Content-Type', 'text/html');
+        res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transcript - ${transcript.ticketName}</title><style>${viewerStyles}${transcriptStyles}</style></head><body>
+${getUserHeader('my-transcripts', req.session)}
+<div class="main">
+    <a href="/viewer/my-transcripts" class="back-link">Back to My Transcripts</a>
+    
+    <div class="transcript-container">
+        <div class="transcript-header">
+            <h2>${escapeHtml(transcript.ticketName)} <span class="ticket-type-tag ${typeTagClass}">${transcript.ticketType || 'Unknown'}</span></h2>
+            <div class="transcript-meta">
+                <div class="transcript-meta-item"><label>Closed By</label><span>${escapeHtml(transcript.closedByTag || 'Unknown')}</span></div>
+                <div class="transcript-meta-item"><label>Created</label><span>${transcript.createdAt ? new Date(transcript.createdAt).toLocaleString() : '—'}</span></div>
+                <div class="transcript-meta-item"><label>Closed</label><span>${transcript.closedAt ? new Date(transcript.closedAt).toLocaleString() : '—'}</span></div>
+                <div class="transcript-meta-item"><label>Messages</label><span>${transcript.messageCount || 0}</span></div>
+                <div class="transcript-meta-item"><label>Close Reason</label><span>${escapeHtml(transcript.closeReason || 'Not specified')}</span></div>
+            </div>
+        </div>
+        
+        <div class="messages-container">
+            ${messagesHtml || '<div style="padding:20px;text-align:center;color:#72767d">No messages in this transcript</div>'}
+        </div>
+    </div>
+</div></body></html>`);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error: ' + e.message);
+    }
+});
+
+// Helper functions for transcript rendering
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function formatMessageContent(content) {
+    if (!content) return '';
+    
+    let formatted = escapeHtml(content);
+    
+    // Convert Discord markdown to HTML
+    // Bold
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    formatted = formatted.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    formatted = formatted.replace(/_(.+?)_/g, '<em>$1</em>');
+    // Strikethrough
+    formatted = formatted.replace(/~~(.+?)~~/g, '<del>$1</del>');
+    // Inline code
+    formatted = formatted.replace(/`([^`]+)`/g, '<code style="background:#2f3136;padding:2px 4px;border-radius:3px">$1</code>');
+    // Code blocks
+    formatted = formatted.replace(/```([^`]+)```/gs, '<pre style="background:#2f3136;padding:8px;border-radius:4px;overflow-x:auto"><code>$1</code></pre>');
+    // URLs
+    formatted = formatted.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    // Discord user mentions
+    formatted = formatted.replace(/&lt;@!?(\d+)&gt;/g, '<span style="background:#5865f233;color:#dee0fc;padding:0 2px;border-radius:3px">@User</span>');
+    // Discord channel mentions
+    formatted = formatted.replace(/&lt;#(\d+)&gt;/g, '<span style="background:#5865f233;color:#dee0fc;padding:0 2px;border-radius:3px">#channel</span>');
+    // Discord role mentions
+    formatted = formatted.replace(/&lt;@&amp;(\d+)&gt;/g, '<span style="background:#5865f233;color:#dee0fc;padding:0 2px;border-radius:3px">@role</span>');
+    
+    return formatted;
+}
 
 // =====================================================
 // AUTHENTICATED API ROUTES
@@ -1612,7 +2437,7 @@ app.post('/api/pvp/log', validateApiKey, async (req, res) => {
         const { type, timestamp, ...data } = req.body;
         console.log('[PvP API] Received log request:', { type, ...data });
         
-        if (!type || !['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'combat_log'].includes(type)) {
+        if (!type || !['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'combat_log', 'low_hp_alert'].includes(type)) {
             console.log('[PvP API] Invalid type:', type);
             return res.status(400).json({ success: false, error: 'Invalid or missing type' });
         }
@@ -1673,6 +2498,23 @@ app.post('/api/pvp/combat-log', validateApiKey, async (req, res) => {
         return res.json({ success: true, logId: log._id });
     } catch (error) {
         console.error('Combat Log Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+app.post('/api/pvp/low-hp', validateApiKey, async (req, res) => {
+    try {
+        const logData = { type: 'low_hp_alert', ...req.body };
+        const log = new PvpLog(logData);
+        await log.save();
+        
+        if (global.discordClient) {
+            global.discordClient.emit('pvpLog', log.toObject());
+        }
+        
+        return res.json({ success: true, logId: log._id });
+    } catch (error) {
+        console.error('Low HP Alert Error:', error);
         return res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });

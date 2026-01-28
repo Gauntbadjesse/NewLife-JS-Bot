@@ -37,10 +37,13 @@ public class PlayerDamageListener implements Listener {
 
         // Get damage amount
         double damage = event.getFinalDamage();
+        
+        // Calculate health after damage (can't go below 0)
+        double healthAfter = Math.max(0, victim.getHealth() - damage);
 
-        // Record the damage in the tracker
+        // Record the damage in the tracker with health info
         if (plugin.getDamageTracker() != null) {
-            plugin.getDamageTracker().recordDamage(attacker, victim, damage);
+            plugin.getDamageTracker().recordDamage(attacker, victim, damage, healthAfter);
         }
 
         // Tag both players as in combat (only if they have PvP enabled)

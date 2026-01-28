@@ -96,6 +96,9 @@ async function handlePvpLog(client, logData) {
         case 'combat_log':
             embed = createCombatLogEmbed(logData);
             break;
+        case 'low_hp_alert':
+            embed = createLowHpAlertEmbed(logData);
+            break;
         default:
             console.warn('[PvP Logger] Unknown log type:', logData.type);
             return;
@@ -233,20 +236,20 @@ function createDeathEmbed(data) {
  * Create embed for damage session
  */
 function createDamageSessionEmbed(data) {
-    const { player1, player2, total_hits, total_damage, duration_ms } = data;
+    const { player1, player2, total_hits, total_damage, duration_ms, initiator } = data;
     
     const bothPvpEnabled = player1.pvp_enabled && player2.pvp_enabled;
     const embedColor = bothPvpEnabled ? 0x2B2D31 : 0xef4444;
     
     const durationSeconds = (duration_ms / 1000).toFixed(1);
     
-    // Determine who initiated (first attacker)
-    const initiator = player1.hits_dealt > 0 ? player1 : player2;
+    // Get initiator info (who started the fight)
+    const initiatorName = initiator ? initiator.username : (player1.hits_dealt > 0 ? player1.username : player2.username);
     
     const embed = new EmbedBuilder()
         .setColor(embedColor)
         .setAuthor({ name: 'PvP Damage Session' })
-        .setDescription(`Combat between **${player1.username}** and **${player2.username}**`)
+        .setDescription(`Combat between **${player1.username}** and **${player2.username}**\n**Initiator:** ${initiatorName}`)
         .addFields(
             { 
                 name: player1.username, 
@@ -312,6 +315,80 @@ function createCombatLogEmbed(data) {
         )
         .setTimestamp(new Date(data.timestamp))
         .setFooter({ text: 'NewLife SMP | Combat Logging Prevention' });
+    
+    return embed;
+}
+
+/**
+ * Create embed for low HP alert (victim dropped below 4 HP during combat)
+ */
+function createLowHpAlertEmbed(data) {
+    const { victim, attacker, initiator, session, location, health_remaining, threshold } = data;
+    
+    const isConsensual = session.consensual;
+    const embedColor = isConsensual ? 0xf59e0b : 0xef4444; // Yellow for consensual, red for non-consensual
+    
+    const durationSeconds = (session.duration_ms / 1000).toFixed(1);
+    const heartsRemaining = (health_remaining / 2).toFixed(1);
+    
+    // Determine the relationship between attacker and initiator
+    let initiatorNote = '';
+    if (initiator.is_current_attacker) {
+        initiatorNote = '(Same as attacker)';
+    } else {
+        initiatorNote = `**${initiator.username}** started the fight`;
+    }
+    
+    const embed = new EmbedBuilder()
+        .setColor(embedColor)
+        .setAuthor({ name: 'Low HP Alert - Critical Health' })
+        .setDescription(`**${victim.username}** dropped to **${heartsRemaining} hearts** (${health_remaining.toFixed(1)} HP) during PvP`)
+        .addFields(
+            { 
+                name: 'Victim', 
+                value: `**${victim.username}**\n${victim.pvp_enabled ? 'PvP On' : 'PvP Off'}\n**${health_remaining.toFixed(1)} HP** remaining`, 
+                inline: true 
+            },
+            { 
+                name: 'Last Attacker', 
+                value: `**${attacker.username}**\n${attacker.pvp_enabled ? 'PvP On' : 'PvP Off'}\n**${attacker.total_damage_dealt.toFixed(1)} HP** dealt`, 
+                inline: true 
+            },
+            { 
+                name: 'Fight Initiator', 
+                value: `**${initiator.username}**\n${initiatorNote}`, 
+                inline: true 
+            },
+            { 
+                name: 'Combat Summary', 
+                value: `**Duration:** ${durationSeconds}s\n**Total Hits:** ${session.total_hits}\n**Total Damage:** ${session.total_damage.toFixed(1)} HP\n**Consensual:** ${isConsensual ? 'Yes' : 'No'}`, 
+                inline: true 
+            },
+            { 
+                name: 'Location', 
+                value: `**World:** ${location.world}\n**Coords:** ${location.x.toFixed(0)}, ${location.y.toFixed(0)}, ${location.z.toFixed(0)}`, 
+                inline: true 
+            },
+            { 
+                name: 'Alert Threshold', 
+                value: `Triggered at ${threshold} HP\n(${(threshold / 2).toFixed(0)} hearts)`, 
+                inline: true 
+            },
+            { name: 'Victim UUID', value: `\`${victim.uuid}\``, inline: true },
+            { name: 'Attacker UUID', value: `\`${attacker.uuid}\``, inline: true },
+            { name: 'Initiator UUID', value: `\`${initiator.uuid}\``, inline: true }
+        )
+        .setTimestamp(new Date(data.timestamp))
+        .setFooter({ text: 'NewLife SMP | Low HP Alert System' });
+    
+    // Add warning if non-consensual
+    if (!isConsensual) {
+        embed.addFields({
+            name: 'Warning',
+            value: 'This combat involved a player with PvP disabled. Potential rule violation.',
+            inline: false
+        });
+    }
     
     return embed;
 }

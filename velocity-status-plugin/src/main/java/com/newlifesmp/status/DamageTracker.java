@@ -11,6 +11,7 @@ import java.util.logging.Logger;
 
 /**
  * Tracks damage sessions between players and logs them after inactivity
+ * Also tracks low HP events when a victim drops below threshold during combat
  */
 public class DamageTracker {
 
@@ -18,11 +19,19 @@ public class DamageTracker {
     private final Logger logger;
     private final Map<String, DamageSession> activeSessions;
     private final long sessionTimeoutMs;
+    
+    // Low HP threshold (4 HP = 2 hearts)
+    private static final double LOW_HP_THRESHOLD = 4.0;
+    
+    // Track recent low HP alerts to prevent spam (UUID -> last alert time)
+    private final Map<UUID, Long> recentLowHpAlerts;
+    private static final long LOW_HP_ALERT_COOLDOWN_MS = 30000; // 30 seconds cooldown
 
     public DamageTracker(NewLifeStatus plugin, long sessionTimeoutSeconds) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
         this.activeSessions = new ConcurrentHashMap<>();
+        this.recentLowHpAlerts = new ConcurrentHashMap<>();
         this.sessionTimeoutMs = sessionTimeoutSeconds * 1000;
 
         // Start cleanup task (runs every 5 seconds)
@@ -34,8 +43,9 @@ public class DamageTracker {
      * @param attacker The player who dealt damage
      * @param victim The player who received damage
      * @param damage Amount of damage dealt
+     * @param victimHealthAfter Victim's health after damage
      */
-    public void recordDamage(Player attacker, Player victim, double damage) {
+    public void recordDamage(Player attacker, Player victim, double damage, double victimHealthAfter) {
         // Create unique session key (ordered by UUID to ensure consistency)
         String sessionKey = createSessionKey(attacker.getUniqueId(), victim.getUniqueId());
 
@@ -45,8 +55,97 @@ public class DamageTracker {
                             victim.getUniqueId(), victim.getName())
         );
 
+        // Record who initiated if this is the first damage event
+        if (session.getInitiatorUUID() == null) {
+            session.setInitiator(attacker.getUniqueId(), attacker.getName());
+        }
+
         // Add damage event to session
-        session.addDamageEvent(attacker.getUniqueId(), damage);
+        session.addDamageEvent(attacker.getUniqueId(), damage, victimHealthAfter, victim.getUniqueId());
+        
+        // Check for low HP threshold
+        if (victimHealthAfter <= LOW_HP_THRESHOLD && victimHealthAfter > 0) {
+            checkLowHpAlert(attacker, victim, victimHealthAfter, session);
+        }
+    }
+    
+    /**
+     * Check and send low HP alert if victim dropped below threshold
+     */
+    private void checkLowHpAlert(Player attacker, Player victim, double healthAfter, DamageSession session) {
+        UUID victimUUID = victim.getUniqueId();
+        long currentTime = System.currentTimeMillis();
+        
+        // Check cooldown
+        Long lastAlert = recentLowHpAlerts.get(victimUUID);
+        if (lastAlert != null && (currentTime - lastAlert) < LOW_HP_ALERT_COOLDOWN_MS) {
+            return; // Still in cooldown
+        }
+        
+        // Update cooldown
+        recentLowHpAlerts.put(victimUUID, currentTime);
+        
+        // Get PvP status for context
+        PlayerDataManager dataManager = plugin.getPlayerDataManager();
+        PlayerDataManager.PlayerData attackerData = dataManager.getPlayerData(attacker.getUniqueId());
+        PlayerDataManager.PlayerData victimData = dataManager.getPlayerData(victim.getUniqueId());
+        
+        boolean attackerPvpEnabled = attackerData != null && attackerData.isPvpEnabled();
+        boolean victimPvpEnabled = victimData != null && victimData.isPvpEnabled();
+        
+        logger.info(String.format("Low HP Alert: %s (%.1f HP) - Attacker: %s - Initiator: %s",
+            victim.getName(), healthAfter, attacker.getName(), session.getInitiatorName()));
+        
+        // Build JSON payload for low HP alert
+        JsonObject payload = new JsonObject();
+        payload.addProperty("type", "low_hp_alert");
+        payload.addProperty("timestamp", currentTime);
+        payload.addProperty("health_remaining", healthAfter);
+        payload.addProperty("threshold", LOW_HP_THRESHOLD);
+        
+        // Victim data
+        JsonObject victimJson = new JsonObject();
+        victimJson.addProperty("uuid", victim.getUniqueId().toString());
+        victimJson.addProperty("username", victim.getName());
+        victimJson.addProperty("pvp_enabled", victimPvpEnabled);
+        victimJson.addProperty("health", healthAfter);
+        payload.add("victim", victimJson);
+        
+        // Current attacker data (who dealt the damage that dropped them low)
+        JsonObject attackerJson = new JsonObject();
+        attackerJson.addProperty("uuid", attacker.getUniqueId().toString());
+        attackerJson.addProperty("username", attacker.getName());
+        attackerJson.addProperty("pvp_enabled", attackerPvpEnabled);
+        attackerJson.addProperty("total_damage_dealt", session.getDamageDealtTo(victim.getUniqueId(), attacker.getUniqueId()));
+        payload.add("attacker", attackerJson);
+        
+        // Initiator data (who started the fight)
+        JsonObject initiatorJson = new JsonObject();
+        initiatorJson.addProperty("uuid", session.getInitiatorUUID().toString());
+        initiatorJson.addProperty("username", session.getInitiatorName());
+        initiatorJson.addProperty("is_current_attacker", session.getInitiatorUUID().equals(attacker.getUniqueId()));
+        payload.add("initiator", initiatorJson);
+        
+        // Session context
+        JsonObject sessionJson = new JsonObject();
+        sessionJson.addProperty("duration_ms", session.getDuration());
+        sessionJson.addProperty("total_hits", session.getTotalHits());
+        sessionJson.addProperty("total_damage", session.getTotalDamage());
+        sessionJson.addProperty("consensual", attackerPvpEnabled && victimPvpEnabled);
+        payload.add("session", sessionJson);
+        
+        // Location data
+        JsonObject locationJson = new JsonObject();
+        locationJson.addProperty("world", victim.getWorld().getName());
+        locationJson.addProperty("x", victim.getLocation().getX());
+        locationJson.addProperty("y", victim.getLocation().getY());
+        locationJson.addProperty("z", victim.getLocation().getZ());
+        payload.add("location", locationJson);
+        
+        // Send to API
+        if (plugin.getApiClient() != null) {
+            plugin.getApiClient().sendLog("pvp/low-hp", payload);
+        }
     }
 
     /**
@@ -94,9 +193,9 @@ public class DamageTracker {
             return;
         }
 
-        logger.info(String.format("Logging damage session: %s <-> %s (%d hits, %.2f total damage)",
+        logger.info(String.format("Logging damage session: %s <-> %s (%d hits, %.2f total damage, initiator: %s)",
             session.getPlayer1Name(), session.getPlayer2Name(), 
-            session.getTotalHits(), session.getTotalDamage()));
+            session.getTotalHits(), session.getTotalDamage(), session.getInitiatorName()));
 
         // Build JSON payload
         JsonObject payload = new JsonObject();
@@ -105,6 +204,14 @@ public class DamageTracker {
         payload.addProperty("duration_ms", session.getDuration());
         payload.addProperty("total_hits", session.getTotalHits());
         payload.addProperty("total_damage", session.getTotalDamage());
+        
+        // Initiator data (who started the fight)
+        if (session.getInitiatorUUID() != null) {
+            JsonObject initiatorJson = new JsonObject();
+            initiatorJson.addProperty("uuid", session.getInitiatorUUID().toString());
+            initiatorJson.addProperty("username", session.getInitiatorName());
+            payload.add("initiator", initiatorJson);
+        }
 
         // Player 1 data
         JsonObject player1Json = new JsonObject();
@@ -164,6 +271,10 @@ public class DamageTracker {
         private final long startTime;
         private long lastDamageTime;
         private final List<DamageEvent> damageEvents;
+        
+        // Track who initiated the fight
+        private UUID initiatorUUID;
+        private String initiatorName;
 
         public DamageSession(UUID player1UUID, String player1Name, UUID player2UUID, String player2Name) {
             this.player1UUID = player1UUID;
@@ -174,10 +285,23 @@ public class DamageTracker {
             this.lastDamageTime = startTime;
             this.damageEvents = new ArrayList<>();
         }
+        
+        public void setInitiator(UUID uuid, String name) {
+            this.initiatorUUID = uuid;
+            this.initiatorName = name;
+        }
+        
+        public UUID getInitiatorUUID() {
+            return initiatorUUID;
+        }
+        
+        public String getInitiatorName() {
+            return initiatorName;
+        }
 
-        public void addDamageEvent(UUID attackerUUID, double damage) {
+        public void addDamageEvent(UUID attackerUUID, double damage, double victimHealthAfter, UUID victimUUID) {
             this.lastDamageTime = System.currentTimeMillis();
-            this.damageEvents.add(new DamageEvent(attackerUUID, damage, lastDamageTime));
+            this.damageEvents.add(new DamageEvent(attackerUUID, damage, lastDamageTime, victimHealthAfter, victimUUID));
         }
 
         public UUID getPlayer1UUID() {
@@ -226,6 +350,16 @@ public class DamageTracker {
                 .mapToDouble(e -> e.damage)
                 .sum();
         }
+        
+        /**
+         * Get damage dealt TO a specific victim BY a specific attacker
+         */
+        public double getDamageDealtTo(UUID victimUUID, UUID attackerUUID) {
+            return damageEvents.stream()
+                .filter(e -> e.attackerUUID.equals(attackerUUID) && e.victimUUID.equals(victimUUID))
+                .mapToDouble(e -> e.damage)
+                .sum();
+        }
 
         public int getHitsDealtBy(UUID uuid) {
             return (int) damageEvents.stream()
@@ -241,11 +375,15 @@ public class DamageTracker {
         private final UUID attackerUUID;
         private final double damage;
         private final long timestamp;
+        private final double victimHealthAfter;
+        private final UUID victimUUID;
 
-        public DamageEvent(UUID attackerUUID, double damage, long timestamp) {
+        public DamageEvent(UUID attackerUUID, double damage, long timestamp, double victimHealthAfter, UUID victimUUID) {
             this.attackerUUID = attackerUUID;
             this.damage = damage;
             this.timestamp = timestamp;
+            this.victimHealthAfter = victimHealthAfter;
+            this.victimUUID = victimUUID;
         }
     }
 }
