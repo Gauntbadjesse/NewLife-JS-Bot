@@ -556,7 +556,7 @@ async function handleGiveawayButton(interaction, client) {
             const member = interaction.member;
             if (!member.roles.cache.has(giveaway.requiredRole)) {
                 return interaction.reply({ 
-                    content: `🔒 You need <@&${giveaway.requiredRole}> to enter this giveaway.`, 
+                    content: `You need <@&${giveaway.requiredRole}> to enter this giveaway.`, 
                     ephemeral: true 
                 });
             }
@@ -583,7 +583,7 @@ async function handleGiveawayButton(interaction, client) {
             await interaction.message.edit({ embeds: [embed], components: [buttons] });
 
             return interaction.reply({ 
-                content: '👋 You\'ve left the giveaway.', 
+                content: 'You\'ve left the giveaway.', 
                 ephemeral: true 
             });
         } else {
@@ -599,15 +599,15 @@ async function handleGiveawayButton(interaction, client) {
             const buttons = createGiveawayButtons(giveawayId);
             await interaction.message.edit({ embeds: [embed], components: [buttons] });
 
-            const premiumBonus = isPremium ? '\\n\\n⭐ **NewLife+ Bonus** — You have **2x entries**!' : '';
+            const premiumBonus = isPremium ? '\n\n**NewLife+ Bonus** — You have **2x entries**!' : '';
             return interaction.reply({ 
-                content: `🎉 You're in! Good luck!${premiumBonus}`, 
+                content: `You're in! Good luck!${premiumBonus}`, 
                 ephemeral: true 
             });
         }
     } catch (e) {
         console.error('[Giveaways] Button error:', e);
-        return interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
+        return interaction.reply({ content: 'An error occurred.', ephemeral: true });
     }
 }
 

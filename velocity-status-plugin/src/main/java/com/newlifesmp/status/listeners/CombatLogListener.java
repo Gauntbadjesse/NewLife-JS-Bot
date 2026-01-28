@@ -161,15 +161,15 @@ public class CombatLogListener implements Listener {
             payload.addProperty("minecraft_username", player.getName());
             
             String message = String.format(
-                "⚔️ **Combat Log Detected**\n\n" +
+                "**Combat Log Detected**\n\n" +
                 "You were killed for logging out during combat while you had PvP enabled.\n\n" +
                 "**What happened?**\n" +
-                "• You took or dealt damage with PvP enabled\n" +
-                "• You disconnected before the combat timer expired\n" +
-                "• Your character was killed and items dropped at your logout location\n\n" +
+                "- You took or dealt damage with PvP enabled\n" +
+                "- You disconnected before the combat timer expired\n" +
+                "- Your character was killed and items dropped at your logout location\n\n" +
                 "**To avoid this:**\n" +
-                "• Wait %d seconds after combat before logging out\n" +
-                "• Turn off PvP if you need to logout (note: this has a cooldown)",
+                "- Wait %d seconds after combat before logging out\n" +
+                "- Turn off PvP if you need to logout (note: this has a cooldown)",
                 plugin.getStatusConfig().getCombatTagDuration()
             );
             

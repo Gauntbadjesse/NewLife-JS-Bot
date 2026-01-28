@@ -178,21 +178,21 @@ async function sendWeeklyStaffReport(client) {
         
         // Build main embed
         const embed = new EmbedBuilder()
-            .setTitle('📊 Weekly Staff Activity Report')
+            .setTitle('Weekly Staff Activity Report')
             .setColor(0x10b981)
             .setDescription(`Staff activity summary for the past **7 days**\n\u200b`)
             .addFields(
-                { name: '📋 Total Moderations', value: String(activity.totalActions), inline: true },
-                { name: '🎫 Tickets Handled', value: String(totalTickets), inline: true },
-                { name: '👥 Active Staff', value: String(activity.staffBreakdown.length), inline: true },
+                { name: 'Total Moderations', value: String(activity.totalActions), inline: true },
+                { name: 'Tickets Handled', value: String(totalTickets), inline: true },
+                { name: 'Active Staff', value: String(activity.staffBreakdown.length), inline: true },
                 { name: '\u200b', value: '\u200b', inline: false },
-                { name: '🚫 Bans', value: String(activity.totalBans), inline: true },
-                { name: '👢 Kicks', value: String(activity.totalKicks), inline: true },
-                { name: '⚠️ Warnings', value: String(activity.totalWarnings), inline: true },
-                { name: '🔇 Mutes', value: String(activity.totalMutes), inline: true }
+                { name: 'Bans', value: String(activity.totalBans), inline: true },
+                { name: 'Kicks', value: String(activity.totalKicks), inline: true },
+                { name: 'Warnings', value: String(activity.totalWarnings), inline: true },
+                { name: 'Mutes', value: String(activity.totalMutes), inline: true }
             )
             .setTimestamp()
-            .setFooter({ text: 'NewLife SMP • Staff Tracking System' });
+            .setFooter({ text: 'NewLife SMP | Staff Tracking System' });
         
         // Add top staff breakdown with detailed stats
         if (activity.staffBreakdown.length > 0) {
@@ -210,7 +210,7 @@ async function sendWeeklyStaffReport(client) {
             }).join('\n');
             
             embed.addFields({
-                name: '\u200b\n🏆 Staff Leaderboard',
+                name: '\u200b\nStaff Leaderboard',
                 value: breakdown || 'No activity recorded',
                 inline: false
             });
@@ -229,7 +229,7 @@ async function sendWeeklyStaffReport(client) {
                 : 0;
             
             embed.addFields({
-                name: '\u200b\n📈 Team Statistics',
+                name: '\u200b\nTeam Statistics',
                 value: `**Total Staff:** ${staffMembers.size}\n**Active (7d):** ${activeStaffCount} (${activityRate}%)\n**Inactive (7d):** ${inactiveStaffCount}`,
                 inline: false
             });
@@ -244,7 +244,7 @@ async function sendWeeklyStaffReport(client) {
                 
                 if (inactiveStaff.length > 0) {
                     embed.addFields({
-                        name: '⚠️ Inactive Staff Members',
+                        name: 'Inactive Staff Members',
                         value: inactiveStaff.join(', ') || 'None',
                         inline: false
                     });

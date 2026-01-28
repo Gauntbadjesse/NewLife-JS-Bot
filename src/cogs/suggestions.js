@@ -49,7 +49,7 @@ const slashCommands = [
                 .addFields(
                     { name: 'Submitted By', value: `${user.tag}`, inline: true },
                     { name: 'Status', value: 'Pending', inline: true },
-                    { name: 'Votes', value: '✓ 0 | ✗ 0', inline: true }
+                    { name: 'Votes', value: 'Yes: 0 | No: 0', inline: true }
                 )
                 .setFooter({ text: `User ID: ${user.id}` })
                 .setTimestamp();
@@ -141,7 +141,7 @@ module.exports = {
             .setFields(
                 { name: 'Submitted By', value: interaction.message.embeds[0].fields[0].value, inline: true },
                 { name: 'Status', value: interaction.message.embeds[0].fields[1].value, inline: true },
-                { name: 'Votes', value: `✓ ${suggestion.upvotes.length} | ✗ ${suggestion.downvotes.length}`, inline: true }
+                { name: 'Votes', value: `Yes: ${suggestion.upvotes.length} | No: ${suggestion.downvotes.length}`, inline: true }
             );
 
         // Update buttons with counts

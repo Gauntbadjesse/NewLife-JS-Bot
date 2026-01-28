@@ -267,26 +267,22 @@ function createSupportPanelEmbed() {
             {
                 label: 'General Support',
                 description: 'I need help with something on the server',
-                value: 'general',
-                emoji: '🎫'
+                value: 'general'
             },
             {
                 label: 'Player Report',
                 description: 'I want to report a player who broke the rules',
-                value: 'report',
-                emoji: '🚨'
+                value: 'report'
             },
             {
                 label: 'Management',
                 description: 'I need to report a staff member or speak with management',
-                value: 'management',
-                emoji: '🛠️'
+                value: 'management'
             },
             {
                 label: 'Other',
                 description: 'Something else not listed above',
-                value: 'other',
-                emoji: '❓'
+                value: 'other'
             }
         ]);
 
@@ -425,17 +421,17 @@ async function createTicket(interaction, type) {
         // Check if user has premium role for priority
         const member = guild.members.cache.get(user.id) || await guild.members.fetch(user.id).catch(() => null);
         const isPremium = member && hasPremiumRole(member);
-        const priorityTag = isPremium ? '⭐ PRIORITY' : '';
+        const priorityTag = isPremium ? 'PRIORITY' : '';
 
         if (type === 'general') {
             ticketEmbed = new EmbedBuilder()
                 .setColor(isPremium ? 0xFFD700 : 0x3498DB)
-                .setTitle(`${isPremium ? '⭐ ' : ''}General Support Ticket${isPremium ? ' (Priority)' : ''}`)
-                .setDescription(`Welcome ${user}\n\n${isPremium ? '**🌟 Premium Member - Priority Support**\n\n' : ''}Thank you for reaching out. A staff member will assist you shortly.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+                .setTitle(`General Support Ticket${isPremium ? ' (Priority)' : ''}`)
+                .setDescription(`Welcome ${user}\n\n${isPremium ? '**Premium Member - Priority Support**\n\n' : ''}Thank you for reaching out. A staff member will assist you shortly.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
                 .addFields(
                     { name: 'Ticket Type', value: 'General Support', inline: true },
                     { name: 'Created By', value: user.tag, inline: true },
-                    { name: 'Status', value: isPremium ? '⭐ Priority' : 'Open', inline: true },
+                    { name: 'Status', value: isPremium ? 'Priority' : 'Open', inline: true },
                     { name: '\u200B', value: '**Please Provide the Following Information:**', inline: false },
                     { name: 'What is your question or concern?', value: 'Please provide as much detail as possible.', inline: false },
                     { name: 'Is this urgent?', value: 'Let us know if this requires immediate attention.', inline: false }
@@ -446,12 +442,12 @@ async function createTicket(interaction, type) {
         } else if (type === 'report') {
             ticketEmbed = new EmbedBuilder()
                 .setColor(isPremium ? 0xFFD700 : 0xE74C3C)
-                .setTitle(`${isPremium ? '⭐ ' : ''}Player Report Ticket${isPremium ? ' (Priority)' : ''}`)
-                .setDescription(`Welcome ${user}\n\n${isPremium ? '**🌟 Premium Member - Priority Support**\n\n' : ''}Thank you for your report. Our moderation team will review this promptly.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+                .setTitle(`Player Report Ticket${isPremium ? ' (Priority)' : ''}`)
+                .setDescription(`Welcome ${user}\n\n${isPremium ? '**Premium Member - Priority Support**\n\n' : ''}Thank you for your report. Our moderation team will review this promptly.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
                 .addFields(
                     { name: 'Ticket Type', value: 'Player Report', inline: true },
                     { name: 'Created By', value: user.tag, inline: true },
-                    { name: 'Status', value: isPremium ? '⭐ Priority Review' : 'Under Review', inline: true },
+                    { name: 'Status', value: isPremium ? 'Priority Review' : 'Under Review', inline: true },
                     { name: '\u200B', value: '**Please Provide the Following Information:**', inline: false },
                     { name: '1. Player Username', value: 'Who are you reporting?', inline: false },
                     { name: '2. Rule Violation', value: 'What rule(s) did they break?', inline: false },
@@ -464,12 +460,12 @@ async function createTicket(interaction, type) {
         } else if (type === 'management') {
             ticketEmbed = new EmbedBuilder()
                 .setColor(isPremium ? 0xFFD700 : 0x9B59B6)
-                .setTitle(`${isPremium ? '⭐ ' : ''}Management Ticket${isPremium ? ' (Priority)' : ''}`)
-                .setDescription(`Welcome ${user}\n\n${isPremium ? '**🌟 Premium Member - Priority Support**\n\n' : ''}This ticket is visible only to supervisors and management.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+                .setTitle(`Management Ticket${isPremium ? ' (Priority)' : ''}`)
+                .setDescription(`Welcome ${user}\n\n${isPremium ? '**Premium Member - Priority Support**\n\n' : ''}This ticket is visible only to supervisors and management.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
                 .addFields(
                     { name: 'Ticket Type', value: 'Management', inline: true },
                     { name: 'Created By', value: user.tag, inline: true },
-                    { name: 'Status', value: isPremium ? '⭐ Priority' : 'Confidential', inline: true },
+                    { name: 'Status', value: isPremium ? 'Priority' : 'Confidential', inline: true },
                     { name: '\u200B', value: '**Please Provide the Following Information:**', inline: false },
                     { name: '1. Subject', value: 'What is the topic of this inquiry?', inline: false },
                     { name: '2. Details', value: 'Please explain your concern or request in full.', inline: false },

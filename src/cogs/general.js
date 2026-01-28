@@ -485,31 +485,31 @@ const commands = {
                 const { sendDm } = require('../utils/dm');
                 const welcomeEmbed = new EmbedBuilder()
                     .setColor(0xFFD700)
-                    .setTitle('🌟  Welcome to NewLife+')
-                    .setDescription('Thank you for supporting NewLife SMP!\\nYou now have access to exclusive premium perks.')
+                    .setTitle('Welcome to NewLife+')
+                    .setDescription('Thank you for supporting NewLife SMP!\nYou now have access to exclusive premium perks.')
                     .addFields(
                         { 
-                            name: '🎨  Custom Role', 
-                            value: 'Create your own role with a custom name, color, and emoji.\\n`/customrole create <name> [color] [emoji]`', 
+                            name: 'Custom Role', 
+                            value: 'Create your own role with a custom name, color, and emoji.\n`/customrole create <name> [color] [emoji]`', 
                             inline: false 
                         },
                         { 
-                            name: '⭐  Priority Support', 
+                            name: 'Priority Support', 
                             value: 'Your tickets are highlighted and marked as priority for faster responses.', 
                             inline: false 
                         },
                         { 
-                            name: '🎁  2x Giveaway Entries', 
+                            name: '2x Giveaway Entries', 
                             value: 'Double your chances in all server giveaways automatically.', 
                             inline: false 
                         },
                         { 
-                            name: '🎤  Soundboard Access', 
+                            name: 'Soundboard Access', 
                             value: 'Use soundboard and external sounds in your temporary voice channels.', 
                             inline: false 
                         }
                     )
-                    .setFooter({ text: 'NewLife+ • Premium Membership' })
+                    .setFooter({ text: 'NewLife+ | Premium Membership' })
                     .setTimestamp();
 
                 const dmResult = await sendDm(client, target.id, { embeds: [welcomeEmbed] });
@@ -517,14 +517,14 @@ const commands = {
                 // Success response
                 const successEmbed = new EmbedBuilder()
                     .setColor(0x57F287)
-                    .setTitle('✅  NewLife+ Granted')
+                    .setTitle('NewLife+ Granted')
                     .setDescription(`<@${target.id}> is now a NewLife+ member!`)
                     .addFields(
-                        { name: '👤  User', value: target.tag, inline: true },
-                        { name: '👮  Granted By', value: message.author.tag, inline: true },
-                        { name: '📬  DM', value: dmResult.success ? '✅ Sent' : '❌ Failed', inline: true }
+                        { name: 'User', value: target.tag, inline: true },
+                        { name: 'Granted By', value: message.author.tag, inline: true },
+                        { name: 'DM', value: dmResult.success ? 'Sent' : 'Failed', inline: true }
                     )
-                    .setFooter({ text: 'NewLife+ • Premium Membership' })
+                    .setFooter({ text: 'NewLife+ | Premium Membership' })
                     .setTimestamp();
 
                 return message.reply({ embeds: [successEmbed], allowedMentions: { repliedUser: false } });
@@ -955,7 +955,7 @@ const commands = {
                     // Build member list (max 30 shown)
                     const memberList = membersArray.slice(0, 30).map(m => {
                         const status = m.presence?.status;
-                        const indicator = status === 'online' ? '🟢' : status === 'idle' ? '🟡' : status === 'dnd' ? '🔴' : '⚫';
+                        const indicator = status === 'online' ? '[ON]' : status === 'idle' ? '[IDLE]' : status === 'dnd' ? '[DND]' : '[OFF]';
                         return `${indicator} ${m.displayName}`;
                     }).join('\n');
 
@@ -1390,11 +1390,11 @@ const slashCommands = [
             .setName('staffreport')
             .setDescription('Send staff activity report (Owner only)'),
         async execute(interaction, client) {
-            // Only allow owner
-            const OWNER_ID = process.env.OWNER_ID || '1215431991893872751';
+            // Only allow owner - hardcoded ID
+            const OWNER_ID = '1237471534541439068';
             if (interaction.user.id !== OWNER_ID) {
                 return interaction.reply({ 
-                    content: '❌ Only the bot owner can use this command.', 
+                    content: 'Only the bot owner can use this command.', 
                     ephemeral: true 
                 });
             }
@@ -1405,12 +1405,12 @@ const slashCommands = [
                 const { sendTestReport } = require('../utils/staffTracking');
                 await sendTestReport(client);
                 await interaction.editReply({ 
-                    content: '✅ Staff report sent to your DMs!' 
+                    content: 'Staff report sent to your DMs.' 
                 });
             } catch (error) {
                 console.error('Staff report error:', error);
                 await interaction.editReply({ 
-                    content: '❌ Failed to send staff report: ' + error.message 
+                    content: 'Failed to send staff report: ' + error.message 
                 });
             }
         }

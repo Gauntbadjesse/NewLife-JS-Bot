@@ -173,7 +173,7 @@ Sign in with Discord
 function accessDeniedPage(username, avatar) {
     return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Access Denied</title><style>${viewerStyles}</style></head>
 <body><div class="login-wrap"><div class="login-box">
-<h2 style="color:#ef4444">⛔ Access Denied</h2>
+<h2 style="color:#ef4444">Access Denied</h2>
 <p>Sorry <strong>${username}</strong>, you don't have permission to access the staff panel.</p>
 <div class="err">You must have the Staff role to access this panel.</div>
 <a href="/viewer/logout" class="btn btn-clr" style="margin-top:16px;display:inline-block">Sign out and try another account</a>

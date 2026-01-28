@@ -135,7 +135,7 @@ module.exports = {
                 .setFooter({ text: 'NewLife SMP 2026' })
                 .setTimestamp();
 
-            await channel.send({ content: '🎉', embeds: [embed] });
+            await channel.send({ content: '', embeds: [embed] });
             console.log(`[ServerStats] Milestone reached: ${currentMilestone} members`);
         }
     },

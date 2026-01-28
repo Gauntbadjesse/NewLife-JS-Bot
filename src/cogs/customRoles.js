@@ -79,24 +79,24 @@ async function sendApprovalDM(client, customRole, isEdit = false) {
 
         const embed = new EmbedBuilder()
             .setColor(roleColor && roleColor !== 'Default' ? parseInt(roleColor.replace('#', ''), 16) : 0xFFD700)
-            .setTitle(`${isEdit ? '✏️  Custom Role Edit' : '🎨  New Custom Role'}`)
+            .setTitle(`${isEdit ? 'Custom Role Edit' : 'New Custom Role'}`)
             .setDescription(`${isEdit ? 'A premium member wants to edit their role.' : 'A premium member is requesting a custom role.'}`)
             .addFields(
-                { name: '👤  Member', value: `<@${customRole.userId}>`, inline: true },
-                { name: '🏷️  Role Name', value: `\`${roleName}\``, inline: true },
-                { name: '🎨  Color', value: roleColor && roleColor !== 'Default' ? `\`${roleColor}\`` : '*Default*', inline: true }
+                { name: 'Member', value: `<@${customRole.userId}>`, inline: true },
+                { name: 'Role Name', value: `\`${roleName}\``, inline: true },
+                { name: 'Color', value: roleColor && roleColor !== 'Default' ? `\`${roleColor}\`` : '*Default*', inline: true }
             )
             .setTimestamp()
-            .setFooter({ text: `NewLife+ • User ID: ${customRole.userId}` });
+            .setFooter({ text: `NewLife+ | User ID: ${customRole.userId}` });
 
         if (roleEmoji && roleEmoji !== 'None') {
-            embed.addFields({ name: '✨  Emoji', value: roleEmoji, inline: true });
+            embed.addFields({ name: 'Emoji', value: roleEmoji, inline: true });
         }
 
         // Show current values if this is an edit
         if (isEdit && customRole.roleId) {
             embed.addFields({
-                name: '📋  Current Role',
+                name: 'Current Role',
                 value: `**Name:** ${customRole.roleName}\n**Color:** ${customRole.roleColor || 'Default'}${customRole.roleEmoji ? `\n**Emoji:** ${customRole.roleEmoji}` : ''}`,
                 inline: false
             });
@@ -106,18 +106,15 @@ async function sendApprovalDM(client, customRole, isEdit = false) {
             new ButtonBuilder()
                 .setCustomId(`customrole_approve_${customRole.userId}`)
                 .setLabel('Approve')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('✅'),
+                .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId(`customrole_deny_${customRole.userId}`)
                 .setLabel('Deny')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('❌'),
+                .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
                 .setCustomId(`customrole_preview_${customRole.userId}`)
                 .setLabel('Preview')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('👁️')
         );
 
         await owner.send({ embeds: [embed], components: [row] });
@@ -333,14 +330,14 @@ async function handleCreate(interaction, client) {
     const colorDisplay = normalizeHexColor(color);
     const embed = new EmbedBuilder()
         .setColor(colorDisplay ? parseInt(colorDisplay.replace('#', ''), 16) : 0xFFD700)
-        .setTitle('🎨  Custom Role Request Submitted')
+        .setTitle('Custom Role Request Submitted')
         .setDescription('Your request has been sent for approval!\nYou\'ll receive a DM once it\'s reviewed.')
         .addFields(
-            { name: '🏷️  Name', value: `\`${name}\``, inline: true },
-            { name: '🎨  Color', value: colorDisplay ? `\`${colorDisplay}\`` : '*Default*', inline: true },
-            { name: '✨  Emoji', value: emoji || '*None*', inline: true }
+            { name: 'Name', value: `\`${name}\``, inline: true },
+            { name: 'Color', value: colorDisplay ? `\`${colorDisplay}\`` : '*Default*', inline: true },
+            { name: 'Emoji', value: emoji || '*None*', inline: true }
         )
-        .setFooter({ text: 'NewLife+ • Custom Role System' })
+        .setFooter({ text: 'NewLife+ | Custom Role System' })
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -404,14 +401,14 @@ async function handleEdit(interaction, client) {
     const newColor = color ? normalizeHexColor(color) : customRole.roleColor;
     const embed = new EmbedBuilder()
         .setColor(newColor ? parseInt(newColor.replace('#', ''), 16) : 0xFFD700)
-        .setTitle('✏️  Edit Request Submitted')
+        .setTitle('Edit Request Submitted')
         .setDescription('Your changes have been sent for approval!\nYou\'ll receive a DM once it\'s reviewed.')
         .addFields(
-            { name: '🏷️  Name', value: `\`${name || customRole.roleName}\``, inline: true },
-            { name: '🎨  Color', value: newColor ? `\`${newColor}\`` : '*Default*', inline: true },
-            { name: '✨  Emoji', value: (emoji !== undefined ? emoji : customRole.roleEmoji) || '*None*', inline: true }
+            { name: 'Name', value: `\`${name || customRole.roleName}\``, inline: true },
+            { name: 'Color', value: newColor ? `\`${newColor}\`` : '*Default*', inline: true },
+            { name: 'Emoji', value: (emoji !== undefined ? emoji : customRole.roleEmoji) || '*None*', inline: true }
         )
-        .setFooter({ text: 'NewLife+ • Custom Role System' })
+        .setFooter({ text: 'NewLife+ | Custom Role System' })
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -449,9 +446,9 @@ async function handleDelete(interaction, client) {
 
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('🗑️  Custom Role Deleted')
+        .setTitle('Custom Role Deleted')
         .setDescription('Your custom role has been removed.')
-        .setFooter({ text: 'NewLife+ • Custom Role System' })
+        .setFooter({ text: 'NewLife+ | Custom Role System' })
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -471,27 +468,27 @@ async function handleView(interaction) {
         });
     }
 
-    const statusEmoji = customRole.status === 'approved' ? '✅' : customRole.status === 'pending' ? '⏳' : '❌';
+    const statusText = customRole.status === 'approved' ? 'Approved' : customRole.status === 'pending' ? 'Pending' : 'Denied';
     
     const embed = new EmbedBuilder()
         .setColor(customRole.roleColor ? parseInt(customRole.roleColor.replace('#', ''), 16) : 0xFFD700)
-        .setTitle('🎨  Your Custom Role')
+        .setTitle('Your Custom Role')
         .setDescription(customRole.roleId ? `<@&${customRole.roleId}>` : '*Role not yet created*')
         .addFields(
-            { name: '📊  Status', value: `${statusEmoji} ${customRole.status.charAt(0).toUpperCase() + customRole.status.slice(1)}`, inline: true },
-            { name: '🏷️  Name', value: `\`${customRole.roleName}\``, inline: true },
-            { name: '🎨  Color', value: customRole.roleColor ? `\`${customRole.roleColor}\`` : '*Default*', inline: true }
+            { name: 'Status', value: statusText, inline: true },
+            { name: 'Name', value: `\`${customRole.roleName}\``, inline: true },
+            { name: 'Color', value: customRole.roleColor ? `\`${customRole.roleColor}\`` : '*Default*', inline: true }
         )
-        .setFooter({ text: 'NewLife+ • Custom Role System' })
+        .setFooter({ text: 'NewLife+ | Custom Role System' })
         .setTimestamp();
 
     if (customRole.roleEmoji) {
-        embed.addFields({ name: '✨  Emoji', value: customRole.roleEmoji, inline: true });
+        embed.addFields({ name: 'Emoji', value: customRole.roleEmoji, inline: true });
     }
 
     if (customRole.pendingRequest && customRole.pendingRequest.requestedAt) {
         embed.addFields({
-            name: '⏳  Pending Changes',
+            name: 'Pending Changes',
             value: `**Name:** ${customRole.pendingRequest.roleName}\n**Color:** ${customRole.pendingRequest.roleColor || 'Default'}${customRole.pendingRequest.roleEmoji ? `\n**Emoji:** ${customRole.pendingRequest.roleEmoji}` : ''}`,
             inline: false
         });
@@ -499,7 +496,7 @@ async function handleView(interaction) {
 
     if (customRole.approvedAt) {
         embed.addFields({
-            name: '📅  Approved',
+            name: 'Approved',
             value: `<t:${Math.floor(customRole.approvedAt.getTime() / 1000)}:R>`,
             inline: true
         });
@@ -538,7 +535,7 @@ async function handlePending(interaction) {
 
     const embed = new EmbedBuilder()
         .setColor(getEmbedColor())
-        .setTitle('⏳ Pending Custom Role Requests')
+        .setTitle('Pending Custom Role Requests')
         .setDescription(`Found ${pendingRoles.length} pending request(s)`)
         .setTimestamp();
 
@@ -546,7 +543,7 @@ async function handlePending(interaction) {
         const isEdit = role.pendingRequest?.isEdit || false;
         const data = role.pendingRequest || role;
         embed.addFields({
-            name: `${isEdit ? '✏️ Edit' : '🆕 New'}: ${role.userTag}`,
+            name: `${isEdit ? '[Edit]' : '[New]'}: ${role.userTag}`,
             value: `**Name:** ${data.roleName || role.roleName}\n**Color:** ${data.roleColor || role.roleColor || 'Default'}\n**Emoji:** ${data.roleEmoji || role.roleEmoji || 'None'}\n**User:** <@${role.userId}>`,
             inline: true
         });
@@ -610,7 +607,7 @@ async function handleButton(interaction) {
 
         const embed = new EmbedBuilder()
             .setColor(roleColor ? parseInt(roleColor.replace('#', ''), 16) : getEmbedColor())
-            .setTitle('👁️ Role Preview')
+            .setTitle('Role Preview')
             .setDescription(`This is how the role will appear:\n\n**${finalName}**`)
             .addFields(
                 { name: 'Display Name', value: finalName, inline: true },
@@ -658,7 +655,7 @@ async function handleButton(interaction) {
             // Update the message to show it was approved
             const embed = EmbedBuilder.from(interaction.message.embeds[0])
                 .setColor(0x00FF00)
-                .setTitle(`✅ ${isEdit ? 'Edit' : 'Custom Role'} Approved`)
+                .setTitle(`${isEdit ? 'Edit' : 'Custom Role'} Approved`)
                 .setFooter({ text: `Approved by ${interaction.user.tag}` });
 
             await interaction.editReply({ embeds: [embed], components: [] });
@@ -666,17 +663,17 @@ async function handleButton(interaction) {
             // DM the user (with logging)
             const userEmbed = new EmbedBuilder()
                 .setColor(0x57F287)
-                .setTitle(`✅  Custom Role ${isEdit ? 'Updated' : 'Created'}!`)
+                .setTitle(`Custom Role ${isEdit ? 'Updated' : 'Created'}!`)
                 .setDescription(`Your ${isEdit ? 'changes have been applied' : 'custom role is ready'}!\n\n<@&${role.id}>`)
                 .addFields(
-                    { name: '🏷️  Name', value: `\`${customRole.roleName}\``, inline: true },
-                    { name: '🎨  Color', value: customRole.roleColor ? `\`${customRole.roleColor}\`` : '*Default*', inline: true }
+                    { name: 'Name', value: `\`${customRole.roleName}\``, inline: true },
+                    { name: 'Color', value: customRole.roleColor ? `\`${customRole.roleColor}\`` : '*Default*', inline: true }
                 )
-                .setFooter({ text: 'NewLife+ • Custom Role System' })
+                .setFooter({ text: 'NewLife+ | Custom Role System' })
                 .setTimestamp();
             
             if (customRole.roleEmoji) {
-                userEmbed.addFields({ name: '✨  Emoji', value: customRole.roleEmoji, inline: true });
+                userEmbed.addFields({ name: 'Emoji', value: customRole.roleEmoji, inline: true });
             }
             
             await sendDm(interaction.client, userId, { embeds: [userEmbed] });
@@ -709,7 +706,7 @@ async function handleButton(interaction) {
         // Update the message to show it was denied
         const embed = EmbedBuilder.from(interaction.message.embeds[0])
             .setColor(0xFF0000)
-            .setTitle(`❌ ${isEdit ? 'Edit' : 'Custom Role'} Denied`)
+            .setTitle(`${isEdit ? 'Edit' : 'Custom Role'} Denied`)
             .setFooter({ text: `Denied by ${interaction.user.tag}` });
 
         await interaction.editReply({ embeds: [embed], components: [] });
@@ -717,10 +714,10 @@ async function handleButton(interaction) {
         // DM the user (with logging)
         const userEmbed = new EmbedBuilder()
             .setColor(0xED4245)
-            .setTitle(`❌  Custom Role ${isEdit ? 'Edit' : 'Request'} Denied`)
+            .setTitle(`Custom Role ${isEdit ? 'Edit' : 'Request'} Denied`)
             .setDescription(`Your ${isEdit ? 'edit request' : 'custom role request'} was not approved.`)
-            .addFields({ name: '💬  What Now?', value: 'If you have questions, feel free to open a support ticket.' })
-            .setFooter({ text: 'NewLife+ • Custom Role System' })
+            .addFields({ name: 'What Now?', value: 'If you have questions, feel free to open a support ticket.' })
+            .setFooter({ text: 'NewLife+ | Custom Role System' })
             .setTimestamp();
         
         await sendDm(interaction.client, userId, { embeds: [userEmbed] });

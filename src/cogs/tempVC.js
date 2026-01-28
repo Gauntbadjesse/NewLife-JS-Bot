@@ -74,7 +74,7 @@ async function createTempChannel(member, hub, client) {
             .substring(0, 100);
         
         if (isPremium) {
-            channelName = `⭐ ${channelName}`;
+            channelName = `${channelName}`;
         }
 
         // Determine parent category
@@ -138,42 +138,38 @@ async function createTempChannel(member, hub, client) {
         // Send control panel message
         try {
             const controlEmbed = new EmbedBuilder()
-                .setTitle(`${isPremium ? '⭐  ' : '🎤  '}Your Voice Channel`)
+                .setTitle(`${isPremium ? '[NewLife+] ' : ''}Your Voice Channel`)
                 .setDescription(isPremium 
-                    ? `Welcome ${member}!\\n\\n**✨ Premium Perks Active**\\n> 🔊 Soundboard & external sounds enabled\\n> ⭐ Priority channel styling`
+                    ? `Welcome ${member}!\n\n**Premium Perks Active**\n- Soundboard & external sounds enabled\n- Priority channel styling`
                     : `Welcome ${member}!`)
                 .setColor(isPremium ? 0xFFD700 : 0x5865F2)
                 .addFields(
-                    { name: '✏️  Rename', value: '`/tempvc rename`', inline: true },
-                    { name: '👥  Limit', value: '`/tempvc limit`', inline: true },
-                    { name: '🔒  Lock', value: '`/tempvc lock`', inline: true },
-                    { name: '👢  Kick', value: '`/tempvc kick`', inline: true },
-                    { name: '🚫  Ban', value: '`/tempvc ban`', inline: true },
-                    { name: '🔄  Transfer', value: '`/tempvc transfer`', inline: true }
+                    { name: 'Rename', value: '`/tempvc rename`', inline: true },
+                    { name: 'Limit', value: '`/tempvc limit`', inline: true },
+                    { name: 'Lock', value: '`/tempvc lock`', inline: true },
+                    { name: 'Kick', value: '`/tempvc kick`', inline: true },
+                    { name: 'Ban', value: '`/tempvc ban`', inline: true },
+                    { name: 'Transfer', value: '`/tempvc transfer`', inline: true }
                 )
-                .setFooter({ text: isPremium ? 'NewLife+ • Channel deletes when empty' : 'Channel deletes when empty' });
+                .setFooter({ text: isPremium ? 'NewLife+ | Channel deletes when empty' : 'Channel deletes when empty' });
 
             const controlButtons = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`tempvc_lock_${tempChannel.id}`)
                     .setLabel('Lock')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('🔒'),
+                    .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tempvc_unlock_${tempChannel.id}`)
                     .setLabel('Unlock')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('🔓'),
+                    .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tempvc_hide_${tempChannel.id}`)
                     .setLabel('Hide')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('👁'),
+                    .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tempvc_reveal_${tempChannel.id}`)
                     .setLabel('Reveal')
                     .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('👀')
             );
 
             await tempChannel.send({ embeds: [controlEmbed], components: [controlButtons] });

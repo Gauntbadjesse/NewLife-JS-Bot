@@ -375,7 +375,7 @@ async function sendWarningDm(client, discordId, warningData) {
         : null;
     
     const embed = new EmbedBuilder()
-        .setTitle('⚠️ You Have Been Warned')
+        .setTitle('You Have Been Warned')
         .setColor(severityColors[warningData.severity] || 0xFFA500)
         .setDescription(`You have received a warning on **NewLife SMP**.`)
         .addFields(
@@ -396,7 +396,7 @@ async function sendWarningDm(client, discordId, warningData) {
     }
     
     embed.addFields({
-        name: '⚠️ Notice',
+        name: 'Notice',
         value: 'Continued violations may result in further action including kicks or bans.',
         inline: false
     });
@@ -421,7 +421,7 @@ async function logWarning(client, warning, linkedAccounts = []) {
         };
         
         const embed = new EmbedBuilder()
-            .setTitle(`⚠️ Player Warned`)
+            .setTitle(`Player Warned`)
             .setColor(severityColors[warning.severity] || 0xFFA500)
             .addFields(
                 { name: 'Discord User', value: `<@${warning.discordId}> (${warning.discordTag})`, inline: true },
@@ -1497,7 +1497,7 @@ const slashCommands = [
             };
 
             const embed = new EmbedBuilder()
-                .setTitle('⚠️ Warning Issued')
+                .setTitle('Warning Issued')
                 .setColor(severityColors[severity] || 0xFFA500)
                 .addFields(
                     { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
@@ -1946,7 +1946,7 @@ const slashCommands = [
             }
 
             const embed = new EmbedBuilder()
-                .setTitle('✅ Muted Role Created')
+                .setTitle('Muted Role Created')
                 .setColor(0x00FF00)
                 .addFields(
                     { name: 'Role', value: `${mutedRole} (ID: \`${mutedRole.id}\`)`, inline: false },

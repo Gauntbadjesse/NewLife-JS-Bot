@@ -120,17 +120,17 @@ async function handlePvpLog(client, logData) {
 function createStatusChangeEmbed(data) {
     const embed = new EmbedBuilder()
         .setColor(data.enabled ? 0x10b981 : 0x2B2D31)
-        .setAuthor({ name: 'PvP Status Change', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setAuthor({ name: 'PvP Status Change' })
         .setDescription(data.enabled 
-            ? `🟢 **${data.username}** has **enabled** PvP` 
-            : `⚫ **${data.username}** has **disabled** PvP`)
+            ? `**${data.username}** has **enabled** PvP` 
+            : `**${data.username}** has **disabled** PvP`)
         .addFields(
             { name: 'Player', value: `\`${data.username}\``, inline: true },
-            { name: 'Status', value: data.enabled ? '`PvP ON`' : '`PvP OFF`', inline: true },
+            { name: 'Status', value: data.enabled ? '\`PvP ON\`' : '\`PvP OFF\`', inline: true },
             { name: 'UUID', value: `\`${data.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife SMP • PvP System' });
+        .setFooter({ text: 'NewLife SMP | PvP System' });
     
     return embed;
 }
@@ -150,29 +150,29 @@ function createPvpKillEmbed(data) {
     
     const embed = new EmbedBuilder()
         .setColor(embedColor)
-        .setAuthor({ name: 'PvP Kill Logged', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
-        .setDescription(`⚔️ **${data.killer.username}** killed **${data.victim.username}**`)
+        .setAuthor({ name: 'PvP Kill Logged' })
+        .setDescription(`**${data.killer.username}** killed **${data.victim.username}**`)
         .addFields(
             { 
                 name: 'Killer', 
-                value: `**${data.killer.username}**\n${data.killer.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}${killerRecording ? ' • 🔴 Recording' : killerStreaming ? ' • 🟣 Streaming' : ''}`, 
+                value: `**${data.killer.username}**\n${data.killer.pvp_enabled ? 'PvP On' : 'PvP Off'}${killerRecording ? ' | Recording' : killerStreaming ? ' | Streaming' : ''}`, 
                 inline: true 
             },
             { 
                 name: 'Victim', 
-                value: `**${data.victim.username}**\n${data.victim.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}${victimRecording ? ' • 🔴 Recording' : victimStreaming ? ' • 🟣 Streaming' : ''}`, 
+                value: `**${data.victim.username}**\n${data.victim.pvp_enabled ? 'PvP On' : 'PvP Off'}${victimRecording ? ' | Recording' : victimStreaming ? ' | Streaming' : ''}`, 
                 inline: true 
             },
             { 
                 name: 'Consensual', 
-                value: consensual ? '✅ Yes' : '❌ No', 
+                value: consensual ? 'Yes' : 'No', 
                 inline: true 
             },
             { name: 'Killer UUID', value: `\`${data.killer.uuid}\``, inline: false },
             { name: 'Victim UUID', value: `\`${data.victim.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife SMP • PvP System' });
+        .setFooter({ text: 'NewLife SMP | PvP System' });
     
     return embed;
 }
@@ -183,17 +183,17 @@ function createPvpKillEmbed(data) {
 function createInvalidPvpEmbed(data) {
     const embed = new EmbedBuilder()
         .setColor(0xf59e0b)
-        .setAuthor({ name: '⚠️ Invalid PvP Detected', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setAuthor({ name: 'Invalid PvP Detected' })
         .setDescription(`**${data.attacker.username}** attacked **${data.victim.username}** without mutual consent`)
         .addFields(
             { 
                 name: 'Attacker', 
-                value: `**${data.attacker.username}**\n${data.attacker.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}`, 
+                value: `**${data.attacker.username}**\n${data.attacker.pvp_enabled ? 'PvP On' : 'PvP Off'}`, 
                 inline: true 
             },
             { 
                 name: 'Victim', 
-                value: `**${data.victim.username}**\n${data.victim.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}`, 
+                value: `**${data.victim.username}**\n${data.victim.pvp_enabled ? 'PvP On' : 'PvP Off'}`, 
                 inline: true 
             },
             { 
@@ -205,7 +205,7 @@ function createInvalidPvpEmbed(data) {
             { name: 'Victim UUID', value: `\`${data.victim.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife SMP • PvP System' });
+        .setFooter({ text: 'NewLife SMP | PvP System' });
     
     return embed;
 }
@@ -216,15 +216,15 @@ function createInvalidPvpEmbed(data) {
 function createDeathEmbed(data) {
     const embed = new EmbedBuilder()
         .setColor(0x2B2D31)
-        .setAuthor({ name: 'Player Death', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
-        .setDescription(`💀 **${data.username}** died`)
+        .setAuthor({ name: 'Player Death' })
+        .setDescription(`**${data.username}** died`)
         .addFields(
             { name: 'Player', value: `\`${data.username}\``, inline: true },
             { name: 'Cause', value: data.cause || 'Unknown', inline: true },
             { name: 'UUID', value: `\`${data.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife SMP • PvP System' });
+        .setFooter({ text: 'NewLife SMP | PvP System' });
     
     return embed;
 }
@@ -245,34 +245,34 @@ function createDamageSessionEmbed(data) {
     
     const embed = new EmbedBuilder()
         .setColor(embedColor)
-        .setAuthor({ name: '⚔️ PvP Damage Session', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setAuthor({ name: 'PvP Damage Session' })
         .setDescription(`Combat between **${player1.username}** and **${player2.username}**`)
         .addFields(
             { 
                 name: player1.username, 
-                value: `${player1.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}\n**${player1.damage_dealt.toFixed(1)} HP** dealt\n**${player1.hits_dealt}** hits`, 
+                value: `${player1.pvp_enabled ? 'PvP On' : 'PvP Off'}\n**${player1.damage_dealt.toFixed(1)} HP** dealt\n**${player1.hits_dealt}** hits`, 
                 inline: true 
             },
             { 
                 name: 'vs', 
-                value: '⚔️', 
+                value: '-', 
                 inline: true 
             },
             { 
                 name: player2.username, 
-                value: `${player2.pvp_enabled ? '🟢 PvP On' : '⚫ PvP Off'}\n**${player2.damage_dealt.toFixed(1)} HP** dealt\n**${player2.hits_dealt}** hits`, 
+                value: `${player2.pvp_enabled ? 'PvP On' : 'PvP Off'}\n**${player2.damage_dealt.toFixed(1)} HP** dealt\n**${player2.hits_dealt}** hits`, 
                 inline: true 
             },
             { 
                 name: 'Session Stats', 
-                value: `**Total Damage:** ${total_damage.toFixed(1)} HP\n**Total Hits:** ${total_hits}\n**Duration:** ${durationSeconds}s\n**Consensual:** ${bothPvpEnabled ? '✅ Yes' : '❌ No'}`, 
+                value: `**Total Damage:** ${total_damage.toFixed(1)} HP\n**Total Hits:** ${total_hits}\n**Duration:** ${durationSeconds}s\n**Consensual:** ${bothPvpEnabled ? 'Yes' : 'No'}`, 
                 inline: false 
             },
             { name: `${player1.username} UUID`, value: `\`${player1.uuid}\``, inline: false },
             { name: `${player2.username} UUID`, value: `\`${player2.uuid}\``, inline: false }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: `NewLife SMP • ${total_hits} hits in ${durationSeconds}s` });
+        .setFooter({ text: `NewLife SMP | ${total_hits} hits in ${durationSeconds}s` });
     
     return embed;
 }
@@ -285,17 +285,17 @@ function createCombatLogEmbed(data) {
     
     const embed = new EmbedBuilder()
         .setColor(0xdc2626)
-        .setAuthor({ name: '☠️ Combat Log Detected', iconURL: 'https://cdn.discordapp.com/emojis/1234567890.png' })
+        .setAuthor({ name: 'Combat Log Detected' })
         .setDescription(`**${player.username}** logged out during combat with PvP enabled`)
         .addFields(
             { 
                 name: 'Player', 
-                value: `**${player.username}**\n🟢 PvP was enabled`, 
+                value: `**${player.username}**\nPvP was enabled`, 
                 inline: true 
             },
             { 
                 name: 'Action Taken', 
-                value: `☠️ Player killed\n📦 Items dropped`, 
+                value: `Player killed\nItems dropped`, 
                 inline: true 
             },
             { 
@@ -305,13 +305,13 @@ function createCombatLogEmbed(data) {
             },
             { name: 'Player UUID', value: `\`${player.uuid}\``, inline: false },
             { 
-                name: '📨 Notification', 
+                name: 'Notification', 
                 value: 'Player has been notified via Discord DM about the combat log penalty.', 
                 inline: false 
             }
         )
         .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife SMP • Combat Logging Prevention' });
+        .setFooter({ text: 'NewLife SMP | Combat Logging Prevention' });
     
     return embed;
 }
@@ -378,21 +378,21 @@ const slashCommands = [
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`📊 Recent PvP Events (${logs.length})`)
+                    .setTitle(`Recent PvP Events (${logs.length})`)
                     .setColor(0x3b82f6)
                     .setDescription(logs.map(log => {
                         const time = `<t:${Math.floor(new Date(log.timestamp).getTime() / 1000)}:R>`;
                         switch (log.type) {
                             case 'status_change':
-                                return `${time} - 🔄 **Status Change** - ${log.username}`;
+                                return `${time} - **Status Change** - ${log.username}`;
                             case 'pvp_kill':
-                                return `${time} - ⚔️ **Kill** - ${log.killer?.username} → ${log.victim?.username}`;
+                                return `${time} - **Kill** - ${log.killer?.username} > ${log.victim?.username}`;
                             case 'invalid_pvp':
-                                return `${time} - ⚠️ **Invalid PvP** - ${log.attacker?.username} → ${log.victim?.username}`;
+                                return `${time} - **Invalid PvP** - ${log.attacker?.username} > ${log.victim?.username}`;
                             case 'death':
-                                return `${time} - 💀 **Death** - ${log.username}`;
+                                return `${time} - **Death** - ${log.username}`;
                             default:
-                                return `${time} - ❓ Unknown event`;
+                                return `${time} - Unknown event`;
                         }
                     }).join('\n'))
                     .setTimestamp();
@@ -418,23 +418,23 @@ const slashCommands = [
                 }
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`📊 PvP Events for ${username} (${logs.length})`)
+                    .setTitle(`PvP Events for ${username} (${logs.length})`)
                     .setColor(0x3b82f6)
                     .setDescription(logs.map(log => {
                         const time = `<t:${Math.floor(new Date(log.timestamp).getTime() / 1000)}:R>`;
                         switch (log.type) {
                             case 'status_change':
-                                return `${time} - 🔄 **Status Change**`;
+                                return `${time} - **Status Change**`;
                             case 'pvp_kill':
                                 const isKiller = log.killer?.username?.toLowerCase() === username.toLowerCase();
-                                return `${time} - ⚔️ **${isKiller ? 'Killed' : 'Killed by'}** ${isKiller ? log.victim?.username : log.killer?.username}`;
+                                return `${time} - **${isKiller ? 'Killed' : 'Killed by'}** ${isKiller ? log.victim?.username : log.killer?.username}`;
                             case 'invalid_pvp':
                                 const isAttacker = log.attacker?.username?.toLowerCase() === username.toLowerCase();
-                                return `${time} - ⚠️ **${isAttacker ? 'Attacked' : 'Attacked by'}** ${isAttacker ? log.victim?.username : log.attacker?.username}`;
+                                return `${time} - **${isAttacker ? 'Attacked' : 'Attacked by'}** ${isAttacker ? log.victim?.username : log.attacker?.username}`;
                             case 'death':
-                                return `${time} - 💀 **Death** - ${log.cause || 'Unknown'}`;
+                                return `${time} - **Death** - ${log.cause || 'Unknown'}`;
                             default:
-                                return `${time} - ❓ Unknown event`;
+                                return `${time} - Unknown event`;
                         }
                     }).join('\n'))
                     .setTimestamp();
@@ -466,15 +466,15 @@ const slashCommands = [
                 });
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`📊 PvP Statistics for ${username}`)
+                    .setTitle(`PvP Statistics for ${username}`)
                     .setColor(0x10b981)
                     .addFields(
-                        { name: '⚔️ PvP Kills', value: kills.toString(), inline: true },
-                        { name: '💀 PvP Deaths', value: deaths.toString(), inline: true },
-                        { name: '📈 K/D Ratio', value: deaths > 0 ? (kills / deaths).toFixed(2) : kills.toString(), inline: true },
-                        { name: '⚠️ Invalid PvP Attacks', value: invalidAttacks.toString(), inline: true },
-                        { name: '☠️ Total Deaths', value: totalDeaths.toString(), inline: true },
-                        { name: '📊 Total Events', value: (kills + deaths + invalidAttacks + totalDeaths).toString(), inline: true }
+                        { name: 'PvP Kills', value: kills.toString(), inline: true },
+                        { name: 'PvP Deaths', value: deaths.toString(), inline: true },
+                        { name: 'K/D Ratio', value: deaths > 0 ? (kills / deaths).toFixed(2) : kills.toString(), inline: true },
+                        { name: 'Invalid PvP Attacks', value: invalidAttacks.toString(), inline: true },
+                        { name: 'Total Deaths', value: totalDeaths.toString(), inline: true },
+                        { name: 'Total Events', value: (kills + deaths + invalidAttacks + totalDeaths).toString(), inline: true }
                     )
                     .setTimestamp();
 

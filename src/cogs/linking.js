@@ -121,7 +121,7 @@ const slashCommands = [
             if (lastUse && Date.now() - lastUse < COOLDOWN_MS) {
                 const remaining = Math.ceil((COOLDOWN_MS - (Date.now() - lastUse)) / 1000);
                 return interaction.reply({
-                    content: `⏳ Please wait ${remaining} seconds before trying again.`,
+                    content: `Please wait ${remaining} seconds before trying again.`,
                     ephemeral: true
                 });
             }
@@ -137,12 +137,12 @@ const slashCommands = [
                     embeds: [
                         new EmbedBuilder()
                             .setColor(0xff4444)
-                            .setTitle('❌ Account Not Found')
+                            .setTitle('Account Not Found')
                             .setDescription(`Could not find a ${platform === 'bedrock' ? 'Bedrock' : 'Java'} account with the username **${username}**.`)
                             .addFields(
-                                { name: '💡 Tips', value: platform === 'bedrock' 
-                                    ? '• Make sure you entered your **Xbox Gamertag** exactly\n• Check capitalization\n• The account must exist and be valid'
-                                    : '• Make sure you entered your **Minecraft username** exactly\n• Check capitalization\n• The account must be a premium (paid) account'
+                                { name: 'Tips', value: platform === 'bedrock' 
+                                    ? '- Make sure you entered your **Xbox Gamertag** exactly\n- Check capitalization\n- The account must exist and be valid'
+                                    : '- Make sure you entered your **Minecraft username** exactly\n- Check capitalization\n- The account must be a premium (paid) account'
                                 }
                             )
                             .setFooter({ text: 'NewLife SMP Account Linking' })
@@ -159,7 +159,7 @@ const slashCommands = [
                         embeds: [
                             new EmbedBuilder()
                                 .setColor(0xffaa00)
-                                .setTitle('⚠️ Already Linked')
+                                .setTitle('Already Linked')
                                 .setDescription(`Your Discord account is already linked to **${profile.name}** (${platform}).`)
                                 .setFooter({ text: 'NewLife SMP Account Linking' })
                                 .setTimestamp()
@@ -170,10 +170,10 @@ const slashCommands = [
                     embeds: [
                         new EmbedBuilder()
                             .setColor(0xff4444)
-                            .setTitle('❌ Account Already Linked')
+                            .setTitle('Account Already Linked')
                             .setDescription(`The Minecraft account **${profile.name}** is already linked to another Discord account.`)
                             .addFields(
-                                { name: '❓ Need Help?', value: 'If you believe this is an error, please open a support ticket.' }
+                                { name: 'Need Help?', value: 'If you believe this is an error, please open a support ticket.' }
                             )
                             .setFooter({ text: 'NewLife SMP Account Linking' })
                             .setTimestamp()
@@ -190,10 +190,10 @@ const slashCommands = [
                     embeds: [
                         new EmbedBuilder()
                             .setColor(0xff4444)
-                            .setTitle('❌ Maximum Accounts Reached')
+                            .setTitle('Maximum Accounts Reached')
                             .setDescription(`You already have ${existingCount} linked accounts, which is the maximum allowed.`)
                             .addFields(
-                                { name: '❓ Need Help?', value: 'If you need to change a linked account, please open a support ticket.' }
+                                { name: 'Need Help?', value: 'If you need to change a linked account, please open a support ticket.' }
                             )
                             .setFooter({ text: 'NewLife SMP Account Linking' })
                             .setTimestamp()
@@ -217,15 +217,15 @@ const slashCommands = [
 
                 const embed = new EmbedBuilder()
                     .setColor(getEmbedColor())
-                    .setTitle('✅ Account Linked Successfully!')
+                    .setTitle('Account Linked Successfully')
                     .setDescription(`Your Discord account has been linked to your Minecraft account.`)
                     .addFields(
-                        { name: '🎮 Minecraft Username', value: `\`${profile.name}\``, inline: true },
-                        { name: '📱 Platform', value: platform === 'bedrock' ? 'Bedrock Edition' : 'Java Edition', inline: true },
-                        { name: '🔗 UUID', value: `\`${profile.uuid}\``, inline: false }
+                        { name: 'Minecraft Username', value: `\`${profile.name}\``, inline: true },
+                        { name: 'Platform', value: platform === 'bedrock' ? 'Bedrock Edition' : 'Java Edition', inline: true },
+                        { name: 'UUID', value: `\`${profile.uuid}\``, inline: false }
                     )
                     .addFields({
-                        name: '🚀 What\'s Next?',
+                        name: 'What\'s Next?',
                         value: 'You can now join **NewLife SMP**! Connect to the server and start your adventure.',
                         inline: false
                     })
@@ -246,7 +246,7 @@ const slashCommands = [
                         embeds: [
                             new EmbedBuilder()
                                 .setColor(0xff4444)
-                                .setTitle('❌ Link Failed')
+                                .setTitle('Link Failed')
                                 .setDescription('This account combination already exists.')
                                 .setFooter({ text: 'NewLife SMP Account Linking' })
                                 .setTimestamp()
@@ -258,7 +258,7 @@ const slashCommands = [
                     embeds: [
                         new EmbedBuilder()
                             .setColor(0xff4444)
-                            .setTitle('❌ Link Failed')
+                            .setTitle('Link Failed')
                             .setDescription('An unexpected error occurred while linking your account. Please try again later.')
                             .setFooter({ text: 'NewLife SMP Account Linking' })
                             .setTimestamp()
@@ -284,10 +284,10 @@ const slashCommands = [
                     embeds: [
                         new EmbedBuilder()
                             .setColor(0xffaa00)
-                            .setTitle('🔗 No Linked Accounts')
+                            .setTitle('No Linked Accounts')
                             .setDescription('You don\'t have any Minecraft accounts linked to your Discord.')
                             .addFields({
-                                name: '📝 How to Link',
+                                name: 'How to Link',
                                 value: 'Use `/linkaccount` to link your Minecraft account!\n\n**Example:**\n`/linkaccount platform:Java Edition username:YourMinecraftName`'
                             })
                             .setFooter({ text: 'NewLife SMP Account Linking' })
@@ -298,18 +298,17 @@ const slashCommands = [
 
             const embed = new EmbedBuilder()
                 .setColor(getEmbedColor())
-                .setTitle('🔗 Your Linked Accounts')
+                .setTitle('Your Linked Accounts')
                 .setDescription(`You have **${accounts.length}** linked account${accounts.length > 1 ? 's' : ''}.`)
                 .setFooter({ text: 'NewLife SMP Account Linking' })
                 .setTimestamp();
 
             for (const account of accounts) {
-                const platformIcon = account.platform === 'bedrock' ? '📱' : '💻';
                 const platformName = account.platform === 'bedrock' ? 'Bedrock' : 'Java';
-                const primaryBadge = account.primary ? ' ⭐' : '';
+                const primaryBadge = account.primary ? ' [Primary]' : '';
                 
                 embed.addFields({
-                    name: `${platformIcon} ${account.minecraftUsername}${primaryBadge}`,
+                    name: `${account.minecraftUsername}${primaryBadge}`,
                     value: [
                         `**Platform:** ${platformName}`,
                         `**UUID:** \`${account.uuid}\``,
@@ -773,7 +772,7 @@ const commands = {
 
             // Check for "all" argument
             if (args[0] && args[0].toLowerCase() === 'all') {
-                const statusMsg = await message.reply({ content: '🔄 Updating all member nicknames... This may take a while.', allowedMentions: { repliedUser: false } });
+                const statusMsg = await message.reply({ content: 'Updating all member nicknames... This may take a while.', allowedMentions: { repliedUser: false } });
 
                 try {
                     // Get all linked accounts
@@ -910,12 +909,12 @@ const commands = {
                 const r = results[0];
                 if (r.success) {
                     return message.reply({ 
-                        content: `✅ Updated **${r.user}**'s nickname: \`${r.oldNick}\` → \`${r.newNick}\``, 
+                        content: `Updated **${r.user}**'s nickname: \`${r.oldNick}\` -> \`${r.newNick}\``, 
                         allowedMentions: { repliedUser: false } 
                     });
                 } else {
                     return message.reply({ 
-                        content: `❌ Failed to update **${r.user}**: ${r.error}`, 
+                        content: `Failed to update **${r.user}**: ${r.error}`, 
                         allowedMentions: { repliedUser: false } 
                     });
                 }
@@ -935,8 +934,8 @@ const commands = {
                 .setFooter({ text: `Executed by ${message.author.tag}` })
                 .setTimestamp();
 
-            const successList = results.filter(r => r.success).map(r => `✅ **${r.user}**: \`${r.newNick}\``).slice(0, 10);
-            const failList = results.filter(r => !r.success).map(r => `❌ **${r.user}**: ${r.error}`).slice(0, 10);
+            const successList = results.filter(r => r.success).map(r => `**${r.user}**: \`${r.newNick}\``).slice(0, 10);
+            const failList = results.filter(r => !r.success).map(r => `**${r.user}**: ${r.error}`).slice(0, 10);
 
             if (successList.length > 0) {
                 embed.addFields({ name: 'Successful', value: successList.join('\n'), inline: false });
