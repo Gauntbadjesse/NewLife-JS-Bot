@@ -423,13 +423,8 @@ app.get('/viewer/dashboard', viewerAuth, async (req, res) => {
         const recentKicks = await Kick.find({ discordId: userId }).sort({ createdAt: -1 }).limit(3).lean();
         const recentWarnings = await Warning.find({ discordId: userId }).sort({ createdAt: -1 }).limit(3).lean();
         
-        // Get user's transcripts count
-        const transcriptCount = await Transcript.countDocuments({ 
-            $or: [
-                { 'opener.id': userId },
-                { 'participants.id': userId }
-            ]
-        });
+        // Get user's transcripts count (where they are the ticket owner)
+        const transcriptCount = await Transcript.countDocuments({ ownerId: userId });
         
         // Calculate total cases
         const totalCases = bans + kicks + warnings + mutes;
