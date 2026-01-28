@@ -206,6 +206,14 @@ client.once('ready', async () => {
         console.error('Failed to initialize staff online tracker:', e);
     }
 
+    // Initialize server restart scheduler (daily at 12:00 AM CST)
+    try {
+        const { initScheduler } = require('./cogs/serverRestart');
+        initScheduler(client);
+    } catch (e) {
+        console.error('Failed to initialize server restart scheduler:', e);
+    }
+
     // Initialize username updater (checks and updates MC usernames every 5 minutes)
     try {
         const { initUsernameUpdater } = require('./utils/usernameUpdater');
