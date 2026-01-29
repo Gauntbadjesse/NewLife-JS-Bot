@@ -3807,21 +3807,22 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         for (const [server, stats] of Object.entries(serverStats)) {
             const avg = (stats.total / stats.count).toFixed(1);
             const current = stats.latest?.tps?.toFixed(1) || '—';
-            const tpsColor = stats.latest?.tps >= 18 ? '#22c55e' : stats.latest?.tps >= 15 ? '#f59e0b' : '#ef4444';
+            const tpsClass = stats.latest?.tps >= 18 ? 'tps-good' : stats.latest?.tps >= 15 ? 'tps-warn' : 'tps-bad';
+            const statusIcon = stats.latest?.tps >= 18 ? '🟢' : stats.latest?.tps >= 15 ? '🟡' : '🔴';
             serverStatsHtml += `
-                <div class="stat-card" style="background:#1f1f23;border-radius:12px;padding:20px;flex:1;min-width:200px">
-                    <div style="font-size:.85em;color:#9ca3af;margin-bottom:8px">${server.toUpperCase()}</div>
-                    <div style="font-size:2em;font-weight:700;color:${tpsColor}">${current}</div>
-                    <div style="font-size:.8em;color:#6b7280;margin-top:4px">TPS (Current)</div>
-                    <div style="display:flex;gap:16px;margin-top:12px;font-size:.8em;color:#9ca3af">
+                <div class="stat-card">
+                    <div class="stat-label">${statusIcon} ${server.toUpperCase()}</div>
+                    <div class="stat-value ${tpsClass}">${current}</div>
+                    <div style="font-size:.75em;color:#6b7280;margin-top:2px">TPS</div>
+                    <div class="stat-meta">
                         <span>Avg: ${avg}</span>
                         <span>Min: ${stats.min.toFixed(1)}</span>
                         <span>Max: ${stats.max.toFixed(1)}</span>
                     </div>
-                    ${stats.latest ? `<div style="font-size:.75em;color:#6b7280;margin-top:8px">
-                        🧱 ${stats.latest.loadedChunks || 0} chunks • 
-                        👥 ${stats.latest.playerCount || 0} players • 
-                        🐄 ${stats.latest.entityCount || 0} entities
+                    ${stats.latest ? `<div class="stat-meta" style="margin-top:8px;border-top:1px solid #2d2d35;padding-top:8px">
+                        <span>🧱 ${stats.latest.loadedChunks || 0}</span>
+                        <span>👥 ${stats.latest.playerCount || 0}</span>
+                        <span>🐄 ${stats.latest.entityCount || 0}</span>
                     </div>` : ''}
                 </div>
             `;
@@ -3830,28 +3831,22 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         // Build pending ALTs HTML
         let altsHtml = '';
         if (pendingAlts.length === 0) {
-            altsHtml = '<div style="color:#6b7280;text-align:center;padding:20px">No pending ALT reviews</div>';
+            altsHtml = '<div class="empty-state"><div style="font-size:2em;margin-bottom:8px">✅</div>No pending ALT reviews</div>';
         } else {
             for (const alt of pendingAlts) {
                 const accounts = alt.accounts || [];
                 altsHtml += `
-                    <div class="alt-item" style="background:#1f1f23;border-radius:8px;padding:16px;margin-bottom:12px;border-left:4px solid #f59e0b">
-                        <div style="display:flex;justify-content:space-between;align-items:center">
-                            <div>
-                                <strong style="color:#f59e0b">⚠️ Potential ALT Group</strong>
-                                <span style="color:#6b7280;font-size:.85em;margin-left:8px">${accounts.length} accounts</span>
-                            </div>
-                            <span style="color:#6b7280;font-size:.8em">${formatCentralDateTime(alt.updatedAt)}</span>
+                    <div class="item-card warning">
+                        <div class="item-header">
+                            <span class="item-title" style="color:#f59e0b">Potential ALT Group</span>
+                            <span class="item-time">${formatCentralDateTime(alt.updatedAt)}</span>
                         </div>
-                        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px">
-                            ${accounts.map(a => `
-                                <span style="background:#2d2d35;padding:4px 10px;border-radius:4px;font-size:.85em">
-                                    ${a.username || a.uuid?.substring(0, 8)}
-                                </span>
-                            `).join('')}
+                        <div class="item-tags">
+                            ${accounts.map(a => `<span class="tag">${a.username || a.uuid?.substring(0, 8)}</span>`).join('')}
                         </div>
-                        <div style="color:#9ca3af;font-size:.8em;margin-top:8px">
-                            Shared IP: ${alt.sharedIp || 'Multiple IPs'}
+                        <div class="item-meta" style="margin-top:10px">
+                            <span>${accounts.length} accounts</span>
+                            <span>IP: ${alt.sharedIp ? '•••' + alt.sharedIp.slice(-6) : 'Multiple'}</span>
                         </div>
                     </div>
                 `;
@@ -3861,22 +3856,20 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         // Build problem chunks HTML
         let chunksHtml = '';
         if (problemChunks.length === 0) {
-            chunksHtml = '<div style="color:#6b7280;text-align:center;padding:20px">No problem chunks detected</div>';
+            chunksHtml = '<div class="empty-state"><div style="font-size:2em;margin-bottom:8px">✅</div>No problem chunks detected</div>';
         } else {
             for (const chunk of problemChunks) {
                 const isHighRisk = chunk.entityCount >= 200 || chunk.hopperCount >= 50;
                 chunksHtml += `
-                    <div class="chunk-item" style="background:#1f1f23;border-radius:8px;padding:12px;margin-bottom:8px;border-left:4px solid ${isHighRisk ? '#ef4444' : '#f59e0b'}">
-                        <div style="display:flex;justify-content:space-between">
-                            <span style="color:${isHighRisk ? '#ef4444' : '#f59e0b'}">
-                                ${chunk.world} @ ${chunk.x}, ${chunk.z}
-                            </span>
-                            <span style="color:#6b7280;font-size:.85em">${chunk.server || 'main'}</span>
+                    <div class="item-card ${isHighRisk ? 'danger' : 'warning'}">
+                        <div class="item-header">
+                            <span class="item-title" style="color:${isHighRisk ? '#ef4444' : '#f59e0b'}">${chunk.world} @ ${chunk.x}, ${chunk.z}</span>
+                            <span class="item-time">${chunk.server || 'main'}</span>
                         </div>
-                        <div style="display:flex;gap:16px;margin-top:8px;font-size:.85em;color:#9ca3af">
-                            <span>🐄 ${chunk.entityCount || 0} entities</span>
-                            <span>📦 ${chunk.hopperCount || 0} hoppers</span>
-                            <span>⚡ ${chunk.redstoneCount || 0} redstone</span>
+                        <div class="item-meta">
+                            <span>🐄 ${chunk.entityCount || 0}</span>
+                            <span>📦 ${chunk.hopperCount || 0}</span>
+                            <span>⚡ ${chunk.redstoneCount || 0}</span>
                         </div>
                     </div>
                 `;
@@ -3886,19 +3879,22 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         // Build lag alerts HTML
         let alertsHtml = '';
         if (lagAlerts.length === 0) {
-            alertsHtml = '<div style="color:#6b7280;text-align:center;padding:20px">No lag alerts in the last 24 hours</div>';
+            alertsHtml = '<div class="empty-state"><div style="font-size:2em;margin-bottom:8px">✅</div>No lag alerts in the last 24 hours</div>';
         } else {
             for (const alert of lagAlerts) {
-                const severity = alert.severity === 'critical' ? '#ef4444' : '#f59e0b';
+                const isCritical = alert.severity === 'critical';
                 alertsHtml += `
-                    <div class="alert-item" style="background:#1f1f23;border-radius:8px;padding:12px;margin-bottom:8px;border-left:4px solid ${severity}">
-                        <div style="display:flex;justify-content:space-between;align-items:center">
-                            <span style="color:${severity};font-weight:500">${alert.type || 'Lag Alert'}</span>
-                            <span style="color:#6b7280;font-size:.8em">${formatCentralDateTime(alert.timestamp)}</span>
+                    <div class="item-card ${isCritical ? 'danger' : 'warning'}">
+                        <div class="item-header">
+                            <span class="item-title" style="color:${isCritical ? '#ef4444' : '#f59e0b'}">${alert.type || 'Lag Alert'}</span>
+                            <span class="item-time">${formatCentralDateTime(alert.timestamp)}</span>
                         </div>
-                        <div style="color:#9ca3af;font-size:.85em;margin-top:4px">
-                            ${alert.message || `TPS: ${alert.tps?.toFixed(1)} | MSPT: ${alert.mspt?.toFixed(1)}ms`}
+                        <div class="item-meta">
+                            ${alert.tps ? `<span>TPS: ${alert.tps.toFixed(1)}</span>` : ''}
+                            ${alert.mspt ? `<span>MSPT: ${alert.mspt.toFixed(1)}ms</span>` : ''}
+                            ${alert.server ? `<span>Server: ${alert.server}</span>` : ''}
                         </div>
+                        ${alert.message ? `<div style="color:#9ca3af;font-size:.8em;margin-top:6px">${alert.message}</div>` : ''}
                     </div>
                 `;
             }
@@ -3911,6 +3907,16 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
             .reverse()
             .map(t => ({ time: new Date(t.timestamp).getTime(), tps: t.tps, server: t.server }));
         
+        // Prepare chart labels (formatted times)
+        const chartLabels = chartData.map(d => {
+            const date = new Date(d.time);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Chicago' });
+        });
+        
+        // Group by server for multi-line chart
+        const servers = [...new Set(chartData.map(d => d.server))];
+        const serverColors = { 'main': '#8b5cf6', 'hub': '#22c55e', 'creative': '#f59e0b', 'survival': '#3b82f6' };
+        
         res.setHeader('Content-Type', 'text/html');
         res.send(`<!DOCTYPE html>
 <html lang="en">
@@ -3918,52 +3924,106 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytics Dashboard - NewLife SMP</title>
-    <style>${viewerStyles}</style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        ${viewerStyles}
+        .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .stat-card { background: linear-gradient(135deg, #1f1f23 0%, #18181b 100%); border-radius: 16px; padding: 24px; border: 1px solid #2d2d35; transition: transform 0.2s, box-shadow 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+        .stat-label { font-size: 0.8em; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .stat-value { font-size: 2.5em; font-weight: 700; line-height: 1; }
+        .stat-meta { display: flex; gap: 12px; margin-top: 12px; font-size: 0.8em; color: #6b7280; }
+        .stat-meta span { display: flex; align-items: center; gap: 4px; }
+        .chart-container { background: #1f1f23; border-radius: 16px; padding: 24px; margin-bottom: 32px; border: 1px solid #2d2d35; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .chart-title { margin: 0; color: #e5e7eb; font-size: 1.1em; }
+        .chart-wrapper { position: relative; height: 280px; }
+        .section-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+        @media (max-width: 900px) { .section-grid { grid-template-columns: 1fr; } }
+        .section-card { background: #18181b; border-radius: 16px; padding: 20px; border: 1px solid #2d2d35; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .section-title { margin: 0; font-size: 1em; display: flex; align-items: center; gap: 8px; }
+        .section-count { background: #2d2d35; padding: 2px 10px; border-radius: 12px; font-size: 0.85em; color: #9ca3af; }
+        .section-content { max-height: 400px; overflow-y: auto; }
+        .item-card { background: #1f1f23; border-radius: 10px; padding: 14px; margin-bottom: 10px; border-left: 4px solid #6b7280; transition: background 0.2s; }
+        .item-card:hover { background: #252529; }
+        .item-card.warning { border-left-color: #f59e0b; }
+        .item-card.danger { border-left-color: #ef4444; }
+        .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .item-title { font-weight: 500; color: #e5e7eb; }
+        .item-time { font-size: 0.75em; color: #6b7280; }
+        .item-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.8em; color: #9ca3af; }
+        .item-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .tag { background: #2d2d35; padding: 4px 10px; border-radius: 6px; font-size: 0.8em; color: #d1d5db; }
+        .full-width { grid-column: span 2; }
+        @media (max-width: 900px) { .full-width { grid-column: span 1; } }
+        .empty-state { text-align: center; padding: 40px 20px; color: #6b7280; }
+        .empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.5; }
+        .tps-good { color: #22c55e; }
+        .tps-warn { color: #f59e0b; }
+        .tps-bad { color: #ef4444; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 ${getHeader('analytics', session)}
 <div class="main">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-        <h1 style="margin:0">📊 Server Analytics</h1>
-        <div style="color:#9ca3af;font-size:.9em">
-            Last 24 hours • ${uniquePlayers.length} unique players
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;flex-wrap:wrap;gap:16px">
+        <h1 style="margin:0;font-size:1.8em">📊 Server Analytics</h1>
+        <div style="color:#9ca3af;font-size:.9em;display:flex;gap:16px;align-items:center">
+            <span>🕐 Last 24 hours</span>
+            <span style="background:#2d2d35;padding:4px 12px;border-radius:8px">👥 ${uniquePlayers.length} unique players</span>
         </div>
     </div>
     
     <!-- Server Stats Cards -->
-    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:32px">
-        ${serverStatsHtml || '<div style="color:#6b7280">No TPS data available</div>'}
+    <div class="analytics-grid">
+        ${serverStatsHtml || '<div class="stat-card"><div class="empty-state">No TPS data available</div></div>'}
     </div>
     
     <!-- TPS Chart -->
-    <div style="background:#1f1f23;border-radius:12px;padding:20px;margin-bottom:32px">
-        <h3 style="margin:0 0 16px 0;color:#e5e7eb">TPS History (Last 6 Hours)</h3>
-        <canvas id="tpsChart" height="100"></canvas>
+    <div class="chart-container">
+        <div class="chart-header">
+            <h3 class="chart-title">📈 TPS History (Last 6 Hours)</h3>
+            <div style="display:flex;gap:16px;font-size:0.8em">
+                ${servers.map(s => `<span style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:3px;background:${serverColors[s] || '#8b5cf6'}"></span>${s}</span>`).join('')}
+            </div>
+        </div>
+        <div class="chart-wrapper">
+            <canvas id="tpsChart"></canvas>
+        </div>
     </div>
     
     <!-- Grid Layout -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+    <div class="section-grid">
         <!-- Pending ALT Reviews -->
-        <div style="background:#18181b;border-radius:12px;padding:20px;border:1px solid #2d2d35">
-            <h3 style="margin:0 0 16px 0;color:#f59e0b">⚠️ Pending ALT Reviews (${pendingAlts.length})</h3>
-            <div style="max-height:400px;overflow-y:auto">
+        <div class="section-card">
+            <div class="section-header">
+                <h3 class="section-title" style="color:#f59e0b">⚠️ Pending ALT Reviews</h3>
+                <span class="section-count">${pendingAlts.length}</span>
+            </div>
+            <div class="section-content">
                 ${altsHtml}
             </div>
         </div>
         
         <!-- Problem Chunks -->
-        <div style="background:#18181b;border-radius:12px;padding:20px;border:1px solid #2d2d35">
-            <h3 style="margin:0 0 16px 0;color:#f59e0b">🧱 Problem Chunks (${problemChunks.length})</h3>
-            <div style="max-height:400px;overflow-y:auto">
+        <div class="section-card">
+            <div class="section-header">
+                <h3 class="section-title" style="color:#f59e0b">🧱 Problem Chunks</h3>
+                <span class="section-count">${problemChunks.length}</span>
+            </div>
+            <div class="section-content">
                 ${chunksHtml}
             </div>
         </div>
         
         <!-- Lag Alerts -->
-        <div style="background:#18181b;border-radius:12px;padding:20px;border:1px solid #2d2d35;grid-column:span 2">
-            <h3 style="margin:0 0 16px 0;color:#ef4444">🚨 Lag Alerts (${lagAlerts.length})</h3>
-            <div style="max-height:300px;overflow-y:auto">
+        <div class="section-card full-width">
+            <div class="section-header">
+                <h3 class="section-title" style="color:#ef4444">🚨 Lag Alerts</h3>
+                <span class="section-count">${lagAlerts.length}</span>
+            </div>
+            <div class="section-content" style="max-height:300px">
                 ${alertsHtml}
             </div>
         </div>
@@ -3971,64 +4031,106 @@ ${getHeader('analytics', session)}
 </div>
 
 <script>
-const chartData = ${JSON.stringify(chartData)};
-
-// Group data by server
-const servers = [...new Set(chartData.map(d => d.server))];
-const datasets = servers.map((server, i) => {
-    const colors = ['#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6'];
-    const serverData = chartData.filter(d => d.server === server);
-    return {
-        label: server,
-        data: serverData.map(d => ({ x: d.time, y: d.tps })),
-        borderColor: colors[i % colors.length],
-        backgroundColor: colors[i % colors.length] + '20',
-        tension: 0.3,
-        fill: true,
-        pointRadius: 0
-    };
-});
-
-new Chart(document.getElementById('tpsChart'), {
-    type: 'line',
-    data: { datasets },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-            x: {
-                type: 'linear',
-                ticks: {
-                    callback: function(value) {
-                        return new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                    },
-                    color: '#6b7280'
-                },
-                grid: { color: '#2d2d35' }
-            },
-            y: {
-                min: 0,
-                max: 20,
-                ticks: { color: '#6b7280' },
-                grid: { color: '#2d2d35' }
+(function() {
+    const rawData = ${JSON.stringify(chartData)};
+    const servers = ${JSON.stringify(servers)};
+    const serverColors = ${JSON.stringify(serverColors)};
+    
+    if (rawData.length === 0) {
+        document.getElementById('tpsChart').parentElement.innerHTML = '<div class="empty-state">No TPS data available for the last 6 hours</div>';
+        return;
+    }
+    
+    // Create time buckets (every 5 minutes) for smoother chart
+    const bucketSize = 5 * 60 * 1000; // 5 minutes
+    const now = Date.now();
+    const sixHoursAgo = now - 6 * 60 * 60 * 1000;
+    
+    // Create labels for every 30 mins
+    const labels = [];
+    for (let t = sixHoursAgo; t <= now; t += 30 * 60 * 1000) {
+        const d = new Date(t);
+        labels.push(d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Chicago' }));
+    }
+    
+    // Build datasets per server
+    const datasets = servers.map(server => {
+        const serverData = rawData.filter(d => d.server === server);
+        
+        // Map data to label indices
+        const dataPoints = new Array(labels.length).fill(null);
+        serverData.forEach(d => {
+            const idx = Math.round((d.time - sixHoursAgo) / (30 * 60 * 1000));
+            if (idx >= 0 && idx < labels.length) {
+                if (dataPoints[idx] === null) {
+                    dataPoints[idx] = d.tps;
+                } else {
+                    dataPoints[idx] = (dataPoints[idx] + d.tps) / 2; // Average if multiple
+                }
             }
-        },
-        plugins: {
-            legend: { labels: { color: '#9ca3af' } },
-            tooltip: {
-                callbacks: {
-                    title: function(ctx) {
-                        return new Date(ctx[0].parsed.x).toLocaleString('en-US', { 
-                            timeZone: 'America/Chicago',
-                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                        });
+        });
+        
+        return {
+            label: server.charAt(0).toUpperCase() + server.slice(1),
+            data: dataPoints,
+            borderColor: serverColors[server] || '#8b5cf6',
+            backgroundColor: (serverColors[server] || '#8b5cf6') + '15',
+            borderWidth: 2,
+            tension: 0.4,
+            fill: true,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            spanGaps: true
+        };
+    });
+    
+    const ctx = document.getElementById('tpsChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1f1f23',
+                    borderColor: '#2d2d35',
+                    borderWidth: 1,
+                    titleColor: '#e5e7eb',
+                    bodyColor: '#9ca3af',
+                    padding: 12,
+                    displayColors: true,
+                    callbacks: {
+                        label: function(ctx) {
+                            if (ctx.parsed.y === null) return null;
+                            const tps = ctx.parsed.y.toFixed(1);
+                            const status = ctx.parsed.y >= 18 ? '🟢' : ctx.parsed.y >= 15 ? '🟡' : '🔴';
+                            return status + ' ' + ctx.dataset.label + ': ' + tps + ' TPS';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: '#2d2d3550', drawBorder: false },
+                    ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }
+                },
+                y: {
+                    min: 0,
+                    max: 22,
+                    grid: { color: '#2d2d3550', drawBorder: false },
+                    ticks: { 
+                        color: '#6b7280',
+                        stepSize: 5,
+                        callback: function(value) { return value + ' TPS'; }
                     }
                 }
             }
         }
-    }
-});
+    });
+})();
 </script>
 </body>
 </html>`);
