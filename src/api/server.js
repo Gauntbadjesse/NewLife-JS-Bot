@@ -807,6 +807,7 @@ app.get('/home', async (req, res) => {
         
         // Check if user has staff role in the guild
         let isStaff = false;
+        let userRoles = [];
         
         if (GUILD_ID && STAFF_ROLE_ID) {
             try {
@@ -816,7 +817,8 @@ app.get('/home', async (req, res) => {
                 
                 if (memberResponse.ok) {
                     const memberData = await memberResponse.json();
-                    isStaff = memberData.roles && memberData.roles.includes(STAFF_ROLE_ID);
+                    userRoles = memberData.roles || [];
+                    isStaff = userRoles.includes(STAFF_ROLE_ID);
                 }
             } catch (e) {
                 console.error('Failed to check guild membership:', e);
@@ -830,6 +832,7 @@ app.get('/home', async (req, res) => {
             username: username,
             avatar: avatar,
             isStaff: isStaff,
+            roles: userRoles,
             adminMode: false, // Start in user mode, staff can toggle to admin
             createdAt: Date.now()
         });
@@ -885,6 +888,18 @@ function staffAuth(req, res, next) {
     next();
 }
 
+// Role IDs for permission checks
+const SUPERVISOR_ROLE_ID = process.env.SUPERVISOR_ROLE_ID;
+const MANAGEMENT_ROLE_ID = process.env.MANAGEMENT_ROLE_ID;
+const OWNER_USER_ID = process.env.OWNER_USER_ID;
+
+// Check if session user is Supervisor+ (Supervisor, Management, or Owner)
+function isSupervisorPlus(session) {
+    if (!session || !session.roles) return false;
+    if (session.discordId === OWNER_USER_ID) return true;
+    return session.roles.includes(SUPERVISOR_ROLE_ID) || session.roles.includes(MANAGEMENT_ROLE_ID);
+}
+
 // User header (for dashboard/my pages)
 function getUserHeader(active, session) {
     const staffToggle = session.isStaff ? `
@@ -925,6 +940,11 @@ function getHeader(active, session = null) {
             My Dashboard
         </a>` : '';
     
+    // Analytics link only for Supervisor+
+    const analyticsLink = session && isSupervisorPlus(session) 
+        ? `<a href="/viewer/analytics" class="${active === 'analytics' ? 'active' : ''}" style="color:#f59e0b">📊 Analytics</a>`
+        : '';
+    
     return `<div class="header">
     <div class="logo">NewLife SMP <span style="font-size:.7em;color:#8b5cf6;margin-left:4px">ADMIN</span></div>
     <nav class="nav">
@@ -935,6 +955,7 @@ function getHeader(active, session = null) {
         <a href="/viewer/mutes" class="${active === 'mutes' ? 'active' : ''}">Mutes</a>
         <a href="/viewer/transcripts" class="${active === 'transcripts' ? 'active' : ''}">Transcripts</a>
         <a href="/viewer/pvp-logs" class="${active === 'pvp-logs' ? 'active' : ''}">PvP Logs</a>
+        ${analyticsLink}
     </nav>
     <div style="display:flex;align-items:center;gap:12px">
         ${switchToUser}
@@ -3709,6 +3730,317 @@ app.post('/api/kick/notify', async (req, res) => {
     } catch (error) {
         console.error('Kick Notify API Error:', error);
         return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// =====================================================
+// ANALYTICS DASHBOARD PAGE (Supervisor+ only)
+// =====================================================
+
+app.get('/viewer/analytics', staffAuth, async (req, res) => {
+    const session = req.session;
+    
+    // Check Supervisor+ permission
+    if (!isSupervisorPlus(session)) {
+        return res.status(403).send(`<!DOCTYPE html><html><head><title>Access Denied</title><style>${viewerStyles}</style></head><body>
+            <div class="main" style="text-align:center;padding:100px">
+                <h1 style="color:#ef4444">⛔ Access Denied</h1>
+                <p style="color:#9ca3af">Analytics dashboard is restricted to Supervisor+ roles.</p>
+                <a href="/viewer/search" class="btn btn-go" style="margin-top:20px">Back to Admin Panel</a>
+            </div>
+        </body></html>`);
+    }
+    
+    try {
+        // Import models
+        const ServerTps = require('../database/models/ServerTps');
+        const AltGroup = require('../database/models/AltGroup');
+        const ChunkAnalytics = require('../database/models/ChunkAnalytics');
+        const LagAlert = require('../database/models/LagAlert');
+        const PlayerConnection = require('../database/models/PlayerConnection');
+        
+        // Get recent TPS data (last 24 hours)
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const tpsData = await ServerTps.find({ timestamp: { $gte: oneDayAgo } })
+            .sort({ timestamp: -1 })
+            .limit(500)
+            .lean();
+        
+        // Get pending ALT reviews
+        const pendingAlts = await AltGroup.find({ status: 'pending' })
+            .sort({ updatedAt: -1 })
+            .limit(20)
+            .lean();
+        
+        // Get problem chunks
+        const problemChunks = await ChunkAnalytics.find({ flagged: true })
+            .sort({ entityCount: -1 })
+            .limit(20)
+            .lean();
+        
+        // Get recent lag alerts
+        const lagAlerts = await LagAlert.find({ timestamp: { $gte: oneDayAgo } })
+            .sort({ timestamp: -1 })
+            .limit(20)
+            .lean();
+        
+        // Get recent connections for unique player count
+        const uniquePlayers = await PlayerConnection.distinct('uuid', { timestamp: { $gte: oneDayAgo } });
+        
+        // Calculate TPS averages per server
+        const serverStats = {};
+        for (const tps of tpsData) {
+            if (!serverStats[tps.server]) {
+                serverStats[tps.server] = { total: 0, count: 0, min: 20, max: 0, latest: null };
+            }
+            serverStats[tps.server].total += tps.tps;
+            serverStats[tps.server].count++;
+            serverStats[tps.server].min = Math.min(serverStats[tps.server].min, tps.tps);
+            serverStats[tps.server].max = Math.max(serverStats[tps.server].max, tps.tps);
+            if (!serverStats[tps.server].latest || tps.timestamp > serverStats[tps.server].latest.timestamp) {
+                serverStats[tps.server].latest = tps;
+            }
+        }
+        
+        // Build server stats HTML
+        let serverStatsHtml = '';
+        for (const [server, stats] of Object.entries(serverStats)) {
+            const avg = (stats.total / stats.count).toFixed(1);
+            const current = stats.latest?.tps?.toFixed(1) || '—';
+            const tpsColor = stats.latest?.tps >= 18 ? '#22c55e' : stats.latest?.tps >= 15 ? '#f59e0b' : '#ef4444';
+            serverStatsHtml += `
+                <div class="stat-card" style="background:#1f1f23;border-radius:12px;padding:20px;flex:1;min-width:200px">
+                    <div style="font-size:.85em;color:#9ca3af;margin-bottom:8px">${server.toUpperCase()}</div>
+                    <div style="font-size:2em;font-weight:700;color:${tpsColor}">${current}</div>
+                    <div style="font-size:.8em;color:#6b7280;margin-top:4px">TPS (Current)</div>
+                    <div style="display:flex;gap:16px;margin-top:12px;font-size:.8em;color:#9ca3af">
+                        <span>Avg: ${avg}</span>
+                        <span>Min: ${stats.min.toFixed(1)}</span>
+                        <span>Max: ${stats.max.toFixed(1)}</span>
+                    </div>
+                    ${stats.latest ? `<div style="font-size:.75em;color:#6b7280;margin-top:8px">
+                        🧱 ${stats.latest.loadedChunks || 0} chunks • 
+                        👥 ${stats.latest.playerCount || 0} players • 
+                        🐄 ${stats.latest.entityCount || 0} entities
+                    </div>` : ''}
+                </div>
+            `;
+        }
+        
+        // Build pending ALTs HTML
+        let altsHtml = '';
+        if (pendingAlts.length === 0) {
+            altsHtml = '<div style="color:#6b7280;text-align:center;padding:20px">No pending ALT reviews</div>';
+        } else {
+            for (const alt of pendingAlts) {
+                const accounts = alt.accounts || [];
+                altsHtml += `
+                    <div class="alt-item" style="background:#1f1f23;border-radius:8px;padding:16px;margin-bottom:12px;border-left:4px solid #f59e0b">
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <div>
+                                <strong style="color:#f59e0b">⚠️ Potential ALT Group</strong>
+                                <span style="color:#6b7280;font-size:.85em;margin-left:8px">${accounts.length} accounts</span>
+                            </div>
+                            <span style="color:#6b7280;font-size:.8em">${formatCentralDateTime(alt.updatedAt)}</span>
+                        </div>
+                        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px">
+                            ${accounts.map(a => `
+                                <span style="background:#2d2d35;padding:4px 10px;border-radius:4px;font-size:.85em">
+                                    ${a.username || a.uuid?.substring(0, 8)}
+                                </span>
+                            `).join('')}
+                        </div>
+                        <div style="color:#9ca3af;font-size:.8em;margin-top:8px">
+                            Shared IP: ${alt.sharedIp || 'Multiple IPs'}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Build problem chunks HTML
+        let chunksHtml = '';
+        if (problemChunks.length === 0) {
+            chunksHtml = '<div style="color:#6b7280;text-align:center;padding:20px">No problem chunks detected</div>';
+        } else {
+            for (const chunk of problemChunks) {
+                const isHighRisk = chunk.entityCount >= 200 || chunk.hopperCount >= 50;
+                chunksHtml += `
+                    <div class="chunk-item" style="background:#1f1f23;border-radius:8px;padding:12px;margin-bottom:8px;border-left:4px solid ${isHighRisk ? '#ef4444' : '#f59e0b'}">
+                        <div style="display:flex;justify-content:space-between">
+                            <span style="color:${isHighRisk ? '#ef4444' : '#f59e0b'}">
+                                ${chunk.world} @ ${chunk.x}, ${chunk.z}
+                            </span>
+                            <span style="color:#6b7280;font-size:.85em">${chunk.server || 'main'}</span>
+                        </div>
+                        <div style="display:flex;gap:16px;margin-top:8px;font-size:.85em;color:#9ca3af">
+                            <span>🐄 ${chunk.entityCount || 0} entities</span>
+                            <span>📦 ${chunk.hopperCount || 0} hoppers</span>
+                            <span>⚡ ${chunk.redstoneCount || 0} redstone</span>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Build lag alerts HTML
+        let alertsHtml = '';
+        if (lagAlerts.length === 0) {
+            alertsHtml = '<div style="color:#6b7280;text-align:center;padding:20px">No lag alerts in the last 24 hours</div>';
+        } else {
+            for (const alert of lagAlerts) {
+                const severity = alert.severity === 'critical' ? '#ef4444' : '#f59e0b';
+                alertsHtml += `
+                    <div class="alert-item" style="background:#1f1f23;border-radius:8px;padding:12px;margin-bottom:8px;border-left:4px solid ${severity}">
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <span style="color:${severity};font-weight:500">${alert.type || 'Lag Alert'}</span>
+                            <span style="color:#6b7280;font-size:.8em">${formatCentralDateTime(alert.timestamp)}</span>
+                        </div>
+                        <div style="color:#9ca3af;font-size:.85em;margin-top:4px">
+                            ${alert.message || `TPS: ${alert.tps?.toFixed(1)} | MSPT: ${alert.mspt?.toFixed(1)}ms`}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Build TPS chart data (last 6 hours)
+        const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
+        const chartData = tpsData
+            .filter(t => new Date(t.timestamp).getTime() > sixHoursAgo)
+            .reverse()
+            .map(t => ({ time: new Date(t.timestamp).getTime(), tps: t.tps, server: t.server }));
+        
+        res.setHeader('Content-Type', 'text/html');
+        res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard - NewLife SMP</title>
+    <style>${viewerStyles}</style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+${getHeader('analytics', session)}
+<div class="main">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <h1 style="margin:0">📊 Server Analytics</h1>
+        <div style="color:#9ca3af;font-size:.9em">
+            Last 24 hours • ${uniquePlayers.length} unique players
+        </div>
+    </div>
+    
+    <!-- Server Stats Cards -->
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:32px">
+        ${serverStatsHtml || '<div style="color:#6b7280">No TPS data available</div>'}
+    </div>
+    
+    <!-- TPS Chart -->
+    <div style="background:#1f1f23;border-radius:12px;padding:20px;margin-bottom:32px">
+        <h3 style="margin:0 0 16px 0;color:#e5e7eb">TPS History (Last 6 Hours)</h3>
+        <canvas id="tpsChart" height="100"></canvas>
+    </div>
+    
+    <!-- Grid Layout -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <!-- Pending ALT Reviews -->
+        <div style="background:#18181b;border-radius:12px;padding:20px;border:1px solid #2d2d35">
+            <h3 style="margin:0 0 16px 0;color:#f59e0b">⚠️ Pending ALT Reviews (${pendingAlts.length})</h3>
+            <div style="max-height:400px;overflow-y:auto">
+                ${altsHtml}
+            </div>
+        </div>
+        
+        <!-- Problem Chunks -->
+        <div style="background:#18181b;border-radius:12px;padding:20px;border:1px solid #2d2d35">
+            <h3 style="margin:0 0 16px 0;color:#f59e0b">🧱 Problem Chunks (${problemChunks.length})</h3>
+            <div style="max-height:400px;overflow-y:auto">
+                ${chunksHtml}
+            </div>
+        </div>
+        
+        <!-- Lag Alerts -->
+        <div style="background:#18181b;border-radius:12px;padding:20px;border:1px solid #2d2d35;grid-column:span 2">
+            <h3 style="margin:0 0 16px 0;color:#ef4444">🚨 Lag Alerts (${lagAlerts.length})</h3>
+            <div style="max-height:300px;overflow-y:auto">
+                ${alertsHtml}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const chartData = ${JSON.stringify(chartData)};
+
+// Group data by server
+const servers = [...new Set(chartData.map(d => d.server))];
+const datasets = servers.map((server, i) => {
+    const colors = ['#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6'];
+    const serverData = chartData.filter(d => d.server === server);
+    return {
+        label: server,
+        data: serverData.map(d => ({ x: d.time, y: d.tps })),
+        borderColor: colors[i % colors.length],
+        backgroundColor: colors[i % colors.length] + '20',
+        tension: 0.3,
+        fill: true,
+        pointRadius: 0
+    };
+});
+
+new Chart(document.getElementById('tpsChart'), {
+    type: 'line',
+    data: { datasets },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+            x: {
+                type: 'linear',
+                ticks: {
+                    callback: function(value) {
+                        return new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    },
+                    color: '#6b7280'
+                },
+                grid: { color: '#2d2d35' }
+            },
+            y: {
+                min: 0,
+                max: 20,
+                ticks: { color: '#6b7280' },
+                grid: { color: '#2d2d35' }
+            }
+        },
+        plugins: {
+            legend: { labels: { color: '#9ca3af' } },
+            tooltip: {
+                callbacks: {
+                    title: function(ctx) {
+                        return new Date(ctx[0].parsed.x).toLocaleString('en-US', { 
+                            timeZone: 'America/Chicago',
+                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        });
+                    }
+                }
+            }
+        }
+    }
+});
+</script>
+</body>
+</html>`);
+    } catch (error) {
+        console.error('Analytics Page Error:', error);
+        res.status(500).send(`<!DOCTYPE html><html><head><title>Error</title><style>${viewerStyles}</style></head><body>
+            <div class="main" style="text-align:center;padding:100px">
+                <h1 style="color:#ef4444">❌ Error Loading Analytics</h1>
+                <p style="color:#9ca3af">${error.message}</p>
+                <a href="/viewer/search" class="btn btn-go" style="margin-top:20px">Back to Admin Panel</a>
+            </div>
+        </body></html>`);
     }
 });
 

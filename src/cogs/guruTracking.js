@@ -304,10 +304,13 @@ function buildWeeklyReportEmbed(records, weekStart, weekEnd) {
 }
 
 /**
- * Send weekly report to owner
+ * Send weekly report to owner and additional recipients
  */
 async function sendWeeklyGuruReport(client) {
     const ownerId = process.env.OWNER_ID || process.env.OWNER_USER_ID;
+    // Additional recipients for guru reports (comma-separated in env, or hardcoded)
+    const additionalRecipients = (process.env.GURU_REPORT_RECIPIENTS || '519184985366986765').split(',').map(id => id.trim()).filter(id => id);
+    
     if (!ownerId) {
         console.error('[GuruTracking] Owner ID not configured for weekly report');
         return;
@@ -337,10 +340,26 @@ async function sendWeeklyGuruReport(client) {
         
         const embed = buildWeeklyReportEmbed(records, lastWeekStart, lastWeekEnd);
         
-        await sendDm(client, ownerId, {
+        const messageContent = {
             content: '**Weekly Guru Performance Report**\nHere is how your whitelist gurus performed this week:',
             embeds: [embed]
-        });
+        };
+        
+        // Send to owner
+        await sendDm(client, ownerId, messageContent);
+        console.log('[GuruTracking] Weekly guru report sent to owner');
+        
+        // Send to additional recipients
+        for (const recipientId of additionalRecipients) {
+            if (recipientId !== ownerId) {
+                try {
+                    await sendDm(client, recipientId, messageContent);
+                    console.log(`[GuruTracking] Weekly guru report sent to ${recipientId}`);
+                } catch (err) {
+                    console.error(`[GuruTracking] Failed to send report to ${recipientId}:`, err.message);
+                }
+            }
+        }
         
         for (const record of records) {
             record.reportSent = true;
@@ -348,7 +367,7 @@ async function sendWeeklyGuruReport(client) {
             await record.save();
         }
         
-        console.log('[GuruTracking] Weekly guru report sent to owner');
+        console.log('[GuruTracking] Weekly guru report delivery complete');
     } catch (err) {
         console.error('[GuruTracking] Failed to send weekly report:', err);
     }
