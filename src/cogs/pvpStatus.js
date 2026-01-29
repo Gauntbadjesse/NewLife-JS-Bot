@@ -63,6 +63,15 @@ function getChannelForLogType(logData) {
 async function handlePvpLog(client, logData) {
     console.log('[PvP Logger] Processing log type:', logData.type);
     
+    // Skip Discord logging for low damage sessions (under 3 HP), but they're still in database
+    if (logData.type === 'pvp_damage_session') {
+        const totalDamage = logData.total_damage || 0;
+        if (totalDamage < 3) {
+            console.log(`[PvP Logger] Skipping Discord log for low damage session (${totalDamage.toFixed(2)} HP < 3 HP)`);
+            return;
+        }
+    }
+    
     const channelId = getChannelForLogType(logData);
     const channel = client.channels.cache.get(channelId);
     
