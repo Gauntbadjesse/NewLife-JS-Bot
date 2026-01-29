@@ -3761,13 +3761,37 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         
         // Get recent TPS data (last 24 hours)
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const tpsData = await ServerTps.find({ timestamp: { $gte: oneDayAgo } })
+        let tpsData = await ServerTps.find({ timestamp: { $gte: oneDayAgo } })
             .sort({ timestamp: -1 })
             .limit(500)
             .lean();
         
+        // Generate live demo data if no real data exists
+        const demoMode = tpsData.length === 0;
+        if (demoMode) {
+            const now = Date.now();
+            tpsData = [];
+            // Generate 6 hours of TPS data every 5 minutes
+            for (let i = 0; i < 72; i++) {
+                const time = new Date(now - i * 5 * 60 * 1000);
+                // Simulate realistic TPS with occasional dips
+                const baseTps = 19.5 + Math.sin(i / 10) * 0.3;
+                const randomDip = Math.random() < 0.05 ? Math.random() * 5 : 0;
+                const tps = Math.max(15, Math.min(20, baseTps - randomDip + (Math.random() - 0.5)));
+                tpsData.push({
+                    server: 'main',
+                    tps: tps,
+                    mspt: (1000 / tps) * (0.8 + Math.random() * 0.4),
+                    timestamp: time,
+                    playerCount: Math.floor(5 + Math.random() * 15),
+                    entityCount: Math.floor(800 + Math.random() * 400),
+                    loadedChunks: Math.floor(200 + Math.random() * 100)
+                });
+            }
+        }
+        
         // Get pending ALT reviews
-        const pendingAlts = await AltGroup.find({ status: 'pending' })
+        let pendingAlts = await AltGroup.find({ status: 'pending' })
             .sort({ updatedAt: -1 })
             .limit(20)
             .lean();
@@ -3923,6 +3947,7 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="30">
     <title>Analytics Dashboard - NewLife SMP</title>
     <style>
         ${viewerStyles}
@@ -3934,7 +3959,7 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         .stat-meta { display: flex; gap: 12px; margin-top: 12px; font-size: 0.8em; color: #6b7280; }
         .stat-meta span { display: flex; align-items: center; gap: 4px; }
         .chart-container { background: #1f1f23; border-radius: 16px; padding: 24px; margin-bottom: 32px; border: 1px solid #2d2d35; }
-        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
         .chart-title { margin: 0; color: #e5e7eb; font-size: 1.1em; }
         .chart-wrapper { position: relative; height: 280px; }
         .section-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
@@ -3961,6 +3986,11 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         .tps-good { color: #22c55e; }
         .tps-warn { color: #f59e0b; }
         .tps-bad { color: #ef4444; }
+        .demo-badge { background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; padding: 4px 12px; border-radius: 6px; font-size: 0.75em; font-weight: 600; animation: pulse 2s infinite; }
+        .live-badge { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; padding: 4px 12px; border-radius: 6px; font-size: 0.75em; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .live-dot { width: 8px; height: 8px; background: #fff; border-radius: 50%; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .refresh-timer { font-size: 0.75em; color: #6b7280; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -3968,12 +3998,27 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
 ${getHeader('analytics', session)}
 <div class="main">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;flex-wrap:wrap;gap:16px">
-        <h1 style="margin:0;font-size:1.8em">📊 Server Analytics</h1>
+        <div style="display:flex;align-items:center;gap:16px">
+            <h1 style="margin:0;font-size:1.8em">📊 Server Analytics</h1>
+            ${demoMode 
+                ? '<span class="demo-badge">⚡ DEMO MODE</span>' 
+                : '<span class="live-badge"><span class="live-dot"></span>LIVE</span>'}
+        </div>
         <div style="color:#9ca3af;font-size:.9em;display:flex;gap:16px;align-items:center">
-            <span>🕐 Last 24 hours</span>
-            <span style="background:#2d2d35;padding:4px 12px;border-radius:8px">👥 ${uniquePlayers.length} unique players</span>
+            <span class="refresh-timer" id="refreshTimer">Auto-refresh in 30s</span>
+            <span style="background:#2d2d35;padding:4px 12px;border-radius:8px">👥 ${uniquePlayers.length || 0} unique players</span>
         </div>
     </div>
+    
+    ${demoMode ? `
+    <div style="background:linear-gradient(135deg,#f59e0b20,#d9770620);border:1px solid #f59e0b40;border-radius:12px;padding:16px;margin-bottom:24px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:1.5em">⚠️</span>
+        <div>
+            <div style="color:#f59e0b;font-weight:600">Demo Mode Active</div>
+            <div style="color:#9ca3af;font-size:0.85em">No live data from Paper analytics plugin. Showing simulated data. Deploy the Paper plugin to see real server stats.</div>
+        </div>
+    </div>
+    ` : ''}
     
     <!-- Server Stats Cards -->
     <div class="analytics-grid">
@@ -4130,6 +4175,21 @@ ${getHeader('analytics', session)}
             }
         }
     });
+})();
+
+// Refresh countdown timer
+(function() {
+    let seconds = 30;
+    const timer = document.getElementById('refreshTimer');
+    if (!timer) return;
+    setInterval(() => {
+        seconds--;
+        if (seconds <= 0) {
+            timer.textContent = 'Refreshing...';
+        } else {
+            timer.textContent = 'Auto-refresh in ' + seconds + 's';
+        }
+    }, 1000);
 })();
 </script>
 </body>
