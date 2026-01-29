@@ -1,0 +1,23 @@
+# NewLife Analytics - Paper Configuration
+# Update api.url to point to your bot server
+
+api:
+  url: "http://YOUR_BOT_IP:27289"
+  key: "your-api-key-here"
+
+server:
+  name: "main"
+
+debug: false
+
+# TPS Monitoring Thresholds
+thresholds:
+  tps:
+    warning: 18.0
+    critical: 15.0
+
+# Scan intervals (in ticks, 20 ticks = 1 second)
+intervals:
+  tps: 20           # 1 second - TPS sampling
+  tps-report: 60    # 3 seconds - Send TPS to API
+  chunk-scan: 6000  # 5 minutes - Chunk lag scan

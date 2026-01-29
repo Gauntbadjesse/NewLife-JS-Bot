@@ -26,10 +26,17 @@ public class PlayerConnectionListener implements Listener {
         // Load or create player data
         PlayerDataManager.PlayerData data = plugin.getDataManager().getPlayerData(uuid);
         if (data == null) {
-            data = new PlayerDataManager.PlayerData(uuid.toString(), false, "none", 0);
+            data = new PlayerDataManager.PlayerData(uuid.toString(), player.getName(), false, "none", 0);
             plugin.getDataManager().savePlayerData(data);
             plugin.getLogger().info("Created new player data for " + player.getName());
         } else {
+            // Always update username in case it changed
+            if (!player.getName().equals(data.getUsername())) {
+                String oldName = data.getUsername();
+                data.setUsername(player.getName());
+                plugin.getDataManager().savePlayerData(data);
+                plugin.getLogger().info("Updated username for " + uuid + ": " + oldName + " -> " + player.getName());
+            }
             plugin.getLogger().info("Loaded player data for " + player.getName() + 
                 " (PvP: " + data.isPvpEnabled() + ", Status: " + data.getStatus() + 
                 ", Cooldown: " + (data.hasPvpCooldown() ? "active" : "none") + ")");

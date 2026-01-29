@@ -34,7 +34,7 @@ public class TabListManager {
 
         if (data == null) {
             // Default: PvP OFF, No status
-            data = new PlayerDataManager.PlayerData(uuid.toString(), false, "none", 0);
+            data = new PlayerDataManager.PlayerData(uuid.toString(), player.getName(), false, "none", 0);
             dataManager.savePlayerData(data);
         }
 

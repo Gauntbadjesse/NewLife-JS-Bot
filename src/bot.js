@@ -244,6 +244,23 @@ client.once('ready', async () => {
         console.error('Failed to initialize PvP logger:', e);
     }
 
+    // Initialize Analytics system (ALT detection, TPS monitoring, lag alerts)
+    try {
+        const { initAnalytics, handleButtonInteraction } = require('./cogs/analytics');
+        initAnalytics(client);
+        
+        // Register button handler for analytics resolution buttons
+        client.on('interactionCreate', async (interaction) => {
+            if (interaction.isButton()) {
+                await handleButtonInteraction(interaction);
+            }
+        });
+        
+        console.log('[Analytics] Initialized analytics system');
+    } catch (e) {
+        console.error('Failed to initialize analytics:', e);
+    }
+
     // Initialize Minecraft DM handler
     try {
         const LinkedAccount = require('./database/models/LinkedAccount');

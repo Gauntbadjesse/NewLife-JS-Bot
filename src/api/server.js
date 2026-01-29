@@ -19,6 +19,55 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // =====================================================
+// TIMEZONE CONFIGURATION - Central Time (America/Chicago)
+// =====================================================
+const TIMEZONE = 'America/Chicago';
+
+/**
+ * Format a date to Central Time
+ * @param {Date|string|number} date - Date to format
+ * @param {Object} options - Intl.DateTimeFormat options
+ * @returns {string} Formatted date string in Central Time
+ */
+function formatCentralTime(date, options = {}) {
+    if (!date) return '—';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '—';
+    
+    const defaultOptions = {
+        timeZone: TIMEZONE,
+        ...options
+    };
+    
+    return d.toLocaleString('en-US', defaultOptions);
+}
+
+/**
+ * Format date only (no time) in Central Time
+ */
+function formatCentralDate(date) {
+    return formatCentralTime(date, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+    });
+}
+
+/**
+ * Format full date and time in Central Time
+ */
+function formatCentralDateTime(date) {
+    return formatCentralTime(date, {
+        month: 'numeric',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
+// =====================================================
 // DISCORD OAUTH2 CONFIGURATION
 // =====================================================
 
@@ -1018,7 +1067,7 @@ ${getUserHeader('dashboard', session)}
                     <span class="tag type ${item.color}">${item.type}</span>
                     <div class="details">
                         <div class="reason">${item.reason || 'No reason provided'}</div>
-                        <div class="date">${item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown date'}</div>
+                        <div class="date">${formatCentralDate(item.createdAt) || 'Unknown date'}</div>
                     </div>
                 </div>
             `).join('') : '<div class="empty-state">No recent activity</div>'}
@@ -1240,7 +1289,7 @@ app.get('/viewer/search', staffAuth, async (req, res) => {
             <td>${(r.reason || '').substring(0, 40)}${(r.reason || '').length > 40 ? '...' : ''}</td>
             <td>${getStatusTag(r.status)}</td>
             <td class="hide">${r.staff || '—'}</td>
-            <td>${r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
+            <td>${formatCentralDate(r.date)}</td>
             <td><a href="/viewer/case/${r.type}/${r.caseNumber}" class="btn-edit">View</a></td>
         </tr>`).join('');
 
@@ -1375,7 +1424,7 @@ app.get('/viewer/bans', staffAuth, async (req, res) => {
             <td>${b.isPermanent ? '<span class="tag tag-o">Perm</span>' : (b.duration || '—')}</td>
             <td>${b.active ? '<span class="tag tag-r">Active</span>' : '<span class="tag tag-g">Expired</span>'}</td>
             <td class="hide">${b.staffTag || '—'}</td>
-            <td class="hide">${b.bannedAt ? new Date(b.bannedAt).toLocaleDateString() : '—'}</td>
+            <td class="hide">${formatCentralDate(b.bannedAt)}</td>
             <td><a href="/viewer/case/ban/${b.caseNumber}" class="btn-edit">View</a></td>
         </tr>`).join('');
         if (!rows) rows = '<tr><td colspan="9" class="empty">No bans found</td></tr>';
@@ -1475,7 +1524,7 @@ app.get('/viewer/kicks', staffAuth, async (req, res) => {
             <td class="hide">${k.discordTag || '—'}</td>
             <td>${(k.reason || '').substring(0, 45)}${(k.reason || '').length > 45 ? '...' : ''}</td>
             <td class="hide">${k.staffTag || '—'}</td>
-            <td>${k.kickedAt ? new Date(k.kickedAt).toLocaleDateString() : '—'}</td>
+            <td>${formatCentralDate(k.kickedAt)}</td>
             <td><a href="/viewer/case/kick/${k.caseNumber}" class="btn-edit">View</a></td>
         </tr>`).join('');
         if (!rows) rows = '<tr><td colspan="7" class="empty">No kicks found</td></tr>';
@@ -1574,7 +1623,7 @@ app.get('/viewer/warnings', staffAuth, async (req, res) => {
             <td>${w.category ? (w.category.charAt(0).toUpperCase() + w.category.slice(1)) : '—'}</td>
             <td>${w.active ? '<span class="tag tag-r">Active</span>' : '<span class="tag tag-g">Removed</span>'}</td>
             <td class="hide">${w.staffName || '—'}</td>
-            <td class="hide">${w.createdAt ? new Date(w.createdAt).toLocaleDateString() : '—'}</td>
+            <td class="hide">${formatCentralDate(w.createdAt)}</td>
             <td><a href="/viewer/case/warning/${w.caseNumber}" class="btn-edit">View</a></td>
         </tr>`).join('');
         if (!rows) rows = '<tr><td colspan="9" class="empty">No warnings found</td></tr>';
@@ -1682,8 +1731,8 @@ app.get('/viewer/mutes', staffAuth, async (req, res) => {
             <td>${m.duration || '—'}</td>
             <td>${m.active ? '<span class="tag tag-r">Active</span>' : '<span class="tag tag-g">Expired</span>'}</td>
             <td class="hide">${m.staffTag || '—'}</td>
-            <td>${m.createdAt ? new Date(m.createdAt).toLocaleDateString() : '—'}</td>
-            <td class="hide">${m.expiresAt ? new Date(m.expiresAt).toLocaleString() : 'Never'}</td>
+            <td>${formatCentralDate(m.createdAt)}</td>
+            <td class="hide">${m.expiresAt ? formatCentralDateTime(m.expiresAt) : 'Never'}</td>
             <td><a href="/viewer/case/mute/${m.caseNumber}" class="btn-edit">View</a></td>
         </tr>`).join('');
         if (!rows) rows = '<tr><td colspan="9" class="empty">No mutes found</td></tr>';
@@ -1796,16 +1845,16 @@ ${getHeader('', req.session)}
         infoItems += `<div class="info-item"><label>Discord Tag</label><span>${discordTag}</span></div>`;
         infoItems += `<div class="info-item"><label>Discord ID</label><span>${discordId}</span></div>`;
         infoItems += `<div class="info-item"><label>Staff</label><span>${staff}</span></div>`;
-        infoItems += `<div class="info-item"><label>Date</label><span>${date ? new Date(date).toLocaleString() : '—'}</span></div>`;
+        infoItems += `<div class="info-item"><label>Date</label><span>${formatCentralDateTime(date)}</span></div>`;
         
         if (type === 'ban') {
             infoItems += `<div class="info-item"><label>Duration</label><span>${caseData.isPermanent ? 'Permanent' : (caseData.duration || '—')}</span></div>`;
             infoItems += `<div class="info-item"><label>Status</label><span class="${caseData.active ? 'status-active' : 'status-inactive'}">${caseData.active ? 'Active' : 'Expired'}</span></div>`;
-            if (caseData.expiresAt) infoItems += `<div class="info-item"><label>Expires</label><span>${new Date(caseData.expiresAt).toLocaleString()}</span></div>`;
+            if (caseData.expiresAt) infoItems += `<div class="info-item"><label>Expires</label><span>${formatCentralDateTime(caseData.expiresAt)}</span></div>`;
         } else if (type === 'mute') {
             infoItems += `<div class="info-item"><label>Duration</label><span>${caseData.duration || '—'}</span></div>`;
             infoItems += `<div class="info-item"><label>Status</label><span class="${caseData.active ? 'status-active' : 'status-inactive'}">${caseData.active ? 'Active' : 'Expired'}</span></div>`;
-            if (caseData.expiresAt) infoItems += `<div class="info-item"><label>Expires</label><span>${new Date(caseData.expiresAt).toLocaleString()}</span></div>`;
+            if (caseData.expiresAt) infoItems += `<div class="info-item"><label>Expires</label><span>${formatCentralDateTime(caseData.expiresAt)}</span></div>`;
         } else if (type === 'warning') {
             infoItems += `<div class="info-item"><label>Category</label><span>${caseData.category ? (caseData.category.charAt(0).toUpperCase() + caseData.category.slice(1)) : '—'}</span></div>`;
             infoItems += `<div class="info-item"><label>Status</label><span class="${caseData.active ? 'status-active' : 'status-inactive'}">${caseData.active ? 'Active' : 'Removed'}</span></div>`;
@@ -1818,7 +1867,7 @@ ${getHeader('', req.session)}
         } else {
             evidence.forEach(ev => {
                 ev.items.forEach(item => {
-                    const meta = `Added by ${item.addedByTag || 'Unknown'} on ${new Date(item.addedAt).toLocaleString()}`;
+                    const meta = `Added by ${item.addedByTag || 'Unknown'} on ${formatCentralDateTime(item.addedAt)}`;
                     if (item.type === 'text') {
                         evidenceHtml += `<div class="evidence-item"><div class="meta">${meta}</div><div class="content">${item.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div></div>`;
                     } else if (item.type === 'image') {
@@ -2111,7 +2160,7 @@ app.get('/viewer/my-cases', userAuth, async (req, res) => {
                     c.evidence.forEach(ev => {
                         ev.items.forEach(item => {
                             if (item.type === 'text') {
-                                evidenceHtml += `<div class="evidence-item"><div class="meta">Evidence added ${new Date(item.addedAt).toLocaleDateString()}</div><div class="content">${item.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div></div>`;
+                                evidenceHtml += `<div class="evidence-item"><div class="meta">Evidence added ${formatCentralDate(item.addedAt)}</div><div class="content">${item.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div></div>`;
                             } else if (item.type === 'image') {
                                 evidenceHtml += `<div class="evidence-item"><div class="meta">Evidence image - ${item.filename || 'Image'}</div><img src="${item.content}" alt="Evidence"></div>`;
                             }
@@ -2130,7 +2179,7 @@ app.get('/viewer/my-cases', userAuth, async (req, res) => {
                 <div class="case-detail" id="case-${c.type}-${c.caseNumber}" style="margin-bottom:20px;${highlightStyle}">
                     <h2>${c.typeTag} Case #${c.caseNumber}</h2>
                     <div class="info-grid">
-                        <div class="info-item"><label>Date</label><span>${c.date ? new Date(c.date).toLocaleString() : '—'}</span></div>
+                        <div class="info-item"><label>Date</label><span>${formatCentralDateTime(c.date)}</span></div>
                         <div class="info-item"><label>Status</label><span>${statusTag}</span></div>
                         ${c.duration !== '—' ? `<div class="info-item"><label>Duration</label><span>${c.duration}</span></div>` : ''}
                         <div class="info-item"><label>Staff</label><span>${c.staff || '—'}</span></div>
@@ -2465,7 +2514,7 @@ app.get('/viewer/transcripts', staffAuth, async (req, res) => {
             <td>${(t.closeReason || '').substring(0, 40)}${(t.closeReason || '').length > 40 ? '...' : ''}</td>
             <td>${t.messageCount || 0}</td>
             <td>${t.closedByTag || '—'}</td>
-            <td>${t.closedAt ? new Date(t.closedAt).toLocaleDateString() : '—'}</td>
+            <td>${formatCentralDate(t.closedAt)}</td>
             <td style="display:flex;gap:6px">
                 <a href="/viewer/transcript/${t.ticketId}" class="btn-edit">View</a>
                 <form method="POST" action="/viewer/transcript/${t.ticketId}/delete" style="display:inline" onsubmit="return confirm('Delete this transcript?')">
@@ -2562,7 +2611,7 @@ ${getHeader('transcripts', req.session)}
         
         for (const msg of transcript.messages) {
             const msgDate = new Date(msg.timestamp);
-            const dateStr = msgDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const dateStr = formatCentralTime(msgDate, { timeZone: TIMEZONE, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             
             // Add date divider if new day
             if (dateStr !== lastDate) {
@@ -2571,7 +2620,7 @@ ${getHeader('transcripts', req.session)}
                 lastAuthorId = null; // Reset author grouping on new day
             }
             
-            const timeStr = msgDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            const timeStr = formatCentralTime(msgDate, { timeZone: TIMEZONE, hour: 'numeric', minute: '2-digit' });
             const isBot = msg.authorBot;
             const isContinuation = lastAuthorId === msg.authorId && !msg.replyTo;
             
@@ -2699,8 +2748,8 @@ ${getHeader('transcripts', req.session)}
             <div class="transcript-meta">
                 <div class="transcript-meta-item"><label>Owner</label><span>${escapeHtml(transcript.ownerTag)}</span></div>
                 <div class="transcript-meta-item"><label>Closed By</label><span>${escapeHtml(transcript.closedByTag || 'Unknown')}</span></div>
-                <div class="transcript-meta-item"><label>Created</label><span>${transcript.createdAt ? new Date(transcript.createdAt).toLocaleString() : '—'}</span></div>
-                <div class="transcript-meta-item"><label>Closed</label><span>${transcript.closedAt ? new Date(transcript.closedAt).toLocaleString() : '—'}</span></div>
+                <div class="transcript-meta-item"><label>Created</label><span>${formatCentralDateTime(transcript.createdAt)}</span></div>
+                <div class="transcript-meta-item"><label>Closed</label><span>${formatCentralDateTime(transcript.closedAt)}</span></div>
                 <div class="transcript-meta-item"><label>Messages</label><span>${transcript.messageCount || 0}</span></div>
                 <div class="transcript-meta-item"><label>Close Reason</label><span>${escapeHtml(transcript.closeReason || 'Not specified')}</span></div>
             </div>
@@ -2864,7 +2913,7 @@ app.get('/viewer/pvp-logs', staffAuth, async (req, res) => {
             <td>${getTypeTag(log.type)}</td>
             <td>${getLogSummary(log)}</td>
             <td class="hide">${getPlayers(log)}</td>
-            <td>${log.timestamp ? new Date(log.timestamp).toLocaleString() : '—'}</td>
+            <td>${formatCentralDateTime(log.timestamp)}</td>
             <td><a href="/viewer/pvp-log/${log._id}" class="btn-edit">View</a></td>
         </tr>`).join('');
         
@@ -2984,7 +3033,7 @@ ${getHeader('pvp-logs', req.session)}
                         <div class="info-item"><label>Player</label><span>${log.username}</span></div>
                         <div class="info-item"><label>UUID</label><span style="font-family:monospace;font-size:0.85em">${log.uuid}</span></div>
                         <div class="info-item"><label>New Status</label><span class="${log.enabled ? 'status-active' : 'status-inactive'}">${log.enabled ? 'PvP ON' : 'PvP OFF'}</span></div>
-                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                        <div class="info-item"><label>Time</label><span>${formatCentralDateTime(log.timestamp)}</span></div>
                     </div>`;
                 break;
                 
@@ -2998,7 +3047,7 @@ ${getHeader('pvp-logs', req.session)}
                         <div class="info-item"><label>Victim UUID</label><span style="font-family:monospace;font-size:0.85em">${log.victim?.uuid || '—'}</span></div>
                         <div class="info-item"><label>Victim PvP</label><span>${log.victim?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
                         <div class="info-item"><label>Consensual</label><span class="${log.consensual ? 'status-inactive' : 'status-active'}">${log.consensual ? 'Yes' : 'No'}</span></div>
-                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                        <div class="info-item"><label>Time</label><span>${formatCentralDateTime(log.timestamp)}</span></div>
                     </div>`;
                 break;
                 
@@ -3016,7 +3065,7 @@ ${getHeader('pvp-logs', req.session)}
                         <div class="info-item"><label>Total Damage</label><span>${log.total_damage?.toFixed(1) || 0} HP</span></div>
                         <div class="info-item"><label>Total Hits</label><span>${log.total_hits || 0}</span></div>
                         <div class="info-item"><label>Duration</label><span>${log.duration_ms ? (log.duration_ms / 1000).toFixed(1) + 's' : '—'}</span></div>
-                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                        <div class="info-item"><label>Time</label><span>${formatCentralDateTime(log.timestamp)}</span></div>
                     </div>
                     ${log.initiator ? `<div class="info-item" style="margin-top:16px"><label>Fight Initiator</label><span>${log.initiator.username}</span></div>` : ''}`;
                 break;
@@ -3036,7 +3085,7 @@ ${getHeader('pvp-logs', req.session)}
                             <div class="info-item"><label>Session Hits</label><span>${log.session.total_hits || 0}</span></div>
                             <div class="info-item"><label>Consensual</label><span class="${log.session.consensual ? 'status-inactive' : 'status-active'}">${log.session.consensual ? 'Yes' : 'No'}</span></div>
                         ` : ''}
-                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                        <div class="info-item"><label>Time</label><span>${formatCentralDateTime(log.timestamp)}</span></div>
                     </div>
                     ${log.location ? `
                         <div class="info-item" style="margin-top:16px">
@@ -3051,7 +3100,7 @@ ${getHeader('pvp-logs', req.session)}
                         <div class="info-item"><label>Player</label><span>${log.player?.username || 'Unknown'}</span></div>
                         <div class="info-item"><label>UUID</label><span style="font-family:monospace;font-size:0.85em">${log.player?.uuid || '—'}</span></div>
                         <div class="info-item"><label>PvP Status</label><span>${log.player?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
-                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                        <div class="info-item"><label>Time</label><span>${formatCentralDateTime(log.timestamp)}</span></div>
                     </div>
                     ${log.location ? `
                         <div class="info-item" style="margin-top:16px">
@@ -3068,7 +3117,7 @@ ${getHeader('pvp-logs', req.session)}
                         <div class="info-item"><label>Victim</label><span>${log.victim?.username || 'Unknown'}</span></div>
                         <div class="info-item"><label>Victim PvP</label><span>${log.victim?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
                         <div class="info-item"><label>Damage Attempted</label><span>${log.damage?.toFixed(1) || 0} HP</span></div>
-                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                        <div class="info-item"><label>Time</label><span>${formatCentralDateTime(log.timestamp)}</span></div>
                     </div>`;
                 break;
                 
@@ -3078,7 +3127,7 @@ ${getHeader('pvp-logs', req.session)}
                         <div class="info-item"><label>Player</label><span>${log.username}</span></div>
                         <div class="info-item"><label>UUID</label><span style="font-family:monospace;font-size:0.85em">${log.uuid}</span></div>
                         <div class="info-item"><label>Cause</label><span>${log.cause || 'Unknown'}</span></div>
-                        <div class="info-item"><label>Time</label><span>${new Date(log.timestamp).toLocaleString()}</span></div>
+                        <div class="info-item"><label>Time</label><span>${formatCentralDateTime(log.timestamp)}</span></div>
                     </div>`;
                 break;
                 
@@ -3144,7 +3193,7 @@ app.get('/viewer/my-transcripts', userAuth, async (req, res) => {
                 transcriptsHtml += `<div class="case-detail" style="margin-bottom:16px">
                     <h2>${getTypeTag(t.ticketType)} ${escapeHtml(t.ticketName || 'Untitled')}</h2>
                     <div class="info-grid">
-                        <div class="info-item"><label>Closed</label><span>${t.closedAt ? new Date(t.closedAt).toLocaleString() : '—'}</span></div>
+                        <div class="info-item"><label>Closed</label><span>${t.closedAt ? formatCentralDateTime(t.closedAt) : '—'}</span></div>
                         <div class="info-item"><label>Closed By</label><span>${escapeHtml(t.closedByTag || 'Unknown')}</span></div>
                         <div class="info-item"><label>Messages</label><span>${t.messageCount || 0}</span></div>
                     </div>
@@ -3319,8 +3368,8 @@ ${getUserHeader('my-transcripts', req.session)}
             <h2>${escapeHtml(transcript.ticketName)} <span class="ticket-type-tag ${typeTagClass}">${transcript.ticketType || 'Unknown'}</span></h2>
             <div class="transcript-meta">
                 <div class="transcript-meta-item"><label>Closed By</label><span>${escapeHtml(transcript.closedByTag || 'Unknown')}</span></div>
-                <div class="transcript-meta-item"><label>Created</label><span>${transcript.createdAt ? new Date(transcript.createdAt).toLocaleString() : '—'}</span></div>
-                <div class="transcript-meta-item"><label>Closed</label><span>${transcript.closedAt ? new Date(transcript.closedAt).toLocaleString() : '—'}</span></div>
+                <div class="transcript-meta-item"><label>Created</label><span>${transcript.createdAt ? formatCentralDateTime(transcript.createdAt) : '—'}</span></div>
+                <div class="transcript-meta-item"><label>Closed</label><span>${transcript.closedAt ? formatCentralDateTime(transcript.closedAt) : '—'}</span></div>
                 <div class="transcript-meta-item"><label>Messages</label><span>${transcript.messageCount || 0}</span></div>
                 <div class="transcript-meta-item"><label>Close Reason</label><span>${escapeHtml(transcript.closeReason || 'Not specified')}</span></div>
             </div>
@@ -3659,6 +3708,378 @@ app.post('/api/kick/notify', async (req, res) => {
         return res.json({ success: true, message: 'Kick recorded - player cannot rejoin for 30 minutes' });
     } catch (error) {
         console.error('Kick Notify API Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// =====================================================
+// ANALYTICS API ENDPOINTS
+// =====================================================
+
+const PlayerConnection = require('../database/models/PlayerConnection');
+const AltGroup = require('../database/models/AltGroup');
+const PlayerAnalytics = require('../database/models/PlayerAnalytics');
+const ServerTps = require('../database/models/ServerTps');
+const ChunkAnalytics = require('../database/models/ChunkAnalytics');
+const LagAlert = require('../database/models/LagAlert');
+const PlayerImpact = require('../database/models/PlayerImpact');
+
+// Analytics API Key validation
+const ANALYTICS_API_KEY = process.env.ANALYTICS_API_KEY || process.env.LINK_API_KEY;
+
+function validateAnalyticsKey(req, res, next) {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'Missing authorization header' });
+    }
+    
+    const token = authHeader.substring(7);
+    if (token !== ANALYTICS_API_KEY) {
+        return res.status(403).json({ success: false, error: 'Invalid API key' });
+    }
+    
+    next();
+}
+
+// Hash IP for privacy
+function hashIp(ip) {
+    return crypto.createHash('sha256').update(ip + (process.env.IP_SALT || 'newlife')).digest('hex').substring(0, 16);
+}
+
+// POST /api/analytics/connection - Log player connection
+app.post('/api/analytics/connection', validateAnalyticsKey, async (req, res) => {
+    try {
+        const { uuid, username, ip, server, type, sessionDuration, ping } = req.body;
+        
+        if (!uuid || !username || !ip) {
+            return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+        
+        const ipHash = hashIp(ip);
+        
+        // Store connection
+        await PlayerConnection.create({
+            uuid,
+            username,
+            ip,
+            ipHash,
+            server: server || 'proxy',
+            type: type || 'join',
+            sessionDuration: sessionDuration || 0,
+            ping: ping || 0
+        });
+        
+        // Update player analytics
+        const updateData = {
+            $set: { username, lastSeen: new Date() },
+            $setOnInsert: { firstSeen: new Date() },
+            $inc: { connectionCount: 1 }
+        };
+        
+        if (sessionDuration) {
+            updateData.$inc.totalPlaytime = sessionDuration;
+            updateData.$inc.sessionCount = 1;
+        }
+        
+        await PlayerAnalytics.findOneAndUpdate(
+            { uuid },
+            updateData,
+            { upsert: true }
+        );
+        
+        // Check for ALTs and emit event to Discord bot
+        if (type === 'join' && global.discordClient) {
+            const sameIpAccounts = await PlayerConnection.aggregate([
+                { $match: { ipHash, uuid: { $ne: uuid } } },
+                { $group: { _id: '$uuid', username: { $last: '$username' }, count: { $sum: 1 } } }
+            ]);
+            
+            if (sameIpAccounts.length > 0) {
+                // Check if already flagged
+                const existing = await AltGroup.findOne({
+                    $or: [
+                        { primaryUuid: uuid },
+                        { 'linkedAccounts.uuid': uuid }
+                    ]
+                });
+                
+                if (!existing) {
+                    // Calculate risk score
+                    let riskScore = 30 + Math.min(sameIpAccounts.length * 15, 40);
+                    riskScore = Math.min(riskScore, 100);
+                    
+                    const altGroup = await AltGroup.create({
+                        primaryUuid: uuid,
+                        primaryUsername: username,
+                        linkedAccounts: sameIpAccounts.map(a => ({
+                            uuid: a._id,
+                            username: a.username
+                        })),
+                        sharedIps: [ipHash],
+                        riskScore,
+                        status: 'pending'
+                    });
+                    
+                    // Emit to Discord bot
+                    global.discordClient.emit('analyticsEvent', {
+                        type: 'alt_detected',
+                        altGroup,
+                        newPlayer: { uuid, username },
+                        linkedAccounts: sameIpAccounts
+                    });
+                }
+            }
+        }
+        
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('Analytics Connection Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// POST /api/analytics/tps - Log TPS data
+app.post('/api/analytics/tps', validateAnalyticsKey, async (req, res) => {
+    try {
+        const { server, tps, mspt, loadedChunks, entityCount, playerCount, memoryUsed, memoryMax } = req.body;
+        
+        if (!server || tps === undefined) {
+            return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+        
+        await ServerTps.create({
+            server,
+            tps,
+            mspt: mspt || 0,
+            loadedChunks: loadedChunks || 0,
+            entityCount: entityCount || 0,
+            playerCount: playerCount || 0,
+            memoryUsed: memoryUsed || 0,
+            memoryMax: memoryMax || 0
+        });
+        
+        // Emit TPS alert if low
+        if (tps < 18 && global.discordClient) {
+            global.discordClient.emit('analyticsEvent', {
+                type: 'tps_update',
+                server,
+                tps,
+                mspt,
+                loadedChunks,
+                entityCount,
+                playerCount,
+                memoryUsed,
+                memoryMax
+            });
+        }
+        
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('Analytics TPS Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// POST /api/analytics/chunks - Log chunk scan data
+app.post('/api/analytics/chunks', validateAnalyticsKey, async (req, res) => {
+    try {
+        const { server, chunks } = req.body;
+        
+        if (!server || !chunks || !Array.isArray(chunks)) {
+            return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+        
+        const flaggedChunks = [];
+        
+        for (const chunk of chunks) {
+            const { world, x, z, entities, entityBreakdown, hoppers, redstone, tileEntities, playersNearby } = chunk;
+            
+            let flagged = false;
+            let flagReason = null;
+            
+            if (entities >= 250) {
+                flagged = true;
+                flagReason = `Critical entity count: ${entities}`;
+            } else if (entities >= 100) {
+                flagged = true;
+                flagReason = `High entity count: ${entities}`;
+            } else if (hoppers >= 50) {
+                flagged = true;
+                flagReason = `High hopper count: ${hoppers}`;
+            } else if (redstone >= 100) {
+                flagged = true;
+                flagReason = `High redstone count: ${redstone}`;
+            }
+            
+            await ChunkAnalytics.findOneAndUpdate(
+                { server, world, chunkX: x, chunkZ: z },
+                {
+                    entityCount: entities || 0,
+                    entityBreakdown: entityBreakdown || {},
+                    tileEntityCount: tileEntities || 0,
+                    hopperCount: hoppers || 0,
+                    redstoneCount: redstone || 0,
+                    flagged,
+                    flagReason,
+                    playersNearby: playersNearby || [],
+                    lastUpdated: new Date()
+                },
+                { upsert: true }
+            );
+            
+            if (flagged) {
+                flaggedChunks.push({ ...chunk, flagReason });
+            }
+        }
+        
+        // Emit flagged chunks to Discord
+        if (flaggedChunks.length > 0 && global.discordClient) {
+            global.discordClient.emit('analyticsEvent', {
+                type: 'chunk_scan',
+                server,
+                chunks: flaggedChunks
+            });
+        }
+        
+        return res.json({ success: true, flaggedCount: flaggedChunks.length });
+    } catch (error) {
+        console.error('Analytics Chunks Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// POST /api/analytics/lag-alert - Log lag alert
+app.post('/api/analytics/lag-alert', validateAnalyticsKey, async (req, res) => {
+    try {
+        const { server, type, severity, location, details, playerNearby, metrics } = req.body;
+        
+        if (!server || !type || !details) {
+            return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+        
+        const alert = await LagAlert.create({
+            server,
+            type,
+            severity: severity || 'medium',
+            location,
+            details,
+            playerNearby,
+            metrics
+        });
+        
+        // Emit to Discord
+        if (global.discordClient) {
+            global.discordClient.emit('analyticsEvent', {
+                type: 'lag_alert',
+                ...alert.toObject()
+            });
+        }
+        
+        return res.json({ success: true, alertId: alert._id });
+    } catch (error) {
+        console.error('Analytics Lag Alert Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// POST /api/analytics/player-impact - Log player impact
+app.post('/api/analytics/player-impact', validateAnalyticsKey, async (req, res) => {
+    try {
+        const data = req.body;
+        
+        if (!data.uuid || !data.username || !data.server) {
+            return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+        
+        await PlayerImpact.create(data);
+        
+        return res.json({ success: true });
+    } catch (error) {
+        console.error('Analytics Player Impact Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// GET /api/analytics/player/:uuid - Get player analytics
+app.get('/api/analytics/player/:uuid', validateAnalyticsKey, async (req, res) => {
+    try {
+        const { uuid } = req.params;
+        
+        const analytics = await PlayerAnalytics.findOne({ uuid });
+        const altGroup = await AltGroup.findOne({
+            $or: [{ primaryUuid: uuid }, { 'linkedAccounts.uuid': uuid }]
+        });
+        
+        return res.json({
+            success: true,
+            analytics,
+            altGroup
+        });
+    } catch (error) {
+        console.error('Analytics Player Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// GET /api/analytics/alts/pending - Get pending ALT reviews
+app.get('/api/analytics/alts/pending', validateAnalyticsKey, async (req, res) => {
+    try {
+        const pending = await AltGroup.find({ status: 'pending' }).sort({ riskScore: -1 }).limit(50);
+        return res.json({ success: true, alts: pending });
+    } catch (error) {
+        console.error('Analytics Alts Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// GET /api/analytics/server/:server/tps - Get TPS history
+app.get('/api/analytics/server/:server/tps', validateAnalyticsKey, async (req, res) => {
+    try {
+        const { server } = req.params;
+        const hours = parseInt(req.query.hours) || 1;
+        
+        const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+        const tpsData = await ServerTps.find({
+            server,
+            timestamp: { $gte: since }
+        }).sort({ timestamp: -1 });
+        
+        return res.json({ success: true, data: tpsData });
+    } catch (error) {
+        console.error('Analytics TPS History Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// GET /api/analytics/server/:server/chunks/problem - Get problem chunks
+app.get('/api/analytics/server/:server/chunks/problem', validateAnalyticsKey, async (req, res) => {
+    try {
+        const { server } = req.params;
+        
+        const problemChunks = await ChunkAnalytics.find({
+            server,
+            flagged: true
+        }).sort({ entityCount: -1 }).limit(20);
+        
+        return res.json({ success: true, chunks: problemChunks });
+    } catch (error) {
+        console.error('Analytics Problem Chunks Error:', error);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// GET /api/analytics/alerts - Get active alerts
+app.get('/api/analytics/alerts', validateAnalyticsKey, async (req, res) => {
+    try {
+        const server = req.query.server;
+        const query = { resolved: false };
+        if (server) query.server = server;
+        
+        const alerts = await LagAlert.find(query).sort({ timestamp: -1 }).limit(50);
+        return res.json({ success: true, alerts });
+    } catch (error) {
+        console.error('Analytics Alerts Error:', error);
         return res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });

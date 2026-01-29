@@ -1,0 +1,9 @@
+{
+  "id": "newlife-analytics",
+  "name": "NewLife Analytics",
+  "version": "1.0.0",
+  "description": "ALT detection and connection analytics for NewLife SMP",
+  "authors": ["NewLife SMP"],
+  "main": "com.newlife.analytics.NewLifeAnalytics",
+  "dependencies": []
+}

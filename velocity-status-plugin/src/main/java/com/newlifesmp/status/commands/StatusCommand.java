@@ -43,7 +43,10 @@ public class StatusCommand implements CommandExecutor, TabCompleter {
 
         PlayerDataManager.PlayerData data = plugin.getDataManager().getPlayerData(uuid);
         if (data == null) {
-            data = new PlayerDataManager.PlayerData(uuid.toString(), false, "none", 0);
+            data = new PlayerDataManager.PlayerData(uuid.toString(), player.getName(), false, "none", 0);
+        } else {
+            // Always update username in case it changed
+            data.setUsername(player.getName());
         }
 
         switch (status) {

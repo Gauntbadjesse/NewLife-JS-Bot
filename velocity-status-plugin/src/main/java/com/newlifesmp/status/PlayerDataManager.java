@@ -72,12 +72,14 @@ public class PlayerDataManager {
 
     public static class PlayerData {
         private String uuid;
+        private String username;
         private boolean pvpEnabled;
         private String status;
         private long pvpCooldownUntil;
 
-        public PlayerData(String uuid, boolean pvpEnabled, String status, long pvpCooldownUntil) {
+        public PlayerData(String uuid, String username, boolean pvpEnabled, String status, long pvpCooldownUntil) {
             this.uuid = uuid;
+            this.username = username;
             this.pvpEnabled = pvpEnabled;
             this.status = status;
             this.pvpCooldownUntil = pvpCooldownUntil;
@@ -85,6 +87,14 @@ public class PlayerDataManager {
 
         public String getUuid() {
             return uuid;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
         }
 
         public boolean isPvpEnabled() {

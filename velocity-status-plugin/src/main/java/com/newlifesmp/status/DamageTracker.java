@@ -59,6 +59,19 @@ public class DamageTracker {
         if (session.getInitiatorUUID() == null) {
             session.setInitiator(attacker.getUniqueId(), attacker.getName());
         }
+        
+        // CRITICAL: Capture PvP status at time of damage, not at session end
+        // This ensures we log the status that was active DURING the fight
+        PlayerDataManager dataManager = plugin.getPlayerDataManager();
+        PlayerDataManager.PlayerData attackerData = dataManager.getPlayerData(attacker.getUniqueId());
+        PlayerDataManager.PlayerData victimData = dataManager.getPlayerData(victim.getUniqueId());
+        
+        boolean attackerPvpEnabled = attackerData != null && attackerData.isPvpEnabled();
+        boolean victimPvpEnabled = victimData != null && victimData.isPvpEnabled();
+        
+        // Store PvP status (only stores on first damage event for each player)
+        session.storePvpStatus(attacker.getUniqueId(), attackerPvpEnabled);
+        session.storePvpStatus(victim.getUniqueId(), victimPvpEnabled);
 
         // Add damage event to session
         session.addDamageEvent(attacker.getUniqueId(), damage, victimHealthAfter, victim.getUniqueId());
@@ -175,21 +188,41 @@ public class DamageTracker {
      * Log a damage session to Discord
      */
     private void logSession(DamageSession session) {
-        // Check if at least one player had PvP disabled
-        PlayerDataManager dataManager = plugin.getPlayerDataManager();
-        
+        // Use PvP status captured AT THE TIME OF THE FIGHT, not current status
+        // This is critical for accuracy - player may have toggled PvP after the fight
         UUID player1UUID = session.getPlayer1UUID();
         UUID player2UUID = session.getPlayer2UUID();
         
-        PlayerDataManager.PlayerData data1 = dataManager.getPlayerData(player1UUID);
-        PlayerDataManager.PlayerData data2 = dataManager.getPlayerData(player2UUID);
+        // Get stored PvP status from when the fight actually happened
+        Boolean player1PvpStored = session.getPlayer1PvpEnabledAtStart();
+        Boolean player2PvpStored = session.getPlayer2PvpEnabledAtStart();
         
-        boolean player1PvpEnabled = data1 != null && data1.isPvpEnabled();
-        boolean player2PvpEnabled = data2 != null && data2.isPvpEnabled();
+        // Fallback to current status only if stored status is null (should not happen normally)
+        boolean player1PvpEnabled;
+        boolean player2PvpEnabled;
         
-        // Only log if at least one player had PvP disabled
+        if (player1PvpStored != null && player2PvpStored != null) {
+            // Use stored status (captured during the fight)
+            player1PvpEnabled = player1PvpStored;
+            player2PvpEnabled = player2PvpStored;
+            logger.info(String.format("Using stored PvP status - %s: %s, %s: %s",
+                session.getPlayer1Name(), player1PvpEnabled,
+                session.getPlayer2Name(), player2PvpEnabled));
+        } else {
+            // Fallback to current status (should rarely happen)
+            PlayerDataManager dataManager = plugin.getPlayerDataManager();
+            PlayerDataManager.PlayerData data1 = dataManager.getPlayerData(player1UUID);
+            PlayerDataManager.PlayerData data2 = dataManager.getPlayerData(player2UUID);
+            player1PvpEnabled = data1 != null && data1.isPvpEnabled();
+            player2PvpEnabled = data2 != null && data2.isPvpEnabled();
+            logger.warning(String.format("Using fallback current PvP status (stored was null) - %s: %s, %s: %s",
+                session.getPlayer1Name(), player1PvpEnabled,
+                session.getPlayer2Name(), player2PvpEnabled));
+        }
+        
+        // Only log if at least one player had PvP disabled during the fight
         if (player1PvpEnabled && player2PvpEnabled) {
-            logger.info("Skipping damage session log - both players had PvP enabled");
+            logger.info("Skipping damage session log - both players had PvP enabled during fight");
             return;
         }
 
@@ -275,6 +308,10 @@ public class DamageTracker {
         // Track who initiated the fight
         private UUID initiatorUUID;
         private String initiatorName;
+        
+        // Store PvP status at time of combat (captured when first damage occurs)
+        private Boolean player1PvpEnabledAtStart;
+        private Boolean player2PvpEnabledAtStart;
 
         public DamageSession(UUID player1UUID, String player1Name, UUID player2UUID, String player2Name) {
             this.player1UUID = player1UUID;
@@ -284,6 +321,8 @@ public class DamageTracker {
             this.startTime = System.currentTimeMillis();
             this.lastDamageTime = startTime;
             this.damageEvents = new ArrayList<>();
+            this.player1PvpEnabledAtStart = null;
+            this.player2PvpEnabledAtStart = null;
         }
         
         public void setInitiator(UUID uuid, String name) {
@@ -297,6 +336,25 @@ public class DamageTracker {
         
         public String getInitiatorName() {
             return initiatorName;
+        }
+        
+        /**
+         * Store PvP status for a player at the time of combat
+         */
+        public void storePvpStatus(UUID playerUUID, boolean pvpEnabled) {
+            if (playerUUID.equals(player1UUID) && player1PvpEnabledAtStart == null) {
+                player1PvpEnabledAtStart = pvpEnabled;
+            } else if (playerUUID.equals(player2UUID) && player2PvpEnabledAtStart == null) {
+                player2PvpEnabledAtStart = pvpEnabled;
+            }
+        }
+        
+        public Boolean getPlayer1PvpEnabledAtStart() {
+            return player1PvpEnabledAtStart;
+        }
+        
+        public Boolean getPlayer2PvpEnabledAtStart() {
+            return player2PvpEnabledAtStart;
         }
 
         public void addDamageEvent(UUID attackerUUID, double damage, double victimHealthAfter, UUID victimUUID) {
