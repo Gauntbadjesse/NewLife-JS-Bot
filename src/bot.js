@@ -904,6 +904,16 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 });
 
+// Analytics Event Logging - Handle analytics alerts from the API
+client.on('analyticsEvent', async (data) => {
+    try {
+        const { handleAnalyticsEvent } = require('./cogs/discordLogger');
+        await handleAnalyticsEvent(data, client);
+    } catch (e) {
+        console.error('[AnalyticsEvent] Failed to handle analytics event:', e);
+    }
+});
+
 // Reaction Role Events - Handle reactions for reaction roles
 client.on('messageReactionAdd', async (reaction, user) => {
     try {

@@ -4318,9 +4318,11 @@ app.post('/api/analytics/connection', validateAnalyticsKey, async (req, res) => 
                     // Emit to Discord bot
                     global.discordClient.emit('analyticsEvent', {
                         type: 'alt_detected',
-                        altGroup,
-                        newPlayer: { uuid, username },
-                        linkedAccounts: sameIpAccounts
+                        primaryUuid: uuid,
+                        primaryUsername: username,
+                        linkedAccounts: sameIpAccounts.map(a => ({ uuid: a._id, username: a.username })),
+                        riskScore,
+                        detectionReason: `Same IP hash detected across ${sameIpAccounts.length + 1} accounts`
                     });
                 }
             }

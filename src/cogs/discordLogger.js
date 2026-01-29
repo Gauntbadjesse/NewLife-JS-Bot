@@ -640,6 +640,168 @@ async function handleVoiceStateUpdate(oldState, newState, client) {
     }
 }
 
+// =====================================================
+// ANALYTICS ALERT LOGGING
+// =====================================================
+
+const ANALYTICS_ALERT_CHANNEL_ID = '1466308624862286079';
+
+/**
+ * Get the analytics alert channel
+ */
+async function getAnalyticsChannel(client) {
+    try {
+        return await client.channels.fetch(ANALYTICS_ALERT_CHANNEL_ID).catch(() => null);
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Handle analytics events (TPS drops, lag alerts, problem chunks)
+ */
+async function handleAnalyticsEvent(data, client) {
+    const alertChannel = await getAnalyticsChannel(client);
+    if (!alertChannel) return;
+    
+    try {
+        let embed;
+        
+        switch (data.type) {
+            case 'tps_update': {
+                // Only alert for significant TPS drops
+                if (data.tps >= 18) return;
+                
+                const severity = data.tps < 15 ? 'CRITICAL' : 'WARNING';
+                const color = data.tps < 15 ? 0xef4444 : 0xf59e0b;
+                const emoji = data.tps < 15 ? '🔴' : '🟡';
+                
+                embed = new EmbedBuilder()
+                    .setColor(color)
+                    .setTitle(`${emoji} TPS Drop Detected - ${severity}`)
+                    .setDescription(`Server **${data.server}** is experiencing performance issues.`)
+                    .addFields(
+                        { name: 'TPS', value: `\`${data.tps?.toFixed(2) || '?'}\``, inline: true },
+                        { name: 'MSPT', value: `\`${data.mspt?.toFixed(2) || '?'}ms\``, inline: true },
+                        { name: 'Players', value: `\`${data.playerCount || 0}\``, inline: true },
+                        { name: 'Entities', value: `\`${data.entityCount || 0}\``, inline: true },
+                        { name: 'Chunks', value: `\`${data.loadedChunks || 0}\``, inline: true },
+                        { name: 'Memory', value: data.memoryUsed && data.memoryMax 
+                            ? `\`${Math.round(data.memoryUsed / 1024 / 1024)}MB / ${Math.round(data.memoryMax / 1024 / 1024)}MB\`` 
+                            : 'N/A', inline: true }
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: 'Server Analytics' });
+                break;
+            }
+            
+            case 'chunk_scan': {
+                if (!data.chunks || data.chunks.length === 0) return;
+                
+                // Group by severity
+                const critical = data.chunks.filter(c => c.entities >= 250 || c.hoppers >= 50);
+                const warning = data.chunks.filter(c => c.entities >= 100 && c.entities < 250);
+                
+                const chunkList = data.chunks.slice(0, 5).map(c => {
+                    const players = c.playersNearby?.length > 0 
+                        ? `👤 ${c.playersNearby.join(', ')}` 
+                        : 'No players nearby';
+                    return `**${c.world} @ ${c.x}, ${c.z}**\n` +
+                           `└ ${c.flagReason}\n` +
+                           `└ 🐄 ${c.entities || 0} entities | 📦 ${c.hoppers || 0} hoppers | ⚡ ${c.redstone || 0} redstone\n` +
+                           `└ ${players}`;
+                }).join('\n\n');
+                
+                embed = new EmbedBuilder()
+                    .setColor(critical.length > 0 ? 0xef4444 : 0xf59e0b)
+                    .setTitle(`🧱 Problem Chunks Detected - ${data.server}`)
+                    .setDescription(`Found **${data.chunks.length}** flagged chunks that may cause lag.\n\n${chunkList}`)
+                    .setTimestamp()
+                    .setFooter({ text: 'Server Analytics • Chunk Scanner' });
+                
+                if (data.chunks.length > 5) {
+                    embed.addFields({ 
+                        name: 'Additional Chunks', 
+                        value: `... and ${data.chunks.length - 5} more flagged chunks. Check /chunks problem for full list.`,
+                        inline: false 
+                    });
+                }
+                break;
+            }
+            
+            case 'lag_alert': {
+                const severityColors = { critical: 0xef4444, high: 0xf59e0b, medium: 0xfbbf24, low: 0x3b82f6 };
+                const severityEmojis = { critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' };
+                const sev = data.severity || 'medium';
+                
+                embed = new EmbedBuilder()
+                    .setColor(severityColors[sev] || 0xf59e0b)
+                    .setTitle(`${severityEmojis[sev] || '⚠️'} Lag Alert - ${sev.toUpperCase()}`)
+                    .setDescription(`**Type:** ${data.type || 'Unknown'}\n**Server:** ${data.server}`)
+                    .addFields({ name: 'Details', value: data.details || 'No details provided', inline: false })
+                    .setTimestamp()
+                    .setFooter({ text: 'Server Analytics • Lag Monitor' });
+                
+                if (data.location) {
+                    embed.addFields({ 
+                        name: 'Location', 
+                        value: `World: ${data.location.world || '?'}\nCoords: ${data.location.x || '?'}, ${data.location.y || '?'}, ${data.location.z || '?'}`, 
+                        inline: true 
+                    });
+                }
+                
+                if (data.playerNearby) {
+                    const players = Array.isArray(data.playerNearby) ? data.playerNearby : [data.playerNearby];
+                    if (players.length > 0) {
+                        embed.addFields({ 
+                            name: '👤 Players Nearby', 
+                            value: players.join(', ') || 'None',
+                            inline: true 
+                        });
+                    }
+                }
+                
+                if (data.metrics) {
+                    const metricsText = Object.entries(data.metrics)
+                        .map(([k, v]) => `${k}: ${v}`)
+                        .join(' | ');
+                    embed.addFields({ name: 'Metrics', value: `\`${metricsText}\``, inline: false });
+                }
+                break;
+            }
+            
+            case 'alt_detected': {
+                embed = new EmbedBuilder()
+                    .setColor(0xf59e0b)
+                    .setTitle('⚠️ Potential ALT Account Detected')
+                    .setDescription(`A new account may be an ALT of an existing player.`)
+                    .addFields(
+                        { name: 'Primary Account', value: data.primaryUsername || data.primaryUuid?.substring(0, 8) || 'Unknown', inline: true },
+                        { name: 'Linked Accounts', value: data.linkedAccounts?.map(a => a.username).join(', ') || 'None', inline: true },
+                        { name: 'Risk Score', value: `${data.riskScore || 0}/100`, inline: true }
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: 'Server Analytics • ALT Detection' });
+                
+                if (data.detectionReason) {
+                    embed.addFields({ name: 'Detection Reason', value: data.detectionReason, inline: false });
+                }
+                break;
+            }
+            
+            default:
+                // Unknown event type, skip
+                return;
+        }
+        
+        if (embed) {
+            await alertChannel.send({ embeds: [embed] });
+        }
+    } catch (e) {
+        console.error('[DiscordLogger] Failed to log analytics event:', e);
+    }
+}
+
 module.exports = {
     name: 'DiscordLogger',
     handleMemberLeave,
@@ -653,5 +815,6 @@ module.exports = {
     handleMemberUnban,
     handleMemberJoin,
     handleBulkMessageDelete,
-    handleVoiceStateUpdate
+    handleVoiceStateUpdate,
+    handleAnalyticsEvent
 };
