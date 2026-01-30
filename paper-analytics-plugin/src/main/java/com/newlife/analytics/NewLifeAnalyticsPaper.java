@@ -32,8 +32,8 @@ public class NewLifeAnalyticsPaper extends JavaPlugin {
     private final Map<String, Integer> pistonActivity = new ConcurrentHashMap<>();
     
     // Thresholds
-    private int entityWarning = 100;
-    private int entityCritical = 250;
+    private int entityWarning = 50;
+    private int entityCritical = 150;
     private int hopperWarning = 50;
     private int redstoneWarning = 100;
     private double tpsAlertThreshold = 18.0;
@@ -41,7 +41,7 @@ public class NewLifeAnalyticsPaper extends JavaPlugin {
     
     // Scan intervals (in ticks)
     private int tpsInterval = 20;       // 1 second
-    private int chunkScanInterval = 6000; // 5 minutes
+    private int chunkScanInterval = 1200; // 1 minute (was 5 mins)
     private int tpsReportInterval = 60;   // 3 seconds (report to API)
 
     @Override
@@ -103,15 +103,15 @@ public class NewLifeAnalyticsPaper extends JavaPlugin {
         config.addDefault("server.name", "main");
         config.addDefault("debug", false);
         
-        config.addDefault("thresholds.entity.warning", 100);
-        config.addDefault("thresholds.entity.critical", 250);
+        config.addDefault("thresholds.entity.warning", 50);
+        config.addDefault("thresholds.entity.critical", 150);
         config.addDefault("thresholds.hopper.warning", 50);
         config.addDefault("thresholds.redstone.warning", 100);
         config.addDefault("thresholds.tps.alert", 18.0);
         config.addDefault("thresholds.tps.critical", 15.0);
         
         config.addDefault("intervals.tps", 20);
-        config.addDefault("intervals.chunkScan", 6000);
+        config.addDefault("intervals.chunkScan", 1200);
         config.addDefault("intervals.tpsReport", 60);
         
         config.options().copyDefaults(true);
@@ -218,6 +218,8 @@ public class NewLifeAnalyticsPaper extends JavaPlugin {
                 sendLagAlert("tps_drop", "critical", 
                     String.format("Critical TPS drop: %.2f (threshold: %.2f)", currentTps, tpsCriticalThreshold),
                     null, null);
+                // Trigger immediate chunk scan when TPS is critical
+                Bukkit.getScheduler().runTask(NewLifeAnalyticsPaper.this, () -> scanChunks());
             } else if (currentTps < tpsAlertThreshold) {
                 sendLagAlert("tps_drop", "high",
                     String.format("TPS warning: %.2f (threshold: %.2f)", currentTps, tpsAlertThreshold),

@@ -91,3 +91,13 @@ PVP_API_KEY=yhweiughwiufheowinfdoweihfoweih9832597gr8974tg97fg9h3h49f
 # Analytics API Configuration (for Paper and Velocity analytics plugins)
 ANALYTICS_API_KEY=your-analytics-api-key-here
 ANALYTICS_API_PORT=3002
+
+# Analytics Alert Channels (Discord logging)
+# Channel where TPS alerts, lag alerts, and problem chunk alerts are posted
+LAG_ALERTS_CHANNEL_ID=
+
+# Channel where ALT detection alerts are posted (can be same as LAG_ALERTS_CHANNEL_ID)
+ALT_ALERTS_CHANNEL_ID=
+
+# Optional: Salt for IP hashing (for privacy when storing connection data)
+IP_SALT=newlife

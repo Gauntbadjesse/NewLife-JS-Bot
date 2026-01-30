@@ -3766,6 +3766,8 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
             .limit(500)
             .lean();
         
+        console.log(`[Analytics Dashboard] Found ${tpsData.length} TPS records in last 24h`);
+        
         const hasData = tpsData.length > 0;
         
         // Get pending ALT reviews
@@ -3902,21 +3904,13 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
             }
         }
         
-        // Build TPS chart data (last 6 hours)
-        const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
-        const chartData = tpsData
-            .filter(t => new Date(t.timestamp).getTime() > sixHoursAgo)
+        // Build TPS chart data (all data from last 24 hours, frontend will filter by selected range)
+        const allChartData = tpsData
             .reverse()
             .map(t => ({ time: new Date(t.timestamp).getTime(), tps: t.tps, server: t.server }));
         
-        // Prepare chart labels (formatted times)
-        const chartLabels = chartData.map(d => {
-            const date = new Date(d.time);
-            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Chicago' });
-        });
-        
         // Group by server for multi-line chart
-        const servers = [...new Set(chartData.map(d => d.server))];
+        const servers = [...new Set(allChartData.map(d => d.server))];
         const serverColors = { 'main': '#8b5cf6', 'hub': '#22c55e', 'creative': '#f59e0b', 'survival': '#3b82f6' };
         
         res.setHeader('Content-Type', 'text/html');
@@ -3940,6 +3934,9 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
         .chart-title { margin: 0; color: #e5e7eb; font-size: 1.1em; }
         .chart-wrapper { position: relative; height: 280px; }
+        .range-btn { background: #2d2d35; border: none; color: #9ca3af; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85em; transition: all 0.2s; }
+        .range-btn:hover { background: #3d3d45; color: #e5e7eb; }
+        .range-btn.active { background: #8b5cf6; color: #fff; }
         .section-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
         @media (max-width: 900px) { .section-grid { grid-template-columns: 1fr; } }
         .section-card { background: #18181b; border-radius: 16px; padding: 20px; border: 1px solid #2d2d35; }
@@ -4000,9 +3997,18 @@ ${getHeader('analytics', session)}
     <!-- TPS Chart -->
     <div class="chart-container">
         <div class="chart-header">
-            <h3 class="chart-title">TPS History (Last 6 Hours)</h3>
-            <div style="display:flex;gap:16px;font-size:0.8em">
-                ${servers.map(s => `<span style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:3px;background:${serverColors[s] || '#8b5cf6'}"></span>${s}</span>`).join('')}
+            <h3 class="chart-title">TPS History</h3>
+            <div style="display:flex;align-items:center;gap:24px">
+                <div class="time-range-selector" style="display:flex;gap:8px">
+                    <button class="range-btn active" data-range="1">1h</button>
+                    <button class="range-btn" data-range="3">3h</button>
+                    <button class="range-btn" data-range="6">6h</button>
+                    <button class="range-btn" data-range="12">12h</button>
+                    <button class="range-btn" data-range="24">24h</button>
+                </div>
+                <div style="display:flex;gap:16px;font-size:0.8em">
+                    ${servers.map(s => `<span style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:3px;background:${serverColors[s] || '#8b5cf6'}"></span>${s}</span>`).join('')}
+                </div>
             </div>
         </div>
         <div class="chart-wrapper">
@@ -4049,102 +4055,159 @@ ${getHeader('analytics', session)}
 
 <script>
 (function() {
-    const rawData = ${JSON.stringify(chartData)};
+    const allData = ${JSON.stringify(allChartData)};
     const servers = ${JSON.stringify(servers)};
     const serverColors = ${JSON.stringify(serverColors)};
     
-    if (rawData.length === 0) {
-        document.getElementById('tpsChart').parentElement.innerHTML = '<div class="empty-state">No TPS data available for the last 6 hours</div>';
+    const chartContainer = document.getElementById('tpsChart');
+    if (!chartContainer) {
+        console.error('Chart container not found');
         return;
     }
     
-    // Create time buckets (every 5 minutes) for smoother chart
-    const bucketSize = 5 * 60 * 1000; // 5 minutes
-    const now = Date.now();
-    const sixHoursAgo = now - 6 * 60 * 60 * 1000;
+    let tpsChart = null;
+    let currentRange = 1; // Default 1 hour
     
-    // Create labels for every 30 mins
-    const labels = [];
-    for (let t = sixHoursAgo; t <= now; t += 30 * 60 * 1000) {
-        const d = new Date(t);
-        labels.push(d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Chicago' }));
-    }
-    
-    // Build datasets per server
-    const datasets = servers.map(server => {
-        const serverData = rawData.filter(d => d.server === server);
+    function buildChart(hours) {
+        const now = Date.now();
+        const rangeStart = now - hours * 60 * 60 * 1000;
         
-        // Map data to label indices
-        const dataPoints = new Array(labels.length).fill(null);
-        serverData.forEach(d => {
-            const idx = Math.round((d.time - sixHoursAgo) / (30 * 60 * 1000));
-            if (idx >= 0 && idx < labels.length) {
-                if (dataPoints[idx] === null) {
-                    dataPoints[idx] = d.tps;
-                } else {
-                    dataPoints[idx] = (dataPoints[idx] + d.tps) / 2; // Average if multiple
-                }
+        // Filter data for selected range
+        const rawData = allData.filter(d => d.time >= rangeStart);
+        
+        if (rawData.length === 0) {
+            chartContainer.parentElement.innerHTML = '<div class="empty-state" style="padding:60px;color:#6b7280">No TPS data available for selected time range</div>';
+            return;
+        }
+        
+        // Dynamic interval based on range
+        let intervalMs, labelInterval;
+        if (hours <= 1) {
+            intervalMs = 1 * 60 * 1000; // 1 min intervals
+            labelInterval = 10; // Label every 10 intervals (10 mins)
+        } else if (hours <= 3) {
+            intervalMs = 2 * 60 * 1000; // 2 min intervals
+            labelInterval = 15; // Label every 15 intervals (30 mins)
+        } else if (hours <= 6) {
+            intervalMs = 5 * 60 * 1000; // 5 min intervals
+            labelInterval = 6; // Label every 6 intervals (30 mins)
+        } else if (hours <= 12) {
+            intervalMs = 10 * 60 * 1000; // 10 min intervals
+            labelInterval = 6; // Label every 6 intervals (1 hour)
+        } else {
+            intervalMs = 15 * 60 * 1000; // 15 min intervals
+            labelInterval = 4; // Label every 4 intervals (1 hour)
+        }
+        
+        const intervals = Math.ceil((now - rangeStart) / intervalMs);
+        
+        // Create time labels
+        const labels = [];
+        for (let i = 0; i <= intervals; i++) {
+            const t = rangeStart + (i * intervalMs);
+            const d = new Date(t);
+            if (i % labelInterval === 0) {
+                labels.push(d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Chicago' }));
+            } else {
+                labels.push('');
             }
+        }
+        
+        // Build datasets per server
+        const datasets = servers.map(server => {
+            const serverData = rawData.filter(d => d.server === server);
+            const dataPoints = new Array(intervals + 1).fill(null);
+            
+            serverData.forEach(d => {
+                const intervalIdx = Math.floor((d.time - rangeStart) / intervalMs);
+                if (intervalIdx >= 0 && intervalIdx <= intervals) {
+                    if (dataPoints[intervalIdx] === null) {
+                        dataPoints[intervalIdx] = d.tps;
+                    } else {
+                        dataPoints[intervalIdx] = (dataPoints[intervalIdx] + d.tps) / 2;
+                    }
+                }
+            });
+            
+            return {
+                label: server.charAt(0).toUpperCase() + server.slice(1),
+                data: dataPoints,
+                borderColor: serverColors[server] || '#8b5cf6',
+                backgroundColor: (serverColors[server] || '#8b5cf6') + '20',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                spanGaps: true
+            };
         });
         
-        return {
-            label: server.charAt(0).toUpperCase() + server.slice(1),
-            data: dataPoints,
-            borderColor: serverColors[server] || '#8b5cf6',
-            backgroundColor: (serverColors[server] || '#8b5cf6') + '15',
-            borderWidth: 2,
-            tension: 0.4,
-            fill: true,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            spanGaps: true
-        };
-    });
-    
-    const ctx = document.getElementById('tpsChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'line',
-        data: { labels, datasets },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#1f1f23',
-                    borderColor: '#2d2d35',
-                    borderWidth: 1,
-                    titleColor: '#e5e7eb',
-                    bodyColor: '#9ca3af',
-                    padding: 12,
-                    displayColors: true,
-                    callbacks: {
-                        label: function(ctx) {
-                            if (ctx.parsed.y === null) return null;
-                            const tps = ctx.parsed.y.toFixed(1);
-                            return ctx.dataset.label + ': ' + tps + ' TPS';
+        // Destroy existing chart if it exists
+        if (tpsChart) {
+            tpsChart.destroy();
+        }
+        
+        const ctx = chartContainer.getContext('2d');
+        tpsChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: servers.length > 1 },
+                    tooltip: {
+                        backgroundColor: '#1f1f23',
+                        borderColor: '#2d2d35',
+                        borderWidth: 1,
+                        titleColor: '#e5e7eb',
+                        bodyColor: '#9ca3af',
+                        padding: 12,
+                        displayColors: true,
+                        callbacks: {
+                            label: function(ctx) {
+                                if (ctx.parsed.y === null) return null;
+                                const tps = ctx.parsed.y.toFixed(1);
+                                return ctx.dataset.label + ': ' + tps + ' TPS';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: '#2d2d3550', drawBorder: false },
+                        ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }
+                    },
+                    y: {
+                        min: 0,
+                        max: 22,
+                        grid: { color: '#2d2d3550', drawBorder: false },
+                        ticks: { 
+                            color: '#6b7280',
+                            stepSize: 5,
+                            callback: function(value) { return value + ' TPS'; }
                         }
                     }
                 }
-            },
-            scales: {
-                x: {
-                    grid: { color: '#2d2d3550', drawBorder: false },
-                    ticks: { color: '#6b7280', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }
-                },
-                y: {
-                    min: 0,
-                    max: 22,
-                    grid: { color: '#2d2d3550', drawBorder: false },
-                    ticks: { 
-                        color: '#6b7280',
-                        stepSize: 5,
-                        callback: function(value) { return value + ' TPS'; }
-                    }
-                }
             }
-        }
+        });
+    }
+    
+    // Initial chart build
+    buildChart(currentRange);
+    
+    // Time range button handlers
+    document.querySelectorAll('.range-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            const hours = parseInt(this.dataset.range);
+            currentRange = hours;
+            buildChart(hours);
+        });
     });
 })();
 

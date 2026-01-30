@@ -94,16 +94,18 @@ app.post('/api/analytics/tps', async (req, res) => {
             console.log(`[Analytics] Low TPS on ${server}: ${tpsValue.toFixed(2)}`);
         }
         
-        // Emit TPS alert if critically low
-        if (tpsValue < 15 && global.discordClient) {
+        // Emit TPS update event for all low TPS (alerts handled in analytics cog)
+        if (tpsValue < 18 && global.discordClient) {
             global.discordClient.emit('analyticsEvent', {
-                type: 'tps_critical',
+                type: 'tps_update',
                 server,
                 tps: tpsValue,
-                mspt,
-                loadedChunks,
-                entityCount,
-                playerCount,
+                mspt: parseFloat(mspt) || 50.0,
+                loadedChunks: parseInt(loadedChunks) || 0,
+                entityCount: parseInt(entityCount) || 0,
+                playerCount: parseInt(playerCount) || 0,
+                memoryUsed: parseInt(memoryUsed) || 0,
+                memoryMax: parseInt(memoryMax) || 0,
             });
         }
         

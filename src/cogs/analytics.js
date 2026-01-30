@@ -99,9 +99,11 @@ async function handleAnalyticsEvent(client, data) {
             await handleAltDetected(client, data);
             break;
         case 'tps_update':
+        case 'tps_critical': // Legacy support
             await handleTpsUpdate(client, data);
             break;
         case 'chunk_scan':
+        case 'problem_chunks': // Legacy support
             await handleChunkScan(client, data);
             break;
         case 'lag_alert':
