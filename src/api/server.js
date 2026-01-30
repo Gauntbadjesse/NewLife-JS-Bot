@@ -3766,29 +3766,7 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
             .limit(500)
             .lean();
         
-        // Generate live demo data if no real data exists
-        const demoMode = tpsData.length === 0;
-        if (demoMode) {
-            const now = Date.now();
-            tpsData = [];
-            // Generate 6 hours of TPS data every 5 minutes
-            for (let i = 0; i < 72; i++) {
-                const time = new Date(now - i * 5 * 60 * 1000);
-                // Simulate realistic TPS with occasional dips
-                const baseTps = 19.5 + Math.sin(i / 10) * 0.3;
-                const randomDip = Math.random() < 0.05 ? Math.random() * 5 : 0;
-                const tps = Math.max(15, Math.min(20, baseTps - randomDip + (Math.random() - 0.5)));
-                tpsData.push({
-                    server: 'main',
-                    tps: tps,
-                    mspt: (1000 / tps) * (0.8 + Math.random() * 0.4),
-                    timestamp: time,
-                    playerCount: Math.floor(5 + Math.random() * 15),
-                    entityCount: Math.floor(800 + Math.random() * 400),
-                    loadedChunks: Math.floor(200 + Math.random() * 100)
-                });
-            }
-        }
+        const hasData = tpsData.length > 0;
         
         // Get pending ALT reviews
         let pendingAlts = await AltGroup.find({ status: 'pending' })
@@ -3832,10 +3810,10 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
             const avg = (stats.total / stats.count).toFixed(1);
             const current = stats.latest?.tps?.toFixed(1) || '—';
             const tpsClass = stats.latest?.tps >= 18 ? 'tps-good' : stats.latest?.tps >= 15 ? 'tps-warn' : 'tps-bad';
-            const statusIcon = stats.latest?.tps >= 18 ? '🟢' : stats.latest?.tps >= 15 ? '🟡' : '🔴';
+            const statusClass = stats.latest?.tps >= 18 ? 'status-good' : stats.latest?.tps >= 15 ? 'status-warn' : 'status-bad';
             serverStatsHtml += `
                 <div class="stat-card">
-                    <div class="stat-label">${statusIcon} ${server.toUpperCase()}</div>
+                    <div class="stat-label"><span class="status-indicator ${statusClass}"></span>${server.toUpperCase()}</div>
                     <div class="stat-value ${tpsClass}">${current}</div>
                     <div style="font-size:.75em;color:#6b7280;margin-top:2px">TPS</div>
                     <div class="stat-meta">
@@ -3844,9 +3822,9 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
                         <span>Max: ${stats.max.toFixed(1)}</span>
                     </div>
                     ${stats.latest ? `<div class="stat-meta" style="margin-top:8px;border-top:1px solid #2d2d35;padding-top:8px">
-                        <span>🧱 ${stats.latest.loadedChunks || 0}</span>
-                        <span>👥 ${stats.latest.playerCount || 0}</span>
-                        <span>🐄 ${stats.latest.entityCount || 0}</span>
+                        <span>Chunks: ${stats.latest.loadedChunks || 0}</span>
+                        <span>Players: ${stats.latest.playerCount || 0}</span>
+                        <span>Entities: ${stats.latest.entityCount || 0}</span>
                     </div>` : ''}
                 </div>
             `;
@@ -3855,7 +3833,7 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         // Build pending ALTs HTML
         let altsHtml = '';
         if (pendingAlts.length === 0) {
-            altsHtml = '<div class="empty-state"><div style="font-size:2em;margin-bottom:8px">✅</div>No pending ALT reviews</div>';
+            altsHtml = '<div class="empty-state">No pending ALT reviews</div>';
         } else {
             for (const alt of pendingAlts) {
                 const accounts = alt.accounts || [];
@@ -3880,7 +3858,7 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         // Build problem chunks HTML
         let chunksHtml = '';
         if (problemChunks.length === 0) {
-            chunksHtml = '<div class="empty-state"><div style="font-size:2em;margin-bottom:8px">✅</div>No problem chunks detected</div>';
+            chunksHtml = '<div class="empty-state">No problem chunks detected</div>';
         } else {
             for (const chunk of problemChunks) {
                 const isHighRisk = chunk.entityCount >= 200 || chunk.hopperCount >= 50;
@@ -3891,9 +3869,9 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
                             <span class="item-time">${chunk.server || 'main'}</span>
                         </div>
                         <div class="item-meta">
-                            <span>🐄 ${chunk.entityCount || 0}</span>
-                            <span>📦 ${chunk.hopperCount || 0}</span>
-                            <span>⚡ ${chunk.redstoneCount || 0}</span>
+                            <span>Entities: ${chunk.entityCount || 0}</span>
+                            <span>Hoppers: ${chunk.hopperCount || 0}</span>
+                            <span>Redstone: ${chunk.redstoneCount || 0}</span>
                         </div>
                     </div>
                 `;
@@ -3903,7 +3881,7 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         // Build lag alerts HTML
         let alertsHtml = '';
         if (lagAlerts.length === 0) {
-            alertsHtml = '<div class="empty-state"><div style="font-size:2em;margin-bottom:8px">✅</div>No lag alerts in the last 24 hours</div>';
+            alertsHtml = '<div class="empty-state">No lag alerts in the last 24 hours</div>';
         } else {
             for (const alert of lagAlerts) {
                 const isCritical = alert.severity === 'critical';
@@ -3986,9 +3964,13 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         .tps-good { color: #22c55e; }
         .tps-warn { color: #f59e0b; }
         .tps-bad { color: #ef4444; }
-        .demo-badge { background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; padding: 4px 12px; border-radius: 6px; font-size: 0.75em; font-weight: 600; animation: pulse 2s infinite; }
-        .live-badge { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; padding: 4px 12px; border-radius: 6px; font-size: 0.75em; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .status-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+        .status-good { background: #22c55e; box-shadow: 0 0 6px #22c55e80; }
+        .status-warn { background: #f59e0b; box-shadow: 0 0 6px #f59e0b80; }
+        .status-bad { background: #ef4444; box-shadow: 0 0 6px #ef444480; }
+        .live-badge { background: #22c55e; color: #fff; padding: 4px 12px; border-radius: 6px; font-size: 0.75em; font-weight: 600; display: flex; align-items: center; gap: 6px; }
         .live-dot { width: 8px; height: 8px; background: #fff; border-radius: 50%; animation: pulse 1.5s infinite; }
+        .no-data-badge { background: #6b7280; color: #fff; padding: 4px 12px; border-radius: 6px; font-size: 0.75em; font-weight: 600; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .refresh-timer { font-size: 0.75em; color: #6b7280; }
     </style>
@@ -3999,26 +3981,16 @@ ${getHeader('analytics', session)}
 <div class="main">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;flex-wrap:wrap;gap:16px">
         <div style="display:flex;align-items:center;gap:16px">
-            <h1 style="margin:0;font-size:1.8em">📊 Server Analytics</h1>
-            ${demoMode 
-                ? '<span class="demo-badge">⚡ DEMO MODE</span>' 
-                : '<span class="live-badge"><span class="live-dot"></span>LIVE</span>'}
+            <h1 style="margin:0;font-size:1.8em">Server Analytics</h1>
+            ${hasData 
+                ? '<span class="live-badge"><span class="live-dot"></span>LIVE</span>'
+                : '<span class="no-data-badge">AWAITING DATA</span>'}
         </div>
         <div style="color:#9ca3af;font-size:.9em;display:flex;gap:16px;align-items:center">
             <span class="refresh-timer" id="refreshTimer">Auto-refresh in 30s</span>
-            <span style="background:#2d2d35;padding:4px 12px;border-radius:8px">👥 ${uniquePlayers.length || 0} unique players</span>
+            <span style="background:#2d2d35;padding:4px 12px;border-radius:8px">${uniquePlayers.length || 0} unique players (24h)</span>
         </div>
     </div>
-    
-    ${demoMode ? `
-    <div style="background:linear-gradient(135deg,#f59e0b20,#d9770620);border:1px solid #f59e0b40;border-radius:12px;padding:16px;margin-bottom:24px;display:flex;align-items:center;gap:12px">
-        <span style="font-size:1.5em">⚠️</span>
-        <div>
-            <div style="color:#f59e0b;font-weight:600">Demo Mode Active</div>
-            <div style="color:#9ca3af;font-size:0.85em">No live data from Paper analytics plugin. Showing simulated data. Deploy the Paper plugin to see real server stats.</div>
-        </div>
-    </div>
-    ` : ''}
     
     <!-- Server Stats Cards -->
     <div class="analytics-grid">
@@ -4028,7 +4000,7 @@ ${getHeader('analytics', session)}
     <!-- TPS Chart -->
     <div class="chart-container">
         <div class="chart-header">
-            <h3 class="chart-title">📈 TPS History (Last 6 Hours)</h3>
+            <h3 class="chart-title">TPS History (Last 6 Hours)</h3>
             <div style="display:flex;gap:16px;font-size:0.8em">
                 ${servers.map(s => `<span style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:3px;background:${serverColors[s] || '#8b5cf6'}"></span>${s}</span>`).join('')}
             </div>
@@ -4043,7 +4015,7 @@ ${getHeader('analytics', session)}
         <!-- Pending ALT Reviews -->
         <div class="section-card">
             <div class="section-header">
-                <h3 class="section-title" style="color:#f59e0b">⚠️ Pending ALT Reviews</h3>
+                <h3 class="section-title" style="color:#f59e0b">Pending ALT Reviews</h3>
                 <span class="section-count">${pendingAlts.length}</span>
             </div>
             <div class="section-content">
@@ -4054,7 +4026,7 @@ ${getHeader('analytics', session)}
         <!-- Problem Chunks -->
         <div class="section-card">
             <div class="section-header">
-                <h3 class="section-title" style="color:#f59e0b">🧱 Problem Chunks</h3>
+                <h3 class="section-title" style="color:#f59e0b">Problem Chunks</h3>
                 <span class="section-count">${problemChunks.length}</span>
             </div>
             <div class="section-content">
@@ -4065,7 +4037,7 @@ ${getHeader('analytics', session)}
         <!-- Lag Alerts -->
         <div class="section-card full-width">
             <div class="section-header">
-                <h3 class="section-title" style="color:#ef4444">🚨 Lag Alerts</h3>
+                <h3 class="section-title" style="color:#ef4444">Lag Alerts</h3>
                 <span class="section-count">${lagAlerts.length}</span>
             </div>
             <div class="section-content" style="max-height:300px">
@@ -4151,8 +4123,7 @@ ${getHeader('analytics', session)}
                         label: function(ctx) {
                             if (ctx.parsed.y === null) return null;
                             const tps = ctx.parsed.y.toFixed(1);
-                            const status = ctx.parsed.y >= 18 ? '🟢' : ctx.parsed.y >= 15 ? '🟡' : '🔴';
-                            return status + ' ' + ctx.dataset.label + ': ' + tps + ' TPS';
+                            return ctx.dataset.label + ': ' + tps + ' TPS';
                         }
                     }
                 }
@@ -4198,7 +4169,7 @@ ${getHeader('analytics', session)}
         console.error('Analytics Page Error:', error);
         res.status(500).send(`<!DOCTYPE html><html><head><title>Error</title><style>${viewerStyles}</style></head><body>
             <div class="main" style="text-align:center;padding:100px">
-                <h1 style="color:#ef4444">❌ Error Loading Analytics</h1>
+                <h1 style="color:#ef4444">Error Loading Analytics</h1>
                 <p style="color:#9ca3af">${error.message}</p>
                 <a href="/viewer/search" class="btn btn-go" style="margin-top:20px">Back to Admin Panel</a>
             </div>
