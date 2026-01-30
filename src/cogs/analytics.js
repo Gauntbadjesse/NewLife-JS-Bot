@@ -24,9 +24,9 @@ const PlayerImpact = require('../database/models/PlayerImpact');
 const { isStaff, isAdmin, isSupervisor } = require('../utils/permissions');
 const { createErrorEmbed, createSuccessEmbed, getEmbedColor } = require('../utils/embeds');
 
-// Alert channels (from env)
-const LAG_ALERTS_CHANNEL_ID = process.env.LAG_ALERTS_CHANNEL_ID || '1439438975151505419';
-const ALT_ALERTS_CHANNEL_ID = process.env.ALT_ALERTS_CHANNEL_ID || '1439438975151505419';
+// Alert channels (from env - REQUIRED)
+const LAG_ALERTS_CHANNEL_ID = process.env.LAG_ALERTS_CHANNEL_ID;
+const ALT_ALERTS_CHANNEL_ID = process.env.ALT_ALERTS_CHANNEL_ID;
 
 // Role IDs for pinging
 const SUPERVISOR_ROLE_ID = process.env.SUPERVISOR_ROLE_ID;

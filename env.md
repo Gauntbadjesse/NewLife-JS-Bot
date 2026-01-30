@@ -88,6 +88,12 @@ LINK_API_PORT=3001
 # PvP Status Plugin API Key
 PVP_API_KEY=yhweiughwiufheowinfdoweihfoweih9832597gr8974tg97fg9h3h49f
 
+# PvP Logging Channels
+# Channel for status changes and consensual kills
+PVP_GOOD_CHANNEL_ID=
+# Channel for alerts/investigations (damage sessions, combat logs, invalid pvp)
+PVP_ALERT_CHANNEL_ID=
+
 # Analytics API Configuration (for Paper and Velocity analytics plugins)
 ANALYTICS_API_KEY=your-analytics-api-key-here
 ANALYTICS_API_PORT=3002

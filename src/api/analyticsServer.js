@@ -301,11 +301,10 @@ app.post('/api/analytics/lag-alert', async (req, res) => {
             server,
             type,
             severity: severity || 'medium',
-            message: details,
+            details: details || `${type} alert on ${server}`, // Provide default if missing
             location,
             playerNearby,
-            tps: metrics?.tps,
-            mspt: metrics?.mspt,
+            metrics: metrics || {},
         });
         
         // Log the alert
