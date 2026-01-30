@@ -157,8 +157,8 @@ function createPvpKillEmbed(data) {
     const victimRecording = data.victim.status === 'recording';
     const victimStreaming = data.victim.status === 'streaming';
     
-    // Green if consensual, Red if non-consensual
-    const embedColor = consensual ? 0x10b981 : 0xef4444;
+    // Always red for kills
+    const embedColor = 0xef4444;
     
     const embed = new EmbedBuilder()
         .setColor(embedColor)
@@ -248,7 +248,7 @@ function createDamageSessionEmbed(data) {
     const { player1, player2, total_hits, total_damage, duration_ms, initiator } = data;
     
     const bothPvpEnabled = player1.pvp_enabled && player2.pvp_enabled;
-    const embedColor = bothPvpEnabled ? 0x2B2D31 : 0xef4444;
+    const embedColor = 0x2B2D31; // Always grey for damage sessions
     
     const durationSeconds = (duration_ms / 1000).toFixed(1);
     
