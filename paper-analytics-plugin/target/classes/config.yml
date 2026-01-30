@@ -2,8 +2,8 @@
 # Update api.url to point to your bot server
 
 api:
-  url: "http://YOUR_BOT_IP:27289"
-  key: "your-api-key-here"
+  url: "http://YOUR_BOT_IP:3002"
+  key: "your-analytics-api-key-here"
 
 server:
   name: "main"

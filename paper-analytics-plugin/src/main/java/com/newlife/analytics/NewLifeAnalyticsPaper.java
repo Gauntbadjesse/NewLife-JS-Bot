@@ -52,6 +52,10 @@ public class NewLifeAnalyticsPaper extends JavaPlugin {
         getLogger().info("NewLife Analytics Paper enabled!");
         getLogger().info("Server: " + serverName);
         getLogger().info("API URL: " + apiUrl);
+        getLogger().info("API Key: " + (apiKey != null && apiKey.length() > 8 ? apiKey.substring(0, 8) + "..." : "NOT SET"));
+        
+        // Test API connection on startup
+        testApiConnection();
         
         // Start TPS monitor
         startTpsMonitor();
@@ -64,6 +68,27 @@ public class NewLifeAnalyticsPaper extends JavaPlugin {
         
         getLogger().info("Analytics monitors started!");
     }
+    
+    private void testApiConnection() {
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                getLogger().info("Testing API connection to: " + apiUrl + "/api/analytics/tps");
+                String testJson = String.format(
+                    "{\"server\":\"%s\",\"tps\":20.0,\"mspt\":50.0,\"loadedChunks\":0,\"entityCount\":0,\"playerCount\":0,\"memoryUsed\":0,\"memoryMax\":0}",
+                    serverName
+                );
+                ApiClient.post(apiUrl + "/api/analytics/tps", apiKey, testJson);
+                getLogger().info("✓ API connection successful!");
+            } catch (Exception e) {
+                getLogger().severe("✗ API connection FAILED: " + e.getMessage());
+                getLogger().severe("Check that:");
+                getLogger().severe("  1. Bot is running and Analytics API is started");
+                getLogger().severe("  2. api.url in config.yml points to the correct address");
+                getLogger().severe("  3. api.key matches ANALYTICS_API_KEY in bot's .env");
+                getLogger().severe("  4. Port 3002 is not blocked by firewall");
+            }
+        });
+    }
 
     @Override
     public void onDisable() {
@@ -73,8 +98,8 @@ public class NewLifeAnalyticsPaper extends JavaPlugin {
     private void loadConfig() {
         FileConfiguration config = getConfig();
         
-        config.addDefault("api.url", "http://localhost:3001");
-        config.addDefault("api.key", "your-api-key-here");
+        config.addDefault("api.url", "http://localhost:3002");
+        config.addDefault("api.key", "your-analytics-api-key-here");
         config.addDefault("server.name", "main");
         config.addDefault("debug", false);
         

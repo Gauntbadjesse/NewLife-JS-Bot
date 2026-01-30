@@ -10,10 +10,11 @@
  * - Manual restart command for admins
  */
 
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { Rcon } = require('rcon-client');
 const cron = require('node-cron');
 const { sendDm } = require('../utils/dm');
+const { isOwner } = require('../utils/permissions');
 
 let scheduledTask = null;
 let scheduledRestartTimer = null;
@@ -354,14 +355,13 @@ const slashCommands = [
                 .setDescription('Cancel a scheduled restart'))
             .addSubcommand(sub => sub
                 .setName('status')
-                .setDescription('Check restart scheduler status'))
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+                .setDescription('Check restart scheduler status')),
 
         async execute(interaction, client) {
-            // Double-check admin permission
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            // Owner only permission check
+            if (!isOwner(interaction.member)) {
                 return interaction.reply({
-                    content: '❌ You need Administrator permission to use this command.',
+                    content: 'You do not have permission to use this command. Owner only.',
                     ephemeral: true
                 });
             }

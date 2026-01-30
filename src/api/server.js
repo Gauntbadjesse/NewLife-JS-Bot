@@ -4580,6 +4580,15 @@ app.get('/api/analytics/alerts', validateAnalyticsKey, async (req, res) => {
     }
 });
 
+// Health check endpoint (no auth required)
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: Date.now() });
+});
+
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: Date.now() });
+});
+
 function startApiServer(port = null) {
     const serverPort = port || process.env.LINK_API_PORT || 3001;
     return new Promise((resolve, reject) => {

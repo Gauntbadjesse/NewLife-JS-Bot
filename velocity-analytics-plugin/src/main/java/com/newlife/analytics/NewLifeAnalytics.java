@@ -68,8 +68,8 @@ public class NewLifeAnalytics {
             if (!Files.exists(configPath)) {
                 // Create default config
                 Properties defaults = new Properties();
-                defaults.setProperty("api.url", "http://YOUR_BOT_IP:27289");
-                defaults.setProperty("api.key", "your-api-key-here");
+                defaults.setProperty("api.url", "http://YOUR_BOT_IP:3002");
+                defaults.setProperty("api.key", "your-analytics-api-key-here");
                 defaults.setProperty("debug", "false");
                 
                 try (OutputStream out = Files.newOutputStream(configPath)) {
@@ -82,7 +82,7 @@ public class NewLifeAnalytics {
                 config.load(in);
             }
             
-            apiUrl = config.getProperty("api.url", "http://localhost:27289");
+            apiUrl = config.getProperty("api.url", "http://localhost:3002");
             apiKey = config.getProperty("api.key", "");
             debug = Boolean.parseBoolean(config.getProperty("debug", "false"));
             

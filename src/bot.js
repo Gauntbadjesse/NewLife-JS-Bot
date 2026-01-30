@@ -12,6 +12,7 @@ const { initWatcher } = require('./database/watcher');
 const { logCommand, sendCommandLogToChannel } = require('./utils/commandLogger');
 const { initErrorLogger, logError } = require('./utils/errorLogger');
 const { startApiServer } = require('./api/server');
+const { startAnalyticsServer } = require('./api/analyticsServer');
 const emojis = require('./utils/emojis');
 
 // Create Discord client with necessary intents
@@ -1002,6 +1003,13 @@ async function main() {
             await startApiServer();
         } catch (apiErr) {
             console.error('Failed to start Link API server:', apiErr);
+        }
+        
+        // Start the Analytics API server
+        try {
+            startAnalyticsServer(client);
+        } catch (analyticsErr) {
+            console.error('Failed to start Analytics API server:', analyticsErr);
         }
         
         await client.login(process.env.DISCORD_TOKEN);

@@ -87,3 +87,7 @@ LINK_API_PORT=3001
 
 # PvP Status Plugin API Key
 PVP_API_KEY=yhweiughwiufheowinfdoweihfoweih9832597gr8974tg97fg9h3h49f
+
+# Analytics API Configuration (for Paper and Velocity analytics plugins)
+ANALYTICS_API_KEY=your-analytics-api-key-here
+ANALYTICS_API_PORT=3002

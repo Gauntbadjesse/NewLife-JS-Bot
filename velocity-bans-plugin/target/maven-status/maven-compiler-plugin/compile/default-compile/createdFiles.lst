@@ -3,4 +3,5 @@ com/newlifesmp/bans/BanApiClient.class
 com/newlifesmp/bans/NewLifeBans.class
 com/newlifesmp/bans/BanConfig.class
 com/newlifesmp/bans/BanCheckListener.class
+com/newlifesmp/bans/KickHttpServer.class
 com/newlifesmp/bans/BanApiClient$BanResult.class

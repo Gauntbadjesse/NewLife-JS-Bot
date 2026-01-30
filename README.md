@@ -177,3 +177,11 @@ MIT License - NewLife SMP
 ## Support
 
 For support, please contact the NewLife SMP administration team.
+
+
+
+
+ANALYTICS_API_KEY=your-secure-key
+LAG_ALERTS_CHANNEL_ID=channel-id
+ALT_ALERTS_CHANNEL_ID=channel-id
+IP_SALT=random-string-for-hashing
