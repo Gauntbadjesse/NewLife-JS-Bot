@@ -2,24 +2,27 @@
  * Analytics API Server
  * Provides REST endpoints for Paper and Velocity analytics plugins
  * Receives TPS data, chunk analysis, lag alerts, and connection events
+ * Stores all data to MongoDB for persistence and dashboard access
  */
 
 const express = require('express');
+const crypto = require('crypto');
+
+// Import MongoDB models
+const ServerTps = require('../database/models/ServerTps');
+const ChunkAnalytics = require('../database/models/ChunkAnalytics');
+const LagAlert = require('../database/models/LagAlert');
+const PlayerConnection = require('../database/models/PlayerConnection');
+const PlayerAnalytics = require('../database/models/PlayerAnalytics');
+const AltGroup = require('../database/models/AltGroup');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// Store for analytics data (in-memory, can be extended to MongoDB)
-const analyticsData = {
-    servers: new Map(), // Server TPS/performance data
-    connections: [],    // Recent connection events
-    lagAlerts: [],      // Recent lag alerts
-    chunks: new Map(),  // Flagged chunks by server
-};
-
-// Keep only last N items for in-memory storage
-const MAX_CONNECTIONS = 1000;
-const MAX_LAG_ALERTS = 500;
+// Hash IP for privacy
+function hashIp(ip) {
+    return crypto.createHash('sha256').update(ip + (process.env.IP_SALT || 'newlife')).digest('hex').substring(0, 16);
+}
 
 /**
  * Authentication middleware
@@ -65,7 +68,7 @@ app.get('/health', (req, res) => {
  * Receives TPS and performance data from Paper plugin
  * Body: { server, tps, mspt, loadedChunks, entityCount, playerCount, memoryUsed, memoryMax }
  */
-app.post('/api/analytics/tps', (req, res) => {
+app.post('/api/analytics/tps', async (req, res) => {
     try {
         const { server, tps, mspt, loadedChunks, entityCount, playerCount, memoryUsed, memoryMax } = req.body;
         
@@ -73,7 +76,8 @@ app.post('/api/analytics/tps', (req, res) => {
             return res.status(400).json({ error: 'Missing server name' });
         }
         
-        const data = {
+        // Store to MongoDB
+        await ServerTps.create({
             server,
             tps: parseFloat(tps) || 20.0,
             mspt: parseFloat(mspt) || 50.0,
@@ -82,14 +86,25 @@ app.post('/api/analytics/tps', (req, res) => {
             playerCount: parseInt(playerCount) || 0,
             memoryUsed: parseInt(memoryUsed) || 0,
             memoryMax: parseInt(memoryMax) || 0,
-            timestamp: new Date(),
-        };
-        
-        analyticsData.servers.set(server, data);
+        });
         
         // Log if TPS is concerning
-        if (data.tps < 18) {
-            console.log(`[Analytics] ⚠️ Low TPS on ${server}: ${data.tps.toFixed(2)}`);
+        const tpsValue = parseFloat(tps) || 20.0;
+        if (tpsValue < 18) {
+            console.log(`[Analytics] Low TPS on ${server}: ${tpsValue.toFixed(2)}`);
+        }
+        
+        // Emit TPS alert if critically low
+        if (tpsValue < 15 && global.discordClient) {
+            global.discordClient.emit('analyticsEvent', {
+                type: 'tps_critical',
+                server,
+                tps: tpsValue,
+                mspt,
+                loadedChunks,
+                entityCount,
+                playerCount,
+            });
         }
         
         res.json({ success: true });
@@ -103,24 +118,49 @@ app.post('/api/analytics/tps', (req, res) => {
  * GET /api/analytics/tps
  * Returns current TPS data for all servers
  */
-app.get('/api/analytics/tps', (req, res) => {
-    const servers = {};
-    for (const [name, data] of analyticsData.servers) {
-        servers[name] = data;
+app.get('/api/analytics/tps', async (req, res) => {
+    try {
+        // Get latest TPS for each server
+        const servers = await ServerTps.aggregate([
+            { $sort: { timestamp: -1 } },
+            { $group: { 
+                _id: '$server',
+                tps: { $first: '$tps' },
+                mspt: { $first: '$mspt' },
+                loadedChunks: { $first: '$loadedChunks' },
+                entityCount: { $first: '$entityCount' },
+                playerCount: { $first: '$playerCount' },
+                timestamp: { $first: '$timestamp' },
+            }}
+        ]);
+        
+        const result = {};
+        for (const s of servers) {
+            result[s._id] = s;
+        }
+        res.json({ servers: result });
+    } catch (error) {
+        console.error('[Analytics API] TPS GET error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-    res.json({ servers });
 });
 
 /**
  * GET /api/analytics/tps/:server
  * Returns TPS data for a specific server
  */
-app.get('/api/analytics/tps/:server', (req, res) => {
-    const data = analyticsData.servers.get(req.params.server);
-    if (!data) {
-        return res.status(404).json({ error: 'Server not found' });
+app.get('/api/analytics/tps/:server', async (req, res) => {
+    try {
+        const data = await ServerTps.findOne({ server: req.params.server })
+            .sort({ timestamp: -1 });
+        if (!data) {
+            return res.status(404).json({ error: 'Server not found' });
+        }
+        res.json(data);
+    } catch (error) {
+        console.error('[Analytics API] TPS server GET error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-    res.json(data);
 });
 
 // =====================================================
@@ -132,7 +172,7 @@ app.get('/api/analytics/tps/:server', (req, res) => {
  * Receives flagged chunk data from Paper plugin
  * Body: { server, chunks: [{ world, x, z, entities, hoppers, redstone, ... }] }
  */
-app.post('/api/analytics/chunks', (req, res) => {
+app.post('/api/analytics/chunks', async (req, res) => {
     try {
         const { server, chunks } = req.body;
         
@@ -140,18 +180,65 @@ app.post('/api/analytics/chunks', (req, res) => {
             return res.status(400).json({ error: 'Missing server or chunks data' });
         }
         
-        analyticsData.chunks.set(server, {
-            chunks,
-            timestamp: new Date(),
-        });
+        const flaggedChunks = [];
+        
+        for (const chunk of chunks) {
+            const { world, x, z, entities, entityBreakdown, hoppers, redstone, tileEntities, playersNearby } = chunk;
+            
+            let flagged = false;
+            let flagReason = null;
+            
+            if (entities >= 250) {
+                flagged = true;
+                flagReason = 'Critical entity count';
+            } else if (entities >= 100) {
+                flagged = true;
+                flagReason = 'High entity count';
+            } else if (hoppers >= 50) {
+                flagged = true;
+                flagReason = 'High hopper count';
+            } else if (redstone >= 100) {
+                flagged = true;
+                flagReason = 'High redstone count';
+            }
+            
+            await ChunkAnalytics.findOneAndUpdate(
+                { server, world, chunkX: x, chunkZ: z },
+                {
+                    entityCount: entities || 0,
+                    entityBreakdown: entityBreakdown || {},
+                    tileEntityCount: tileEntities || 0,
+                    hopperCount: hoppers || 0,
+                    redstoneCount: redstone || 0,
+                    flagged,
+                    flagReason,
+                    playersNearby: playersNearby || [],
+                    lastUpdated: new Date()
+                },
+                { upsert: true }
+            );
+            
+            if (flagged) {
+                flaggedChunks.push({ world, x, z, entities, hoppers, redstone, flagReason });
+            }
+        }
         
         // Log critical chunks
         const criticalChunks = chunks.filter(c => c.entities >= 250);
         if (criticalChunks.length > 0) {
-            console.log(`[Analytics] 🚨 ${criticalChunks.length} critical chunks on ${server}`);
+            console.log(`[Analytics] ${criticalChunks.length} critical chunks on ${server}`);
         }
         
-        res.json({ success: true, received: chunks.length });
+        // Emit flagged chunks to Discord
+        if (flaggedChunks.length > 0 && global.discordClient) {
+            global.discordClient.emit('analyticsEvent', {
+                type: 'chunk_scan',
+                server,
+                chunks: flaggedChunks
+            });
+        }
+        
+        res.json({ success: true, received: chunks.length, flagged: flaggedChunks.length });
     } catch (error) {
         console.error('[Analytics API] Chunks endpoint error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -162,24 +249,33 @@ app.post('/api/analytics/chunks', (req, res) => {
  * GET /api/analytics/chunks
  * Returns flagged chunks for all servers
  */
-app.get('/api/analytics/chunks', (req, res) => {
-    const result = {};
-    for (const [server, data] of analyticsData.chunks) {
-        result[server] = data;
+app.get('/api/analytics/chunks', async (req, res) => {
+    try {
+        const chunks = await ChunkAnalytics.find({ flagged: true })
+            .sort({ entityCount: -1 })
+            .limit(50);
+        res.json({ chunks });
+    } catch (error) {
+        console.error('[Analytics API] Chunks GET error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-    res.json(result);
 });
 
 /**
  * GET /api/analytics/chunks/:server
  * Returns flagged chunks for a specific server
  */
-app.get('/api/analytics/chunks/:server', (req, res) => {
-    const data = analyticsData.chunks.get(req.params.server);
-    if (!data) {
-        return res.status(404).json({ error: 'No chunk data for server' });
+app.get('/api/analytics/chunks/:server', async (req, res) => {
+    try {
+        const chunks = await ChunkAnalytics.find({ 
+            server: req.params.server,
+            flagged: true 
+        }).sort({ entityCount: -1 });
+        res.json({ chunks });
+    } catch (error) {
+        console.error('[Analytics API] Chunks server GET error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-    res.json(data);
 });
 
 // =====================================================
@@ -191,7 +287,7 @@ app.get('/api/analytics/chunks/:server', (req, res) => {
  * Receives lag alerts from Paper plugin
  * Body: { server, type, severity, details, location?, playerNearby?, metrics }
  */
-app.post('/api/analytics/lag-alert', (req, res) => {
+app.post('/api/analytics/lag-alert', async (req, res) => {
     try {
         const { server, type, severity, details, location, playerNearby, metrics } = req.body;
         
@@ -199,29 +295,30 @@ app.post('/api/analytics/lag-alert', (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
         
-        const alert = {
+        const alert = await LagAlert.create({
             server,
             type,
-            severity,
-            details,
-            location: location || null,
-            playerNearby: playerNearby || null,
-            metrics: metrics || {},
-            timestamp: new Date(),
-        };
-        
-        analyticsData.lagAlerts.unshift(alert);
-        
-        // Trim old alerts
-        if (analyticsData.lagAlerts.length > MAX_LAG_ALERTS) {
-            analyticsData.lagAlerts = analyticsData.lagAlerts.slice(0, MAX_LAG_ALERTS);
-        }
+            severity: severity || 'medium',
+            message: details,
+            location,
+            playerNearby,
+            tps: metrics?.tps,
+            mspt: metrics?.mspt,
+        });
         
         // Log the alert
-        const severityEmoji = severity === 'critical' ? '🚨' : severity === 'high' ? '⚠️' : 'ℹ️';
-        console.log(`[Analytics] ${severityEmoji} Lag Alert [${server}] ${type}: ${details}`);
+        const severityLabel = severity === 'critical' ? 'CRITICAL' : severity === 'high' ? 'HIGH' : 'INFO';
+        console.log(`[Analytics] [${severityLabel}] Lag Alert [${server}] ${type}: ${details}`);
         
-        res.json({ success: true });
+        // Emit to Discord
+        if (global.discordClient) {
+            global.discordClient.emit('analyticsEvent', {
+                type: 'lag_alert',
+                ...alert.toObject()
+            });
+        }
+        
+        res.json({ success: true, alertId: alert._id });
     } catch (error) {
         console.error('[Analytics API] Lag alert endpoint error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -232,21 +329,25 @@ app.post('/api/analytics/lag-alert', (req, res) => {
  * GET /api/analytics/lag-alerts
  * Returns recent lag alerts
  */
-app.get('/api/analytics/lag-alerts', (req, res) => {
-    const limit = parseInt(req.query.limit) || 50;
-    const severity = req.query.severity;
-    const server = req.query.server;
-    
-    let alerts = analyticsData.lagAlerts;
-    
-    if (severity) {
-        alerts = alerts.filter(a => a.severity === severity);
+app.get('/api/analytics/lag-alerts', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 50;
+        const severity = req.query.severity;
+        const server = req.query.server;
+        
+        const query = {};
+        if (severity) query.severity = severity;
+        if (server) query.server = server;
+        
+        const alerts = await LagAlert.find(query)
+            .sort({ timestamp: -1 })
+            .limit(limit);
+        
+        res.json({ alerts });
+    } catch (error) {
+        console.error('[Analytics API] Lag alerts GET error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-    if (server) {
-        alerts = alerts.filter(a => a.server === server);
-    }
-    
-    res.json({ alerts: alerts.slice(0, limit) });
 });
 
 // =====================================================
@@ -258,7 +359,7 @@ app.get('/api/analytics/lag-alerts', (req, res) => {
  * Receives connection events from Velocity plugin
  * Body: { uuid, username, ip, server, type, sessionDuration, ping }
  */
-app.post('/api/analytics/connection', (req, res) => {
+app.post('/api/analytics/connection', async (req, res) => {
     try {
         const { uuid, username, ip, server, type, sessionDuration, ping } = req.body;
         
@@ -266,22 +367,77 @@ app.post('/api/analytics/connection', (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
         
-        const event = {
+        const ipHash = hashIp(ip || 'unknown');
+        
+        // Store connection
+        await PlayerConnection.create({
             uuid,
             username,
             ip: ip || 'unknown',
+            ipHash,
             server: server || 'proxy',
             type, // join, leave, server_switch
             sessionDuration: parseInt(sessionDuration) || 0,
             ping: parseInt(ping) || 0,
-            timestamp: new Date(),
+        });
+        
+        // Update player analytics
+        const updateData = {
+            $set: { username, lastSeen: new Date() },
+            $setOnInsert: { firstSeen: new Date() },
+            $inc: { connectionCount: 1 }
         };
         
-        analyticsData.connections.unshift(event);
+        if (sessionDuration) {
+            updateData.$inc.totalPlaytime = sessionDuration;
+            updateData.$inc.sessionCount = 1;
+        }
         
-        // Trim old events
-        if (analyticsData.connections.length > MAX_CONNECTIONS) {
-            analyticsData.connections = analyticsData.connections.slice(0, MAX_CONNECTIONS);
+        await PlayerAnalytics.findOneAndUpdate(
+            { uuid },
+            updateData,
+            { upsert: true }
+        );
+        
+        // Check for ALTs on join
+        if (type === 'join' && ip && global.discordClient) {
+            const sameIpAccounts = await PlayerConnection.aggregate([
+                { $match: { ipHash, uuid: { $ne: uuid } } },
+                { $group: { _id: '$uuid', username: { $last: '$username' }, count: { $sum: 1 } } }
+            ]);
+            
+            if (sameIpAccounts.length > 0) {
+                // Check if already flagged
+                const existing = await AltGroup.findOne({
+                    $or: [
+                        { primaryUuid: uuid },
+                        { 'linkedAccounts.uuid': uuid }
+                    ]
+                });
+                
+                if (!existing) {
+                    // Create new ALT group
+                    const altGroup = await AltGroup.create({
+                        primaryUuid: uuid,
+                        primaryUsername: username,
+                        linkedAccounts: sameIpAccounts.map(a => ({
+                            uuid: a._id,
+                            username: a.username,
+                            connectionCount: a.count
+                        })),
+                        sharedIpHash: ipHash,
+                        status: 'pending',
+                        riskScore: Math.min(100, sameIpAccounts.length * 25)
+                    });
+                    
+                    global.discordClient.emit('analyticsEvent', {
+                        type: 'alt_detected',
+                        primary: { uuid, username },
+                        alts: sameIpAccounts,
+                        groupId: altGroup._id
+                    });
+                }
+            }
         }
         
         res.json({ success: true });
@@ -295,33 +451,50 @@ app.post('/api/analytics/connection', (req, res) => {
  * GET /api/analytics/connections
  * Returns recent connection events
  */
-app.get('/api/analytics/connections', (req, res) => {
-    const limit = parseInt(req.query.limit) || 50;
-    const type = req.query.type;
-    const username = req.query.username;
-    
-    let connections = analyticsData.connections;
-    
-    if (type) {
-        connections = connections.filter(c => c.type === type);
+app.get('/api/analytics/connections', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 50;
+        const type = req.query.type;
+        const username = req.query.username;
+        
+        const query = {};
+        if (type) query.type = type;
+        if (username) query.username = new RegExp(username, 'i');
+        
+        const connections = await PlayerConnection.find(query)
+            .sort({ timestamp: -1 })
+            .limit(limit);
+        
+        res.json({ connections });
+    } catch (error) {
+        console.error('[Analytics API] Connections GET error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-    if (username) {
-        connections = connections.filter(c => c.username.toLowerCase() === username.toLowerCase());
-    }
-    
-    res.json({ connections: connections.slice(0, limit) });
 });
 
 /**
  * GET /api/analytics/player/:username
  * Returns connection history for a specific player
  */
-app.get('/api/analytics/player/:username', (req, res) => {
-    const username = req.params.username.toLowerCase();
-    const connections = analyticsData.connections.filter(
-        c => c.username.toLowerCase() === username
-    );
-    res.json({ username: req.params.username, connections });
+app.get('/api/analytics/player/:username', async (req, res) => {
+    try {
+        const connections = await PlayerConnection.find({
+            username: new RegExp(`^${req.params.username}$`, 'i')
+        }).sort({ timestamp: -1 }).limit(100);
+        
+        const analytics = await PlayerAnalytics.findOne({
+            username: new RegExp(`^${req.params.username}$`, 'i')
+        });
+        
+        res.json({ 
+            username: req.params.username, 
+            analytics,
+            connections 
+        });
+    } catch (error) {
+        console.error('[Analytics API] Player GET error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // =====================================================
@@ -332,44 +505,55 @@ app.get('/api/analytics/player/:username', (req, res) => {
  * GET /api/analytics/summary
  * Returns a summary of all analytics data
  */
-app.get('/api/analytics/summary', (req, res) => {
-    const servers = {};
-    for (const [name, data] of analyticsData.servers) {
-        servers[name] = {
-            tps: data.tps,
-            mspt: data.mspt,
-            playerCount: data.playerCount,
-            entityCount: data.entityCount,
-            lastUpdate: data.timestamp,
-        };
-    }
-    
-    const recentAlerts = analyticsData.lagAlerts.slice(0, 10);
-    const recentConnections = analyticsData.connections.slice(0, 10);
-    
-    // Count active players (joined but not left in last hour)
-    const oneHourAgo = Date.now() - (60 * 60 * 1000);
-    const recentJoins = new Set();
-    const recentLeaves = new Set();
-    
-    for (const conn of analyticsData.connections) {
-        if (new Date(conn.timestamp).getTime() > oneHourAgo) {
-            if (conn.type === 'join') recentJoins.add(conn.uuid);
-            if (conn.type === 'leave') recentLeaves.add(conn.uuid);
+app.get('/api/analytics/summary', async (req, res) => {
+    try {
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
+        // Get latest TPS for each server
+        const servers = await ServerTps.aggregate([
+            { $sort: { timestamp: -1 } },
+            { $group: { 
+                _id: '$server',
+                tps: { $first: '$tps' },
+                mspt: { $first: '$mspt' },
+                playerCount: { $first: '$playerCount' },
+                entityCount: { $first: '$entityCount' },
+                timestamp: { $first: '$timestamp' },
+            }}
+        ]);
+        
+        const serverData = {};
+        for (const s of servers) {
+            serverData[s._id] = s;
         }
+        
+        // Get alert count
+        const alertCount = await LagAlert.countDocuments({ timestamp: { $gte: oneDayAgo } });
+        const recentAlerts = await LagAlert.find({ timestamp: { $gte: oneDayAgo } })
+            .sort({ timestamp: -1 })
+            .limit(10);
+        
+        // Get connection count
+        const connectionCount = await PlayerConnection.countDocuments({ timestamp: { $gte: oneDayAgo } });
+        const uniquePlayers = await PlayerConnection.distinct('uuid', { timestamp: { $gte: oneDayAgo } });
+        
+        res.json({
+            servers: serverData,
+            alertCount,
+            recentAlerts,
+            connectionCount,
+            stats: {
+                criticalAlerts: await LagAlert.countDocuments({ 
+                    timestamp: { $gte: oneDayAgo },
+                    severity: 'critical'
+                }),
+                uniquePlayersLastDay: uniquePlayers.length,
+            },
+        });
+    } catch (error) {
+        console.error('[Analytics API] Summary GET error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-    
-    res.json({
-        servers,
-        alertCount: analyticsData.lagAlerts.length,
-        recentAlerts,
-        connectionCount: analyticsData.connections.length,
-        recentConnections,
-        stats: {
-            criticalAlerts: analyticsData.lagAlerts.filter(a => a.severity === 'critical').length,
-            uniquePlayersLastHour: recentJoins.size,
-        },
-    });
 });
 
 // =====================================================
@@ -406,13 +590,7 @@ function stopAnalyticsServer() {
     }
 }
 
-// Export analytics data for use in cogs
-function getAnalyticsData() {
-    return analyticsData;
-}
-
 module.exports = {
     startAnalyticsServer,
     stopAnalyticsServer,
-    getAnalyticsData,
 };
