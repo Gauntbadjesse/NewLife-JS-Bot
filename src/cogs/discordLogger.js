@@ -698,33 +698,44 @@ async function handleAnalyticsEvent(data, client) {
             case 'chunk_scan': {
                 if (!data.chunks || data.chunks.length === 0) return;
                 
-                // Group by severity
-                const critical = data.chunks.filter(c => c.entities >= 250 || c.hoppers >= 50);
-                const warning = data.chunks.filter(c => c.entities >= 100 && c.entities < 250);
+                // Only care about entity counts - filter out hoppers/redstone alerts
+                const entityChunks = data.chunks.filter(c => c.entities >= 250);
+                if (entityChunks.length === 0) return;
                 
-                const chunkList = data.chunks.slice(0, 5).map(c => {
+                // Check if any are critical (500+) for pinging
+                const critical = entityChunks.filter(c => c.entities >= 500);
+                
+                const chunkList = entityChunks.slice(0, 5).map(c => {
                     const players = c.playersNearby?.length > 0 
-                        ? `👤 ${c.playersNearby.join(', ')}` 
+                        ? `Players nearby: ${c.playersNearby.join(', ')}` 
                         : 'No players nearby';
                     return `**${c.world} @ ${c.x}, ${c.z}**\n` +
-                           `└ ${c.flagReason}\n` +
-                           `└ 🐄 ${c.entities || 0} entities | 📦 ${c.hoppers || 0} hoppers | ⚡ ${c.redstone || 0} redstone\n` +
+                           `└ ${c.entities} entities\n` +
                            `└ ${players}`;
                 }).join('\n\n');
                 
                 embed = new EmbedBuilder()
                     .setColor(critical.length > 0 ? 0xef4444 : 0xf59e0b)
-                    .setTitle(`🧱 Problem Chunks Detected - ${data.server}`)
-                    .setDescription(`Found **${data.chunks.length}** flagged chunks that may cause lag.\n\n${chunkList}`)
+                    .setTitle(`Problem Chunks Detected - ${data.server}`)
+                    .setDescription(`Found **${entityChunks.length}** chunks with high entity counts.\n\n${chunkList}`)
                     .setTimestamp()
-                    .setFooter({ text: 'Server Analytics • Chunk Scanner' });
+                    .setFooter({ text: 'Server Analytics' });
                 
-                if (data.chunks.length > 5) {
+                if (entityChunks.length > 5) {
                     embed.addFields({ 
                         name: 'Additional Chunks', 
-                        value: `... and ${data.chunks.length - 5} more flagged chunks. Check /chunks problem for full list.`,
+                        value: `... and ${entityChunks.length - 5} more flagged chunks.`,
                         inline: false 
                     });
+                }
+                
+                // Only ping if 500+ entities in any chunk
+                if (critical.length > 0) {
+                    const pingContent = process.env.SUPERVISOR_ROLE_ID ? `<@&${process.env.SUPERVISOR_ROLE_ID}>` : null;
+                    if (pingContent) {
+                        await alertChannel.send({ content: pingContent, embeds: [embed] });
+                        return;
+                    }
                 }
                 break;
             }
