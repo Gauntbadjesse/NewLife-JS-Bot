@@ -367,23 +367,19 @@ async function handleChunkScan(client, data) {
         
         let flagged = false;
         let flagReason = null;
+        let shouldPing = false;
         
-        // Check thresholds
-        if (entities >= 250) {
+        // Only check entity thresholds - ping if over 500
+        if (entities >= 500) {
             flagged = true;
             flagReason = `Critical entity count: ${entities}`;
-        } else if (entities >= 100) {
+            shouldPing = true;
+        } else if (entities >= 250) {
             flagged = true;
             flagReason = `High entity count: ${entities}`;
-        } else if (hoppers >= 50) {
-            flagged = true;
-            flagReason = `High hopper count: ${hoppers}`;
-        } else if (redstone >= 100) {
-            flagged = true;
-            flagReason = `High redstone count: ${redstone}`;
         }
         
-        // Update chunk data
+        // Update chunk data in database (still track everything)
         await ChunkAnalytics.findOneAndUpdate(
             { server, world, chunkX: x, chunkZ: z },
             {
@@ -399,23 +395,21 @@ async function handleChunkScan(client, data) {
             { upsert: true }
         );
         
-        // Alert if flagged
+        // Alert if flagged (only for entities)
         if (flagged && canSendAlert(`chunk_${server}_${x}_${z}`)) {
             markAlertSent(`chunk_${server}_${x}_${z}`);
             
             const channel = client.channels.cache.get(LAG_ALERTS_CHANNEL_ID);
             if (channel) {
-                const severity = entities >= 250 ? 'critical' : 'high';
+                const severity = entities >= 500 ? 'critical' : 'high';
                 
                 const embed = new EmbedBuilder()
                     .setColor(severity === 'critical' ? 0xef4444 : 0xf59e0b)
-                    .setTitle(`⚠️ Problem Chunk Detected - ${server}`)
+                    .setTitle(`Problem Chunk Detected - ${server}`)
                     .setDescription(`**World:** ${world}\n**Chunk:** (${x}, ${z})\n**Block Coords:** (${x * 16}, ${z * 16})`)
                     .addFields(
                         { name: 'Issue', value: flagReason, inline: false },
-                        { name: 'Entities', value: `\`${entities}\``, inline: true },
-                        { name: 'Hoppers', value: `\`${hoppers || 0}\``, inline: true },
-                        { name: 'Redstone', value: `\`${redstone || 0}\``, inline: true }
+                        { name: 'Entities', value: `\`${entities}\``, inline: true }
                     )
                     .setTimestamp();
                 
@@ -428,15 +422,16 @@ async function handleChunkScan(client, data) {
                     embed.addFields({ name: 'Top Entities', value: `\`\`\`${breakdown}\`\`\``, inline: false });
                 }
                 
+                // Only ping if over 500 entities
                 await channel.send({ 
-                    content: getAlertPing(),
+                    content: shouldPing ? getAlertPing() : null,
                     embeds: [embed] 
                 });
                 
                 // Create alert record
                 await LagAlert.create({
                     server,
-                    type: entities >= 100 ? 'entity_spam' : hoppers >= 50 ? 'hopper_lag' : 'redstone_lag',
+                    type: 'entity_spam',
                     severity,
                     location: { world, chunkX: x, chunkZ: z, x: x * 16, z: z * 16 },
                     details: flagReason,
