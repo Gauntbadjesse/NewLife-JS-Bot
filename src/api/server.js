@@ -3782,6 +3782,28 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
             .limit(20)
             .lean();
         
+        // Get chunks with boats (10+ boats) - also check all chunks for boat accumulation
+        let boatChunks = await ChunkAnalytics.find({
+            $or: [
+                { 'entityBreakdown.boat': { $gte: 10 } },
+                { 'entityBreakdown.chest_boat': { $gte: 10 } }
+            ]
+        }).sort({ lastUpdated: -1 }).limit(20).lean();
+        
+        // Also scan all chunks for boats if the query didn't find any
+        if (boatChunks.length === 0) {
+            const allChunks = await ChunkAnalytics.find({ entityCount: { $gt: 0 } })
+                .sort({ lastUpdated: -1 })
+                .limit(100)
+                .lean();
+            
+            boatChunks = allChunks.filter(c => {
+                const eb = c.entityBreakdown || {};
+                const boats = (eb.boat || 0) + (eb.chest_boat || 0);
+                return boats >= 10;
+            });
+        }
+        
         // Get recent lag alerts
         const lagAlerts = await LagAlert.find({ timestamp: { $gte: oneDayAgo } })
             .sort({ timestamp: -1 })
@@ -3857,23 +3879,112 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
             }
         }
         
-        // Build problem chunks HTML
+        // Build problem chunks HTML - expandable with full details
         let chunksHtml = '';
         if (problemChunks.length === 0) {
             chunksHtml = '<div class="empty-state">No problem chunks detected</div>';
         } else {
             for (const chunk of problemChunks) {
-                const isHighRisk = chunk.entityCount >= 200 || chunk.hopperCount >= 50;
+                const isHighRisk = chunk.entityCount >= 200;
+                const blockX = chunk.chunkX * 16;
+                const blockZ = chunk.chunkZ * 16;
+                const centerX = blockX + 8;
+                const centerZ = blockZ + 8;
+                const tpCommand = `/tp @s ${centerX} ~ ${centerZ}`;
+                
+                // Get entity breakdown - handle both Map and plain object
+                let breakdownHtml = '';
+                const eb = chunk.entityBreakdown instanceof Map 
+                    ? Object.fromEntries(chunk.entityBreakdown) 
+                    : (chunk.entityBreakdown || {});
+                    
+                if (Object.keys(eb).length > 0) {
+                    const breakdown = Object.entries(eb)
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 8);
+                    breakdownHtml = breakdown.map(([type, count]) => 
+                        `<span class="entity-tag ${count >= 50 ? 'danger' : count >= 20 ? 'warning' : ''}">${type.replace(/_/g, ' ')}: ${count}</span>`
+                    ).join('');
+                }
+                
                 chunksHtml += `
-                    <div class="item-card ${isHighRisk ? 'danger' : 'warning'}">
-                        <div class="item-header">
-                            <span class="item-title" style="color:${isHighRisk ? '#ef4444' : '#f59e0b'}">${chunk.world} @ ${chunk.x}, ${chunk.z}</span>
-                            <span class="item-time">${chunk.server || 'main'}</span>
+                    <div class="chunk-card ${isHighRisk ? 'danger' : 'warning'}" onclick="this.classList.toggle('expanded')">
+                        <div class="chunk-header">
+                            <div class="chunk-title">
+                                <span class="severity-dot ${isHighRisk ? 'critical' : 'high'}"></span>
+                                <span>${chunk.world}</span>
+                                <span class="chunk-coords">(${chunk.chunkX}, ${chunk.chunkZ})</span>
+                            </div>
+                            <span class="entity-count ${isHighRisk ? 'critical' : ''}">${chunk.entityCount} entities</span>
                         </div>
-                        <div class="item-meta">
-                            <span>Entities: ${chunk.entityCount || 0}</span>
-                            <span>Hoppers: ${chunk.hopperCount || 0}</span>
-                            <span>Redstone: ${chunk.redstoneCount || 0}</span>
+                        <div class="chunk-details">
+                            <div class="coords-section">
+                                <div class="coords-label">Block Coordinates</div>
+                                <div class="coords-value">${blockX}, ~ , ${blockZ}</div>
+                                <button class="copy-btn" onclick="event.stopPropagation(); navigator.clipboard.writeText('${tpCommand}'); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy TP Command', 1500)">Copy TP Command</button>
+                            </div>
+                            <div class="breakdown-section">
+                                <div class="breakdown-label">Entity Breakdown</div>
+                                <div class="breakdown-tags">${breakdownHtml || '<span class="entity-tag">No breakdown data</span>'}</div>
+                            </div>
+                            ${chunk.flagReason ? `<div class="flag-reason">${chunk.flagReason}</div>` : ''}
+                            <div class="chunk-meta">
+                                <span>Server: ${chunk.server || 'main'}</span>
+                                <span>Updated: ${formatCentralDateTime(chunk.lastUpdated)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Build boat alerts HTML
+        let boatsHtml = '';
+        if (boatChunks.length === 0) {
+            boatsHtml = '<div class="empty-state">No boat accumulation detected</div>';
+        } else {
+            for (const chunk of boatChunks) {
+                // Handle both Map and plain object
+                const eb = chunk.entityBreakdown instanceof Map 
+                    ? Object.fromEntries(chunk.entityBreakdown) 
+                    : (chunk.entityBreakdown || {});
+                const boatCount = (eb.boat || 0) + (eb.chest_boat || 0);
+                const blockX = chunk.chunkX * 16;
+                const blockZ = chunk.chunkZ * 16;
+                const centerX = blockX + 8;
+                const centerZ = blockZ + 8;
+                const tpCommand = `/tp @s ${centerX} ~ ${centerZ}`;
+                const killCommand = `/kill @e[type=boat,x=${centerX},z=${centerZ},distance=..32]`;
+                
+                boatsHtml += `
+                    <div class="chunk-card warning" onclick="this.classList.toggle('expanded')">
+                        <div class="chunk-header">
+                            <div class="chunk-title">
+                                <span class="boat-icon">⛵</span>
+                                <span>${chunk.world}</span>
+                                <span class="chunk-coords">(${chunk.chunkX}, ${chunk.chunkZ})</span>
+                            </div>
+                            <span class="entity-count">${boatCount} boats</span>
+                        </div>
+                        <div class="chunk-details">
+                            <div class="coords-section">
+                                <div class="coords-label">Location</div>
+                                <div class="coords-value">${blockX}, ~ , ${blockZ}</div>
+                                <div class="btn-group">
+                                    <button class="copy-btn" onclick="event.stopPropagation(); navigator.clipboard.writeText('${tpCommand}'); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy TP', 1500)">Copy TP</button>
+                                    <button class="copy-btn danger" onclick="event.stopPropagation(); navigator.clipboard.writeText('${killCommand}'); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy Kill Cmd', 1500)">Copy Kill Cmd</button>
+                                </div>
+                            </div>
+                            <div class="breakdown-section">
+                                <div class="breakdown-tags">
+                                    ${eb.boat ? `<span class="entity-tag">boat: ${eb.boat}</span>` : ''}
+                                    ${eb.chest_boat ? `<span class="entity-tag">chest_boat: ${eb.chest_boat}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="chunk-meta">
+                                <span>Server: ${chunk.server || 'main'}</span>
+                                <span>Total entities: ${chunk.entityCount}</span>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -3964,6 +4075,38 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         .status-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
         .status-good { background: #22c55e; box-shadow: 0 0 6px #22c55e80; }
         .status-warn { background: #f59e0b; box-shadow: 0 0 6px #f59e0b80; }
+        
+        /* Expandable Chunk Cards */
+        .chunk-card { background: #1f1f23; border-radius: 10px; padding: 14px; margin-bottom: 10px; border-left: 4px solid #6b7280; cursor: pointer; transition: all 0.2s; }
+        .chunk-card:hover { background: #252529; }
+        .chunk-card.warning { border-left-color: #f59e0b; }
+        .chunk-card.danger { border-left-color: #ef4444; }
+        .chunk-header { display: flex; justify-content: space-between; align-items: center; }
+        .chunk-title { display: flex; align-items: center; gap: 8px; color: #e5e7eb; font-weight: 500; }
+        .chunk-coords { color: #9ca3af; font-weight: 400; font-size: 0.9em; }
+        .severity-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .severity-dot.critical { background: #ef4444; box-shadow: 0 0 6px #ef444480; }
+        .severity-dot.high { background: #f59e0b; box-shadow: 0 0 6px #f59e0b80; }
+        .entity-count { font-size: 0.85em; color: #9ca3af; padding: 4px 10px; background: #2d2d35; border-radius: 6px; }
+        .entity-count.critical { color: #ef4444; background: #ef444420; }
+        .boat-icon { font-size: 1.1em; }
+        .chunk-details { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid #2d2d35; }
+        .chunk-card.expanded .chunk-details { display: block; }
+        .coords-section { margin-bottom: 14px; }
+        .coords-label, .breakdown-label { font-size: 0.75em; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .coords-value { font-family: monospace; font-size: 1.1em; color: #e5e7eb; margin-bottom: 10px; }
+        .copy-btn { background: #3b82f6; border: none; color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 0.8em; cursor: pointer; transition: all 0.2s; }
+        .copy-btn:hover { background: #2563eb; }
+        .copy-btn.danger { background: #ef4444; }
+        .copy-btn.danger:hover { background: #dc2626; }
+        .btn-group { display: flex; gap: 8px; }
+        .breakdown-section { margin-bottom: 14px; }
+        .breakdown-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+        .entity-tag { background: #2d2d35; padding: 4px 10px; border-radius: 6px; font-size: 0.8em; color: #d1d5db; }
+        .entity-tag.warning { background: #f59e0b30; color: #f59e0b; }
+        .entity-tag.danger { background: #ef444430; color: #ef4444; }
+        .flag-reason { font-size: 0.85em; color: #f59e0b; background: #f59e0b15; padding: 8px 12px; border-radius: 6px; margin-bottom: 14px; }
+        .chunk-meta { display: flex; gap: 16px; font-size: 0.8em; color: #6b7280; }
         .status-bad { background: #ef4444; box-shadow: 0 0 6px #ef444480; }
         .live-badge { background: #22c55e; color: #fff; padding: 4px 12px; border-radius: 6px; font-size: 0.75em; font-weight: 600; display: flex; align-items: center; gap: 6px; }
         .live-dot { width: 8px; height: 8px; background: #fff; border-radius: 50%; animation: pulse 1.5s infinite; }
@@ -4018,6 +4161,28 @@ ${getHeader('analytics', session)}
     
     <!-- Grid Layout -->
     <div class="section-grid">
+        <!-- Problem Chunks -->
+        <div class="section-card">
+            <div class="section-header">
+                <h3 class="section-title" style="color:#ef4444">Problem Chunks</h3>
+                <span class="section-count">${problemChunks.length}</span>
+            </div>
+            <div class="section-content">
+                ${chunksHtml}
+            </div>
+        </div>
+        
+        <!-- Boat Alerts -->
+        <div class="section-card">
+            <div class="section-header">
+                <h3 class="section-title" style="color:#3b82f6">Boat Accumulation</h3>
+                <span class="section-count">${boatChunks.length}</span>
+            </div>
+            <div class="section-content">
+                ${boatsHtml}
+            </div>
+        </div>
+        
         <!-- Pending ALT Reviews -->
         <div class="section-card">
             <div class="section-header">
@@ -4029,21 +4194,10 @@ ${getHeader('analytics', session)}
             </div>
         </div>
         
-        <!-- Problem Chunks -->
+        <!-- Lag Alerts -->
         <div class="section-card">
             <div class="section-header">
-                <h3 class="section-title" style="color:#f59e0b">Problem Chunks</h3>
-                <span class="section-count">${problemChunks.length}</span>
-            </div>
-            <div class="section-content">
-                ${chunksHtml}
-            </div>
-        </div>
-        
-        <!-- Lag Alerts -->
-        <div class="section-card full-width">
-            <div class="section-header">
-                <h3 class="section-title" style="color:#ef4444">Lag Alerts</h3>
+                <h3 class="section-title" style="color:#f59e0b">Lag Alerts</h3>
                 <span class="section-count">${lagAlerts.length}</span>
             </div>
             <div class="section-content" style="max-height:300px">
