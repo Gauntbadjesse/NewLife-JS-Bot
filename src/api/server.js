@@ -3782,6 +3782,29 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
             .limit(20)
             .lean();
         
+        // Get ALL chunks with entities for global summary
+        const allEntityChunks = await ChunkAnalytics.find({ entityCount: { $gt: 0 } })
+            .sort({ entityCount: -1 })
+            .limit(500)
+            .lean();
+        
+        // Calculate global entity summary
+        let totalEntities = 0;
+        const globalEntityBreakdown = {};
+        for (const chunk of allEntityChunks) {
+            totalEntities += chunk.entityCount || 0;
+            const eb = chunk.entityBreakdown instanceof Map 
+                ? Object.fromEntries(chunk.entityBreakdown) 
+                : (chunk.entityBreakdown || {});
+            for (const [type, count] of Object.entries(eb)) {
+                globalEntityBreakdown[type] = (globalEntityBreakdown[type] || 0) + count;
+            }
+        }
+        
+        // Sort entity types by count
+        const sortedEntityTypes = Object.entries(globalEntityBreakdown)
+            .sort((a, b) => b[1] - a[1]);
+        
         // Get chunks with boats (10+ boats) - also check all chunks for boat accumulation
         let boatChunks = await ChunkAnalytics.find({
             $or: [
@@ -3792,13 +3815,10 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         
         // Also scan all chunks for boats if the query didn't find any
         if (boatChunks.length === 0) {
-            const allChunks = await ChunkAnalytics.find({ entityCount: { $gt: 0 } })
-                .sort({ lastUpdated: -1 })
-                .limit(100)
-                .lean();
-            
-            boatChunks = allChunks.filter(c => {
-                const eb = c.entityBreakdown || {};
+            boatChunks = allEntityChunks.filter(c => {
+                const eb = c.entityBreakdown instanceof Map 
+                    ? Object.fromEntries(c.entityBreakdown) 
+                    : (c.entityBreakdown || {});
                 const boats = (eb.boat || 0) + (eb.chest_boat || 0);
                 return boats >= 10;
             });
@@ -4113,6 +4133,50 @@ app.get('/viewer/analytics', staffAuth, async (req, res) => {
         .no-data-badge { background: #6b7280; color: #fff; padding: 4px 12px; border-radius: 6px; font-size: 0.75em; font-weight: 600; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .refresh-timer { font-size: 0.75em; color: #6b7280; }
+        
+        /* Entity Summary Section */
+        .entity-summary { background: #1f1f23; border-radius: 16px; padding: 24px; margin-bottom: 32px; border: 1px solid #2d2d35; }
+        .summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+        .summary-title { margin: 0; color: #e5e7eb; font-size: 1.1em; }
+        .summary-total { font-size: 0.85em; color: #9ca3af; background: #2d2d35; padding: 6px 14px; border-radius: 8px; }
+        .entity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+        .entity-item { background: #18181b; border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; border: 1px solid #2d2d35; transition: all 0.2s; }
+        .entity-item:hover { border-color: #3d3d45; }
+        .entity-item.high { border-left: 3px solid #ef4444; }
+        .entity-item.medium { border-left: 3px solid #f59e0b; }
+        .entity-name { flex: 0 0 auto; min-width: 80px; font-size: 0.85em; color: #e5e7eb; text-transform: capitalize; }
+        .entity-bar-container { flex: 1; height: 6px; background: #2d2d35; border-radius: 3px; overflow: hidden; }
+        .entity-bar { height: 100%; background: linear-gradient(90deg, #8b5cf6, #6366f1); border-radius: 3px; transition: width 0.3s; }
+        .entity-item.high .entity-bar { background: linear-gradient(90deg, #ef4444, #dc2626); }
+        .entity-item.medium .entity-bar { background: linear-gradient(90deg, #f59e0b, #d97706); }
+        .entity-count-badge { flex: 0 0 auto; font-size: 0.8em; color: #9ca3af; font-weight: 600; min-width: 50px; text-align: right; }
+        
+        /* Spark Profiler Styles */
+        .spark-section { background: #1f1f23; border-radius: 16px; padding: 24px; margin-bottom: 32px; border: 1px solid #2d2d35; }
+        .spark-header { margin-bottom: 16px; }
+        .spark-title { margin: 0 0 4px 0; color: #fbbf24; font-size: 1.1em; display: flex; align-items: center; gap: 8px; }
+        .spark-subtitle { font-size: 0.85em; color: #9ca3af; }
+        .spark-input-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .spark-input { flex: 1; min-width: 250px; background: #18181b; border: 1px solid #2d2d35; border-radius: 8px; padding: 12px 16px; color: #e5e7eb; font-size: 0.9em; transition: border-color 0.2s; }
+        .spark-input:focus { outline: none; border-color: #fbbf24; }
+        .spark-input::placeholder { color: #6b7280; }
+        .spark-btn { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #18181b; border: none; border-radius: 8px; padding: 12px 24px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.9em; }
+        .spark-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(251,191,36,0.3); }
+        .spark-btn.secondary { background: #2d2d35; color: #e5e7eb; }
+        .spark-btn.secondary:hover { background: #3d3d45; box-shadow: none; }
+        .spark-viewer { background: #18181b; border-radius: 12px; border: 1px solid #2d2d35; min-height: 200px; overflow: hidden; }
+        .spark-empty { padding: 48px 24px; text-align: center; color: #6b7280; }
+        .spark-empty svg { margin-bottom: 16px; opacity: 0.5; }
+        .spark-empty p { margin: 0 0 8px 0; }
+        .spark-hint { font-size: 0.85em; opacity: 0.7; }
+        .spark-iframe { width: 100%; height: 600px; border: none; border-radius: 12px; }
+        .spark-loading { padding: 48px 24px; text-align: center; color: #fbbf24; }
+        .spark-loading-spinner { width: 40px; height: 40px; border: 3px solid #2d2d35; border-top-color: #fbbf24; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spark-error { padding: 24px; text-align: center; color: #ef4444; }
+        .spark-meta { display: flex; gap: 16px; padding: 16px; background: #1f1f23; border-bottom: 1px solid #2d2d35; flex-wrap: wrap; }
+        .spark-meta-item { display: flex; align-items: center; gap: 6px; font-size: 0.85em; color: #9ca3af; }
+        .spark-meta-item strong { color: #e5e7eb; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -4156,6 +4220,52 @@ ${getHeader('analytics', session)}
         </div>
         <div class="chart-wrapper">
             <canvas id="tpsChart"></canvas>
+        </div>
+    </div>
+    
+    <!-- Global Entity Summary -->
+    <div class="entity-summary">
+        <div class="summary-header">
+            <h3 class="summary-title">Entity Summary</h3>
+            <span class="summary-total">${totalEntities.toLocaleString()} total entities across ${allEntityChunks.length} chunks</span>
+        </div>
+        <div class="entity-grid">
+            ${sortedEntityTypes.slice(0, 20).map(([type, count]) => {
+                const percentage = ((count / totalEntities) * 100).toFixed(1);
+                const isHigh = count > 500;
+                const isMedium = count > 100;
+                return `
+                    <div class="entity-item ${isHigh ? 'high' : isMedium ? 'medium' : ''}">
+                        <span class="entity-name">${type.replace(/_/g, ' ')}</span>
+                        <div class="entity-bar-container">
+                            <div class="entity-bar" style="width: ${Math.min(percentage * 2, 100)}%"></div>
+                        </div>
+                        <span class="entity-count-badge">${count.toLocaleString()}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    </div>
+    
+    <!-- Spark Profiler Section -->
+    <div class="spark-section">
+        <div class="spark-header">
+            <h3 class="spark-title">Spark Profiler</h3>
+            <span class="spark-subtitle">Paste a Spark profiler URL to analyze</span>
+        </div>
+        <div class="spark-input-row">
+            <input type="text" id="sparkUrl" class="spark-input" placeholder="https://spark.lucko.me/..." />
+            <button id="loadSparkBtn" class="spark-btn">Load Profile</button>
+            <button id="clearSparkBtn" class="spark-btn secondary">Clear</button>
+        </div>
+        <div id="sparkViewer" class="spark-viewer">
+            <div class="spark-empty">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                <p>Enter a Spark profiler URL above to view performance data</p>
+                <p class="spark-hint">Supports spark.lucko.me links for profiles and health reports</p>
+            </div>
         </div>
     </div>
     
@@ -4378,6 +4488,90 @@ ${getHeader('analytics', session)}
             timer.textContent = 'Auto-refresh in ' + seconds + 's';
         }
     }, 1000);
+})();
+
+// Spark Profiler Integration
+(function() {
+    const sparkInput = document.getElementById('sparkUrl');
+    const loadBtn = document.getElementById('loadSparkBtn');
+    const clearBtn = document.getElementById('clearSparkBtn');
+    const viewer = document.getElementById('sparkViewer');
+    
+    if (!sparkInput || !loadBtn || !viewer) return;
+    
+    // Load saved Spark URL from localStorage
+    const savedUrl = localStorage.getItem('sparkProfilerUrl');
+    if (savedUrl) {
+        sparkInput.value = savedUrl;
+        loadSparkProfile(savedUrl);
+    }
+    
+    loadBtn.addEventListener('click', () => {
+        const url = sparkInput.value.trim();
+        if (!url) {
+            viewer.innerHTML = '<div class="spark-error">Please enter a Spark profiler URL</div>';
+            return;
+        }
+        loadSparkProfile(url);
+    });
+    
+    clearBtn.addEventListener('click', () => {
+        sparkInput.value = '';
+        localStorage.removeItem('sparkProfilerUrl');
+        viewer.innerHTML = \`
+            <div class="spark-empty">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                <p>Enter a Spark profiler URL above to view performance data</p>
+                <p class="spark-hint">Supports spark.lucko.me links for profiles and health reports</p>
+            </div>
+        \`;
+    });
+    
+    // Also load on Enter key
+    sparkInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            loadBtn.click();
+        }
+    });
+    
+    function loadSparkProfile(url) {
+        // Validate URL format
+        const sparkMatch = url.match(/spark\\.lucko\\.me\\/([a-zA-Z0-9]+)/);
+        if (!sparkMatch) {
+            viewer.innerHTML = '<div class="spark-error">Invalid Spark URL. Please use a spark.lucko.me link.</div>';
+            return;
+        }
+        
+        const profileId = sparkMatch[1];
+        localStorage.setItem('sparkProfilerUrl', url);
+        
+        // Show loading
+        viewer.innerHTML = \`
+            <div class="spark-loading">
+                <div class="spark-loading-spinner"></div>
+                <p>Loading Spark profile...</p>
+            </div>
+        \`;
+        
+        // Create the embed with meta info
+        const embedUrl = 'https://spark.lucko.me/' + profileId;
+        
+        viewer.innerHTML = \`
+            <div class="spark-meta">
+                <div class="spark-meta-item">
+                    <strong>Profile ID:</strong> \${profileId}
+                </div>
+                <div class="spark-meta-item">
+                    <a href="\${embedUrl}" target="_blank" style="color:#fbbf24;text-decoration:none;">
+                        Open in New Tab ↗
+                    </a>
+                </div>
+            </div>
+            <iframe class="spark-iframe" src="\${embedUrl}" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+        \`;
+    }
 })();
 </script>
 </body>

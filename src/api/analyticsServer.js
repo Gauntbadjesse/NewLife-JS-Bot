@@ -183,9 +183,20 @@ app.post('/api/analytics/chunks', async (req, res) => {
         }
         
         const flaggedChunks = [];
+        let totalEntities = 0;
+        const globalBreakdown = {};
         
         for (const chunk of chunks) {
             const { world, x, z, entities, entityBreakdown, hoppers, redstone, tileEntities, playersNearby } = chunk;
+            
+            totalEntities += entities || 0;
+            
+            // Aggregate entity types globally
+            if (entityBreakdown) {
+                for (const [type, count] of Object.entries(entityBreakdown)) {
+                    globalBreakdown[type] = (globalBreakdown[type] || 0) + count;
+                }
+            }
             
             let flagged = false;
             let flagReason = null;
@@ -240,7 +251,24 @@ app.post('/api/analytics/chunks', async (req, res) => {
             });
         }
         
-        res.json({ success: true, received: chunks.length, flagged: flaggedChunks.length });
+        // Log summary
+        console.log(`[Analytics] ${server}: ${chunks.length} chunks, ${totalEntities} total entities`);
+        if (Object.keys(globalBreakdown).length > 0) {
+            const topEntities = Object.entries(globalBreakdown)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([type, count]) => `${type}:${count}`)
+                .join(', ');
+            console.log(`[Analytics] Top entities: ${topEntities}`);
+        }
+        
+        res.json({ 
+            success: true, 
+            received: chunks.length, 
+            flagged: flaggedChunks.length,
+            totalEntities,
+            topEntities: Object.entries(globalBreakdown).sort((a, b) => b[1] - a[1]).slice(0, 10)
+        });
     } catch (error) {
         console.error('[Analytics API] Chunks endpoint error:', error);
         res.status(500).json({ error: 'Internal server error' });

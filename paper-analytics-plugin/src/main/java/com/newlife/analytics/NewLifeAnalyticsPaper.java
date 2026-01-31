@@ -243,21 +243,42 @@ public class NewLifeAnalyticsPaper extends JavaPlugin {
     }
 
     private void scanChunks() {
-        List<Map<String, Object>> flaggedChunks = new ArrayList<>();
+        List<Map<String, Object>> allChunks = new ArrayList<>();
+        Map<String, Integer> globalEntityCounts = new HashMap<>();
+        int totalEntities = 0;
         
         for (World world : Bukkit.getWorlds()) {
             for (Chunk chunk : world.getLoadedChunks()) {
                 Map<String, Object> chunkData = analyzeChunk(world, chunk);
                 
                 if (chunkData != null) {
-                    flaggedChunks.add(chunkData);
+                    allChunks.add(chunkData);
+                    totalEntities += (int) chunkData.getOrDefault("entities", 0);
+                    
+                    // Aggregate entity types
+                    @SuppressWarnings("unchecked")
+                    Map<String, Integer> breakdown = (Map<String, Integer>) chunkData.get("entityBreakdown");
+                    if (breakdown != null) {
+                        for (Map.Entry<String, Integer> entry : breakdown.entrySet()) {
+                            globalEntityCounts.merge(entry.getKey(), entry.getValue(), Integer::sum);
+                        }
+                    }
                 }
             }
         }
         
+        if (debug) {
+            getLogger().info("Chunk scan complete: " + allChunks.size() + " chunks with entities, " + totalEntities + " total entities");
+            // Log top entity types
+            globalEntityCounts.entrySet().stream()
+                .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                .limit(5)
+                .forEach(e -> getLogger().info("  " + e.getKey() + ": " + e.getValue()));
+        }
+        
         // Send to API async
-        if (!flaggedChunks.isEmpty()) {
-            final List<Map<String, Object>> chunks = new ArrayList<>(flaggedChunks);
+        if (!allChunks.isEmpty()) {
+            final List<Map<String, Object>> chunks = new ArrayList<>(allChunks);
             Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
                 sendChunkData(chunks);
             });
@@ -297,8 +318,8 @@ public class NewLifeAnalyticsPaper extends JavaPlugin {
         // Check if chunk should be flagged
         boolean flagged = entityCount >= entityWarning || hopperCount >= hopperWarning || redstoneCount >= redstoneWarning;
         
-        // Only report flagged chunks to reduce data
-        if (!flagged && entityCount < 50) {
+        // Report ALL chunks with entities (not just flagged) for accurate dashboard
+        if (entityCount == 0) {
             return null;
         }
         
