@@ -16,6 +16,24 @@ const PlayerConnection = require('../database/models/PlayerConnection');
 const PlayerAnalytics = require('../database/models/PlayerAnalytics');
 const AltGroup = require('../database/models/AltGroup');
 
+// Import RCON for End items clearing
+const { executeRcon } = require('../utils/rcon');
+
+// Import End items clearing function from cog
+// This is loaded lazily to avoid circular dependencies
+let clearEndItemsFromPlayer = null;
+function getClearEndItemsFunction() {
+    if (!clearEndItemsFromPlayer) {
+        try {
+            const endItemsCog = require('../cogs/endItemsClear');
+            clearEndItemsFromPlayer = endItemsCog.clearEndItemsFromPlayer;
+        } catch (err) {
+            console.error('[Analytics] Failed to load endItemsClear cog:', err);
+        }
+    }
+    return clearEndItemsFromPlayer;
+}
+
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
@@ -467,6 +485,32 @@ app.post('/api/analytics/connection', async (req, res) => {
                     });
                 }
             }
+        }
+        
+        // Clear End items from player on join
+        // This removes elytras, shulker boxes, ender chests, and other End items
+        // Also wipes the player's ender chest contents
+        if (type === 'join') {
+            // Small delay to ensure player is fully loaded
+            setTimeout(async () => {
+                try {
+                    const clearFn = getClearEndItemsFunction();
+                    if (!clearFn) {
+                        console.error('[EndClear] Clear function not available');
+                        return;
+                    }
+                    
+                    const clearResult = await clearFn(username);
+                    if (clearResult.itemsCleared > 0) {
+                        console.log(`[EndClear] Successfully cleared ${clearResult.itemsCleared} End items from ${username} on join`);
+                        
+                        // Notify the player
+                        await executeRcon(`tellraw ${username} {"text":"[NewLife] End items have been cleared from your inventory.","color":"yellow"}`);
+                    }
+                } catch (error) {
+                    console.error(`[EndClear] Failed to clear End items from ${username}:`, error);
+                }
+            }, 2000); // 2 second delay for player to fully load
         }
         
         res.json({ success: true });

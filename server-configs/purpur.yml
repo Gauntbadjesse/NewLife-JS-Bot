@@ -1,0 +1,1204 @@
+# Purpur Configuration - Optimized for TPS
+# Server: NewLife SMP
+# Last Updated: January 2026
+# 
+# This config prioritizes server performance (TPS) while maintaining
+# a mostly vanilla gameplay experience. Settings are thoroughly commented.
+
+verbose: false
+
+settings:
+  # Network compression threshold - 256 is good balance
+  # Lower = more CPU, less bandwidth | Higher = less CPU, more bandwidth
+  network:
+    upnp-port-forwarding: false
+    max-joins-per-tick: 3
+    kick-for-out-of-order-chat: false
+  
+  # Lagging threshold for "can't keep up" warnings
+  lagging-threshold: 19.0
+  
+  # Use alternate keepalive - helps with players on poor connections
+  use-alternate-keepalive: true
+  
+  # Disable give command dropping items (prevents lag exploits)
+  give-command-drops-items: false
+  
+  # Broadcast crit particles - disable for TPS
+  broadcast-crit-particle: false
+  
+  # Chunk loading rate limiting
+  chunks:
+    disable-mushroom-block-dropped-on-silk-touch: false
+  
+  # Logger settings
+  logger:
+    suppress-init-legacy-material-errors: false
+    suppress-ignored-advancement-warnings: true
+    suppress-library-loader-warnings: true
+    suppress-unrecognized-recipe-errors: false
+    suppress-setblock-in-far-chunk-errors: true
+  
+  # Blocks settings
+  blocks:
+    barrel:
+      six-rows: false
+    ender_chest:
+      six-rows: false
+    crying_obsidian:
+      valid-for-portal-frame: false
+    beehive:
+      max-bees-inside: 3
+    anvil:
+      allow-colors: false
+      iron-ingots-used-for-repair: 0
+    lightning_rod:
+      range: 128
+  
+  # Mob spawning general settings
+  mobs:
+    ridable-in-water: false
+    
+  # Enchantment settings
+  enchantment:
+    allow-looting-on-shears: false
+    clamp-levels: true
+    anvil:
+      allow-unsafe-enchants: false
+      allow-inapplicable-enchants: false
+      allow-higher-enchants-levels: false
+      allow-incompatible-enchants: false
+
+# World-specific settings
+# These apply to all worlds unless overridden in world-settings.<worldname>
+world-settings:
+  default:
+    # ============================================
+    # GAMEPLAY MECHANICS (mostly vanilla)
+    # ============================================
+    gameplay-mechanics:
+      # Boat settings
+      boat:
+        eject-players-on-land: false
+        do-fall-damage: true
+      
+      # Armorstand settings
+      armorstand:
+        step-height: 0.0
+        set-name-visible-when-placing-with-custom-name: false
+        fix-nametags: false
+        can-movement-tick: true
+        can-move-in-water: true
+        can-move-in-water-over-fence: true
+      
+      # Player settings
+      player:
+        exp-dropped-on-death:
+          equation: expLevel * 7
+          maximum: 100
+        teleport-if-outside-border: false
+        totem-of-undying-works-in-inventory: false
+        fix-stuck-in-portal: false
+        one-punch-in-creative: false
+        sleep-ignore-nearby-mobs: false
+        can-skip-night: true
+        critical-damage-multiplier: 1.5
+        burp-when-full: false
+        spawn-invulnerable-ticks: 60
+        invulnerable-while-accepting-resource-pack: false
+        teleport-on-void-damage: false
+        allow-void-trading: true
+        teleport-on-death-to-respawn-point: false
+        death-respawn-tp-delay: 0
+      
+      # Minecart settings
+      minecart:
+        max-speed: 0.4
+        place-anywhere: false
+        powered-rail:
+          boost-modifier: 0.06
+        controllable:
+          enabled: false
+      
+      # Item settings
+      item:
+        immune:
+          cactus: []
+          explosion: []
+          fire: []
+          lightning: []
+        shears:
+          damage-if-sprinting: false
+          sprinting-damage: 1
+        compass-locate-allows-player-to-run: true
+        ender-pearl:
+          damage: 5
+          cooldown: 20
+          creative-cooldown: 20
+          endermite-spawn-chance: 0.05
+        glow-berries:
+          eat-glow-duration: 0
+        snowball:
+          extinguish:
+            fire: false
+            candles: false
+            campfires: false
+        egg:
+          extinguish:
+            fire: false
+            candles: false
+            campfires: false
+        shulker_box:
+          allow-oversized-stacks: false
+        
+      # Mob-related gameplay settings
+      mob:
+        spawn-eggs:
+          bypass-mob-griefing: false
+      
+      # Entity settings
+      entity:
+        enderman:
+          short-height: false
+        shared-random: true
+        turtle:
+          breeding:
+            ignore-distance: false
+      
+      # Projectile settings
+      projectile:
+        damage:
+          snowball:
+            inanimate: 3
+            mobs: 0
+          egg:
+            inanimate: 3
+            mobs: 0
+        
+      # Silk touch settings
+      silk-touch:
+        enabled: false
+        spawner-name: "&5Mob Spawner"
+        spawner-lore: []
+        tools: []
+        spawner-drops:
+          drop-experience: true
+          drop-experience-on-break: true
+          drop-experience-on-interaction: true
+      
+      # Elytra settings  
+      elytra:
+        damage-per-second: 1
+        damage-multiplied-by-speed: 0.0
+        ignore-unbreaking: false
+        damage-per-boost:
+          firework: 0
+          trident: 0
+
+    # ============================================
+    # MOB SETTINGS (vanilla-like with optimizations)
+    # ============================================
+    mobs:
+      # Allay
+      allay:
+        ridable: false
+        controllable: true
+        respect-nbt: []
+        
+      # Axolotl
+      axolotl:
+        ridable: false
+        controllable: true
+        breeding-cooldown: 6000
+        
+      # Bat - MAJOR TPS SAVER
+      bat:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        # Reduce bat spawning - they serve no gameplay purpose
+        ridable-max-y: 256
+        
+      # Bee
+      bee:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        dies-after-sting: true
+        can-work-at-night: false
+        can-work-in-rain: false
+        
+      # Blaze
+      blaze:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        takes-damage-from-water: true
+        
+      # Camel
+      camel:
+        ridable-in-water: false
+        breeding-cooldown: 6000
+        
+      # Cat
+      cat:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        default-collar-color: RED
+        spawn-delay: 1200
+        scan-range-for-other-cats:
+          swamp-hut: 16
+          village: 48
+        breeding-cooldown: 6000
+        
+      # Cave Spider
+      cave_spider:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        
+      # Chicken
+      chicken:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        retaliate: false
+        breeding-cooldown: 6000
+        
+      # Cod
+      cod:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        
+      # Cow
+      cow:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        feed-mushrooms-for-mooshroom: 0
+        breeding-cooldown: 6000
+        naturally-aggressive-to-players:
+          enabled: false
+          chance: 1.0
+        
+      # Creeper
+      creeper:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        allow-griefing: true
+        naturally-charged-chance: 0.0
+        explode-when-killed: false
+        health: 20.0
+        
+      # Dolphin
+      dolphin:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        spit:
+          enabled: false
+        disable-treasure-searching: false
+        
+      # Donkey
+      donkey:
+        ridable-in-water: false
+        breeding-cooldown: 6000
+        
+      # Drowned
+      drowned:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        ridable-max-y: 256
+        jockey:
+          only-babies: true
+          chance: 0.05
+          try-existing-chickens: true
+          
+      # Elder Guardian
+      elder_guardian:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        
+      # Ender Dragon
+      ender_dragon:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        ridable-max-y: 256
+        always-drop-egg-block: false
+        always-drop-full-exp: false
+        bypass-mob-griefing: false
+        can-ride-vehicles: false
+        
+      # Enderman
+      enderman:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        allow-griefing: true
+        can-despawn-with-held-block: false
+        ignore-projectiles: false
+        bypass-mob-griefing: false
+        takes-damage-from-water: true
+        aggressive-towards-endermites: true
+        aggressive-towards-endermites-only-spawned-by-ender-pearl: false
+        ignore-players-wearing-dragon-head: false
+        disable-player-stare-aggression: false
+        
+      # Endermite
+      endermite:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        
+      # Evoker
+      evoker:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        bypass-mob-griefing: false
+        
+      # Fox
+      fox:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        tulips-change-type: false
+        breeding-cooldown: 6000
+        bypass-mob-griefing: false
+        
+      # Frog
+      frog:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        
+      # Ghast
+      ghast:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        allow-griefing: true
+        
+      # Giant
+      giant:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        step-height: 2.0
+        jump-height: 1.0
+        movement-speed: 0.5
+        attack-damage: 50.0
+        have-ai: false
+        have-hostile-ai: false
+        
+      # Glow Squid
+      glow_squid:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        can-fly: false
+        
+      # Goat
+      goat:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        
+      # Guardian
+      guardian:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        
+      # Hoglin
+      hoglin:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        
+      # Horse
+      horse:
+        ridable-in-water: false
+        breeding-cooldown: 6000
+        
+      # Husk
+      husk:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        jockey:
+          only-babies: true
+          chance: 0.05
+          try-existing-chickens: true
+          
+      # Illusioner
+      illusioner:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        movement-speed: 0.5
+        follow-range: 18.0
+        
+      # Iron Golem
+      iron_golem:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        can-spawn-in-air: false
+        can-swim: false
+        poppy-calms-anger: false
+        healing-calms-anger: false
+        
+      # Llama
+      llama:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        join-caravans: true
+        
+      # Magma Cube
+      magma_cube:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        
+      # Mooshroom
+      mooshroom:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        
+      # Mule
+      mule:
+        ridable-in-water: false
+        breeding-cooldown: 6000
+        
+      # Ocelot
+      ocelot:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        
+      # Panda
+      panda:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        
+      # Parrot
+      parrot:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        can-breed: false
+        
+      # Phantom - MAJOR TPS IMPACT
+      phantom:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        # Burn in daylight and in light - reduces phantom counts
+        burn-in-daylight: true
+        burn-in-light: 0
+        flames-on-swoop: false
+        ignore-players-with-torch: false
+        allow-griefing: false
+        # Spawn settings - slightly reduced for TPS
+        spawn:
+          min-sky-darkness: 5
+          only-above-sea-level: true
+          only-with-visible-sky: true
+          local-difficulty-chance: 3.0
+          min-time-since-slept: 72000
+          delay:
+            min: 1200
+            max: 2400
+          overhead:
+            min: 20
+            max: 35
+            radius: 10
+          per-attempt:
+            min: 1
+            max: 1
+            
+      # Pig
+      pig:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        give-saddle-back: false
+        breeding-cooldown: 6000
+        
+      # Piglin
+      piglin:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        portal-spawn-modifier: 2000
+        
+      # Piglin Brute
+      piglin_brute:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        
+      # Pillager
+      pillager:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        bypass-mob-griefing: false
+        
+      # Polar Bear
+      polar_bear:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breedable-item: ""
+        breeding-cooldown: 6000
+        
+      # Pufferfish
+      pufferfish:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        
+      # Rabbit
+      rabbit:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        spawn-toast-chance: 0.0
+        spawn-killer-rabbit-chance: 0.0
+        breeding-cooldown: 6000
+        bypass-mob-griefing: false
+        
+      # Ravager
+      ravager:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        bypass-mob-griefing: false
+        griefable-blocks: []
+        
+      # Salmon
+      salmon:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        
+      # Sheep
+      sheep:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        bypass-mob-griefing: false
+        jeb-shear-random-color: false
+        
+      # Shulker
+      shulker:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        spawn-from-bullet:
+          base-chance: 0.10
+          require-open-lid: true
+          nearby-range: 8.0
+          nearby-equation: "(nearby - 1) / 5.0"
+          random-color: false
+        change-color-with-dye: false
+        
+      # Silverfish
+      silverfish:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        bypass-mob-griefing: false
+        
+      # Skeleton
+      skeleton:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        bow-accuracy: 14
+        
+      # Skeleton Horse
+      skeleton_horse:
+        ridable-in-water: true
+        can-swim: true
+        
+      # Slime
+      slime:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        
+      # Sniffer
+      sniffer:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        boosted-egg-hatching: false
+        egg-item-hatching: false
+        
+      # Snow Golem
+      snow_golem:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        leave-trail-when-ridden: false
+        drop-pumpkin-when-sheared: true
+        pumpkin-can-be-added-back: false
+        min-shoot-interval-ticks: 20
+        max-shoot-interval-ticks: 20
+        snow-ball-modifier: 10.0
+        attack-distance: 1.25
+        bypass-mob-griefing: false
+        takes-damage-from-water: true
+        
+      # Spider
+      spider:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        can-climb-world-border: true
+        
+      # Squid
+      squid:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        immune-to-EAR: false
+        water-offset-check: 0.0
+        can-fly: false
+        
+      # Stray
+      stray:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        
+      # Strider
+      strider:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        give-saddle-back: false
+        breeding-cooldown: 6000
+        takes-damage-from-water: true
+        
+      # Tadpole
+      tadpole:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        
+      # Trader Llama
+      trader_llama:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        
+      # Tropical Fish
+      tropical_fish:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        
+      # Turtle
+      turtle:
+        ridable: false
+        controllable: true
+        ridable-in-water: true
+        ridable-max-y: 256
+        breeding-cooldown: 6000
+        
+      # Vex
+      vex:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        takes-damage-from-water: false
+        
+      # Villager - HEAVILY OPTIMIZED FOR TPS
+      villager:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        # Brain tick settings - AGGRESSIVE TPS OPTIMIZATION
+        # Higher value = less frequent AI updates = massive TPS savings
+        # Default is 1, we use 4 for significant reduction
+        brain-ticks: 4
+        use-brain-ticks-only-when-lagging: false
+        # Spawn settings - disable iron golem spawning from villagers
+        spawn-iron-golem:
+          radius: 10
+          limit: 4
+        can-be-leashed: false
+        follow-emerald-blocks: false
+        allow-trading: true
+        # Lobotomization - ENABLED for maximum TPS
+        # Villagers stop pathfinding when they can't reach their destination
+        # They will still trade, breed, and work - just won't wander aimlessly
+        lobotomize:
+          enabled: true
+          check-interval: 60
+          wait-until-trade-locked: true
+        display-trade-item: false
+        breeding-cooldown: 6000
+        clerics-farm-warts: false
+        cleric-wart-farmers-throw-warts-at-villagers: false
+        bypass-mob-griefing: false
+        can-breed: true
+        minimum-demand: 0
+        # Reduced search radius - villagers won't pathfind as far
+        search-radius:
+          acquire-poi: 16
+          nearest-bed-sensor: 16
+        
+      # Vindicator
+      vindicator:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        johnny:
+          spawn-chance: 0.0
+          
+      # Wandering Trader
+      wandering_trader:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        can-be-leashed: false
+        follow-emerald-blocks: false
+        allow-trading: true
+        
+      # Warden
+      warden:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        
+      # Witch
+      witch:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        
+      # Wither
+      wither:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        can-ride-vehicles: false
+        explosion-radius: 1.0
+        health-regen-amount: 1.0
+        health-regen-delay: 20
+        bypass-mob-griefing: false
+        play-spawn-sound: true
+        
+      # Wither Skeleton
+      wither_skeleton:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        takes-damage-from-water: false
+        
+      # Wolf
+      wolf:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        default-collar-color: RED
+        breeding-cooldown: 6000
+        milk-cures-rabies: true
+        spawn-rabid-chance: 0.0
+        
+      # Zoglin
+      zoglin:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        
+      # Zombie
+      zombie:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        jockey:
+          only-babies: true
+          chance: 0.05
+          try-existing-chickens: true
+        aggressive-towards-villager-when-lagging: false
+        bypass-mob-griefing: false
+        
+      # Zombie Horse
+      zombie_horse:
+        ridable-in-water: false
+        spawn-chance: 0.0
+        can-breed: false
+        
+      # Zombie Villager
+      zombie_villager:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        jockey:
+          only-babies: true
+          chance: 0.05
+          try-existing-chickens: true
+        cure:
+          enabled: true
+        curing-time:
+          min: 3600
+          max: 6000
+          
+      # Zombified Piglin
+      zombified_piglin:
+        ridable: false
+        controllable: true
+        ridable-in-water: false
+        ridable-max-y: 256
+        count-as-player-kill-when-angry: true
+        jockey:
+          only-babies: true
+          chance: 0.05
+          try-existing-chickens: true
+
+    # ============================================
+    # BLOCKS SETTINGS
+    # ============================================
+    blocks:
+      # Bed settings
+      bed:
+        exploding-beds-in-creative: true
+      
+      # Big Dripleaf settings
+      big_dripleaf:
+        tilt-delay:
+          FULL: 30
+          PARTIAL: 10
+          UNSTABLE: 10
+          
+      # Azalea settings
+      azalea:
+        growth-chance: 0.0
+        
+      # Beacon settings
+      beacon:
+        effect-range:
+          level-1: 20
+          level-2: 30
+          level-3: 40
+          level-4: 50
+          
+      # Budding Amethyst settings
+      budding_amethyst:
+        silk-touch: DISABLED
+        
+      # Calibrated Sculk Sensor settings
+      calibrated_sculk_sensor:
+        range: 16
+        
+      # Campfire settings
+      campfire:
+        lit-when-placed: true
+        
+      # Chest settings
+      chest:
+        open-with-solid-block-on-top: false
+        
+      # Chorus Fruit settings
+      chorus_fruit:
+        solid-blocks-required-to-teleport-beneath: true
+        
+      # Composter settings
+      composter:
+        sneak-to-bulk-process: false
+        
+      # Coral settings
+      coral:
+        die-outside-water: true
+        ignore-surrounding-water: false
+        
+      # Dispenser settings
+      dispenser:
+        apply-cursed-to-armor-slots: true
+        place-anvils: false
+        break-blocks:
+          allowed: []
+          cooldown: 20
+          blacklist: []
+          
+      # Door settings
+      door:
+        requires-redstone: []
+        
+      # Dragon Egg settings
+      dragon_egg:
+        teleport: true
+        
+      # End Portal settings
+      end_portal:
+        safe-teleporting: false
+        
+      # Farmland settings
+      farmland:
+        bypass-mob-griefing: false
+        gets-moist-from-below: false
+        use-alpha-farmland: false
+        disable-trampling: false
+        only-players-trample: false
+        feather-fall-distance-affects-trampling: false
+        
+      # Flowering Azalea settings  
+      flowering_azalea:
+        growth-chance: 0.0
+        
+      # Furnace settings
+      furnace:
+        use-lava-from-underneath: false
+        infinite-fuel: false
+        
+      # Grindstone settings
+      grindstone:
+        ignored-enchants: []
+        remove-attributes: false
+        remove-name-and-lore: false
+        
+      # Lava settings
+      lava:
+        infinite-source: false
+        infinite-required-sources: 2
+        speed:
+          nether: 10
+          not-nether: 30
+          
+      # Magma Block settings
+      magma-block:
+        damage-when-sneaking: false
+        damage-with-frost-walker: false
+        
+      # Observer settings
+      observer:
+        disable-clock: false
+        
+      # Packed Mud settings
+      packed_mud:
+        can-be-placed-on-crafting-table: true
+        
+      # Pointed Dripstone settings
+      pointed_dripstone:
+        can-fill-cauldron-below: true
+        drips-water-time: 1200
+        drips-lava-time: 1200
+        
+      # Powder Snow settings
+      powder_snow:
+        bypass-mob-griefing: false
+        
+      # Redstone Torch settings
+      redstone_torch:
+        burnout:
+          enabled: true
+          count: 8
+          period: 60
+          
+      # Respawn Anchor settings
+      respawn_anchor:
+        explode-on-use-in-overworld: true
+        explode-on-use-in-the-end: true
+        
+      # Sculk Sensor settings
+      sculk_sensor:
+        range: 8
+        
+      # Sculk Shrieker settings
+      sculk_shrieker:
+        can-summon-default: false
+        
+      # Sign settings
+      sign:
+        allow-colors: false
+        right-click-edit: true
+        
+      # Spawner settings  
+      spawner:
+        deactivate-by-redstone: false
+        fix-mc-238526: false
+        
+      # Sponge settings
+      sponge:
+        absorbs-lava: false
+        absorption:
+          area: 64
+          radius: 6
+          
+      # Stonecutter settings
+      stonecutter:
+        damage: 0.0
+        
+      # Turtle Egg settings
+      turtle_egg:
+        break-from-exp-orbs: true
+        break-from-items: true
+        break-from-minecarts: true
+        bypass-mob-griefing: false
+        random-tick-crack-chance: 500
+        feather-fall-distance-affects-trampling: false
+        
+      # Water settings
+      water:
+        infinite-source: true
+        infinite-required-sources: 2
+
+    # ============================================
+    # RIDABLE ENTITY SETTINGS  
+    # ============================================
+    ridable-settings:
+      babies-are-ridable: false
+      untamed-tamables-are-ridable: false
+      use-night-vision: false
+      
+    # ============================================
+    # TICK RATES (Performance Critical!)
+    # ============================================
+    tick-rates:
+      # Sensor tick rates - AGGRESSIVELY OPTIMIZED
+      # Higher values = less frequent checks = massive TPS savings
+      # Default is 20 for most, we use much higher values
+      sensor:
+        villager:
+          secondarypoisensor: 200
+          nearestbedsensor: 200
+          villagerbabiessensor: 200
+          playersensor: 200
+          nearestlivingentitysensor: 200
+          golopedetectsensor: 200
+          guardianattacksensor: 200
+          hurtbysensor: 100
+          interactablesensor: 200
+          mingledetectorsensor: 200
+          nearestplayersensor: 200
+        piglin:
+          secondarypoisensor: 200
+          nearestbedsensor: 200
+          villagerbabiessensor: 200
+          playersensor: 200
+          nearestlivingentitysensor: 200
+          
+      # Behavior tick rates - AGGRESSIVELY OPTIMIZED
+      behavior:
+        villager:
+          validatenearbypoi: 200
+          acquirepoi: 200
+          updateraidstatus: 200
+          yieldjobsite: 200
+          gotonearestvillage: 200
+          locatehidingplaceinvillage: 200
+          victorystroll: 200
+          chaseandattackgoal: 200
+          setlookandinteract: 200
+          assertinfection: 200
+          gotodefaultposition: 200
+          celebratevictory: 200
+          panicandhelp: 200
+
+    # ============================================
+    # ENTITY SETTINGS (Performance Critical!)
+    # ============================================
+    entity:
+      # Entity shared random - improves performance
+      shared-random: true
+      
+    # ============================================
+    # MISCELLANEOUS SETTINGS
+    # ============================================
+    # Allow Water Placement in dimensions
+    allow-water-placement-in-the-end: true
+    allow-water-placement-in-the-nether: false
+    
+    # Anvil settings
+    anvil:
+      cumulative-cost: true
+      
+    # Hunger settings
+    hunger:
+      starvation-damage: 1.0
+      
+    # Enchantments
+    enchantment:
+      allow-looting-on-shears: false

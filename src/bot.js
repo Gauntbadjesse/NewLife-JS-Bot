@@ -245,6 +245,15 @@ client.once('ready', async () => {
         console.error('Failed to initialize PvP logger:', e);
     }
 
+    // Initialize End Items Clear (elytra removal on join via RCON polling)
+    try {
+        const { initEndItemsClear } = require('./cogs/endItemsClear');
+        initEndItemsClear();
+        console.log('[EndClear] Initialized elytra clearing system');
+    } catch (e) {
+        console.error('Failed to initialize End Items Clear:', e);
+    }
+
     // Initialize Analytics system (ALT detection, TPS monitoring, lag alerts)
     try {
         const { initAnalytics, handleButtonInteraction } = require('./cogs/analytics');
