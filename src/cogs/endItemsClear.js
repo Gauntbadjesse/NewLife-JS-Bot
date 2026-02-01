@@ -32,7 +32,10 @@ function parsePlayerList(response) {
     const match = response.match(/players online:\s*(.*)/i);
     if (!match || !match[1] || match[1].trim() === '') return [];
     
-    return match[1].split(',').map(name => name.trim()).filter(name => name.length > 0);
+    return match[1].split(',').map(name => {
+        // Strip any special characters/prefixes (like ○, ●, etc.) and trim whitespace
+        return name.replace(/[^\w_]/g, '').trim();
+    }).filter(name => name.length > 0);
 }
 
 /**
