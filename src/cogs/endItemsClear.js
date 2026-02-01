@@ -39,27 +39,47 @@ function parsePlayerList(response) {
 }
 
 /**
- * Clear elytra from a player
+ * Clear elytra and shulker shells from a player
  * @param {string} username - Player's Minecraft username
  */
 async function clearElytraFromPlayer(username) {
+    let totalCleared = 0;
+    
     try {
-        const result = await executeRcon(`clear ${username} minecraft:elytra`);
-        if (result.success && result.response) {
-            const match = result.response.match(/Removed (\d+) item/i);
+        // Clear elytras
+        const elytraResult = await executeRcon(`clear ${username} minecraft:elytra`);
+        if (elytraResult.success && elytraResult.response) {
+            const match = elytraResult.response.match(/Removed (\d+) item/i);
             if (match) {
                 const count = parseInt(match[1]);
                 if (count > 0) {
-                    console.log(`[EndClear] Cleared ${count} elytra(s) from ${username} on join`);
-                    // Notify the player
-                    await executeRcon(`tellraw ${username} {"text":"[NewLife] Elytras have been cleared from your inventory.","color":"yellow"}`);
-                    return count;
+                    console.log(`[EndClear] Cleared ${count} elytra(s) from ${username}`);
+                    totalCleared += count;
                 }
             }
         }
-        return 0;
+        
+        // Clear shulker shells
+        const shellResult = await executeRcon(`clear ${username} minecraft:shulker_shell`);
+        if (shellResult.success && shellResult.response) {
+            const match = shellResult.response.match(/Removed (\d+) item/i);
+            if (match) {
+                const count = parseInt(match[1]);
+                if (count > 0) {
+                    console.log(`[EndClear] Cleared ${count} shulker shell(s) from ${username}`);
+                    totalCleared += count;
+                }
+            }
+        }
+        
+        // Notify the player if anything was cleared
+        if (totalCleared > 0) {
+            await executeRcon(`tellraw ${username} {"text":"[NewLife] End items (elytras/shulker shells) have been cleared from your inventory.","color":"yellow"}`);
+        }
+        
+        return totalCleared;
     } catch (error) {
-        console.error(`[EndClear] Error clearing elytra from ${username}:`, error);
+        console.error(`[EndClear] Error clearing items from ${username}:`, error);
         return 0;
     }
 }
