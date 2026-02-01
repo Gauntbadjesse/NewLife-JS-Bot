@@ -62,6 +62,36 @@ async function clearElytraFromPlayer(username) {
 }
 
 /**
+ * Check if a player is in The End and teleport them out
+ * @param {string} username - Player's Minecraft username
+ */
+async function checkAndTeleportFromEnd(username) {
+    try {
+        // Get player's current dimension
+        const result = await executeRcon(`data get entity ${username} Dimension`);
+        if (result.success && result.response) {
+            // Response format: "Player has the following entity data: "minecraft:the_end""
+            if (result.response.includes('the_end')) {
+                console.log(`[EndClear] ${username} is in The End! Teleporting them out...`);
+                
+                // Teleport to overworld at specified coordinates
+                const tpResult = await executeRcon(`execute in minecraft:overworld run tp ${username} -835 108 356`);
+                
+                if (tpResult.success) {
+                    console.log(`[EndClear] Teleported ${username} from The End to overworld`);
+                    await executeRcon(`tellraw ${username} {"text":"[NewLife] The End is currently disabled. You have been teleported to the overworld.","color":"red"}`);
+                    return true;
+                }
+            }
+        }
+        return false;
+    } catch (error) {
+        console.error(`[EndClear] Error checking dimension for ${username}:`, error);
+        return false;
+    }
+}
+
+/**
  * Poll the server for online players and detect joins
  */
 async function pollForJoins() {
@@ -80,8 +110,14 @@ async function pollForJoins() {
                 // Small delay to ensure player is fully loaded
                 setTimeout(async () => {
                     await clearElytraFromPlayer(player);
+                    await checkAndTeleportFromEnd(player);
                 }, 1500);
             }
+        }
+        
+        // Check ALL online players for being in The End (not just new joins)
+        for (const player of currentPlayers) {
+            await checkAndTeleportFromEnd(player);
         }
         
         // Update the online players set
