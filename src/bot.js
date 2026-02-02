@@ -253,7 +253,13 @@ client.once('ready', async () => {
         console.error('Failed to initialize End Items Clear:', e);
     }
 
-
+    // Initialize Instagram Feed
+    try {
+        const { initInstagramFeed } = require('./cogs/instagram');
+        initInstagramFeed(client);
+    } catch (e) {
+        console.error('Failed to initialize Instagram feed:', e);
+    }
 
     // Initialize Minecraft DM handler
     try {
@@ -949,6 +955,11 @@ process.on('SIGINT', async () => {
     try {
         const { stopTicketProcessors } = require('./cogs/tickets');
         stopTicketProcessors();
+    } catch (e) {}
+    
+    try {
+        const { stopInstagramFeed } = require('./cogs/instagram');
+        stopInstagramFeed();
     } catch (e) {}
     
     // Close database connection
