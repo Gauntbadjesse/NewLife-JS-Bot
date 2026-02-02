@@ -22,7 +22,7 @@ const mongoose = require('mongoose');
 const { isAdmin, isOwner } = require('../utils/permissions');
 
 // Premium role ID - gets soundboard access in temp VCs
-const PREMIUM_ROLE_ID = '1463405789241802895';
+const PREMIUM_ROLE_ID = process.env.NEWLIFE_PLUS;
 
 /**
  * Check if a member has premium role

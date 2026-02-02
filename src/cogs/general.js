@@ -680,7 +680,7 @@ const commands = {
                 });
             }
 
-            const PREMIUM_ROLE_ID = '1463405789241802895';
+            const PREMIUM_ROLE_ID = process.env.NEWLIFE_PLUS;
             const guild = message.guild;
             
             // Get the member

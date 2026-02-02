@@ -14,7 +14,7 @@ const mongoose = require('mongoose');
 const { isOwner } = require('../utils/permissions');
 
 // Premium role ID - gets double entries in giveaways
-const PREMIUM_ROLE_ID = '1463405789241802895';
+const PREMIUM_ROLE_ID = process.env.NEWLIFE_PLUS;
 
 // Giveaway schema
 const giveawaySchema = new mongoose.Schema({
@@ -611,9 +611,17 @@ async function handleGiveawayButton(interaction, client) {
     }
 }
 
+function stopGiveawayChecker() {
+    if (giveawayInterval) {
+        clearInterval(giveawayInterval);
+        giveawayInterval = null;
+    }
+}
+
 module.exports = {
     name: 'Giveaways',
     slashCommands,
     handleGiveawayButton,
-    initGiveawayChecker
+    initGiveawayChecker,
+    stopGiveawayChecker
 };

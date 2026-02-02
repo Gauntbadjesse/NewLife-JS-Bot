@@ -24,7 +24,7 @@ const CustomRole = require('../database/models/CustomRole');
 const emojis = require('../utils/emojis');
 
 // Premium role that grants access to custom roles
-const PREMIUM_ROLE_ID = '1463405789241802895';
+const PREMIUM_ROLE_ID = process.env.NEWLIFE_PLUS;
 
 // Role that custom roles will be positioned under
 const CUSTOM_ROLE_POSITION_REFERENCE = '1462501136673280011';

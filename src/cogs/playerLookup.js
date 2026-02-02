@@ -12,34 +12,7 @@ const WhitelistApplication = require('../database/models/WhitelistApplication');
 const LinkedAccount = require('../database/models/LinkedAccount');
 const { isModerator, isAdmin, isStaff, isSupervisor, isManagement, isOwner } = require('../utils/permissions');
 const { resolvePlayer } = require('../utils/playerResolver');
-const fetch = require('node-fetch');
-
-/**
- * Lookup Minecraft profile from API (supports java and bedrock)
- */
-async function lookupMcProfile(username, platform = 'java') {
-    try {
-        const res = await fetch(`https://mcprofile.io/api/v1/${platform}/username/${encodeURIComponent(username)}`);
-        if (!res.ok) return null;
-        const data = await res.json();
-        
-        // For bedrock, prefer fuuid; for java, prefer uuid
-        let uuid = null;
-        if (platform === 'bedrock') {
-            uuid = data.fuuid || data.floodgateuid || data.id || data.uuid;
-        } else {
-            uuid = data.uuid || data.id;
-        }
-        
-        return {
-            uuid,
-            name: data.name || data.username || username,
-            platform
-        };
-    } catch (e) {
-        return null;
-    }
-}
+const { lookupMcProfile } = require('../utils/minecraft');
 
 /**
  * Get linked account info

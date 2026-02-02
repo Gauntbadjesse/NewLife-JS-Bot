@@ -15,6 +15,7 @@ const { isStaff, isAdmin, isModerator } = require('../utils/permissions');
 const { sendDm } = require('../utils/dm');
 const { executeRcon, kickFromProxy } = require('../utils/rcon');
 const { resolveDiscordFromMinecraft } = require('../utils/playerResolver');
+const { lookupMcProfile, parseDuration } = require('../utils/minecraft');
 
 // Environment config
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || process.env.BAN_LOG_CHANNEL_ID;
@@ -34,99 +35,6 @@ function getEmbedColor() {
 function normalizeUuid(uuid) {
     return uuid.replace(/-/g, '').toLowerCase();
 }
-
-/**
- * Lookup Minecraft profile from API
- */
-async function lookupMcProfile(username, platform = 'java') {
-    try {
-        let fetcher = globalThis.fetch;
-        if (!fetcher) fetcher = require('node-fetch');
-        
-        const url = platform === 'bedrock'
-            ? `https://mcprofile.io/api/v1/bedrock/gamertag/${encodeURIComponent(username)}`
-            : `https://mcprofile.io/api/v1/java/username/${encodeURIComponent(username)}`;
-        
-        const res = await fetcher(url);
-        if (!res.ok) return null;
-        
-        const data = await res.json();
-        
-        let uuid = null;
-        if (platform === 'bedrock') {
-            uuid = data.fuuid || data.floodgateuid || data.id || data.uuid;
-        } else {
-            uuid = data.uuid || data.id;
-        }
-        
-        if (!uuid) return null;
-        
-        return {
-            uuid: uuid.replace(/-/g, ''),
-            name: data.name || data.username || username,
-            platform
-        };
-    } catch (e) {
-        console.error('MC Profile lookup error:', e);
-        return null;
-    }
-}
-
-/**
- * Parse duration string to milliseconds and expiry date
- * @param {string} duration - Duration string like "1d", "7d", "30d", "1h", "perm"
- * @returns {Object} - { ms, expiresAt, isPermanent, display }
- */
-function parseDuration(duration) {
-    if (!duration) return null;
-    
-    const lower = duration.toLowerCase().trim();
-    
-    if (lower === 'perm' || lower === 'permanent' || lower === 'forever') {
-        return {
-            ms: null,
-            expiresAt: null,
-            isPermanent: true,
-            display: 'Permanent'
-        };
-    }
-    
-    const match = lower.match(/^(\d+)([dhms])$/);
-    if (!match) return null;
-    
-    const value = parseInt(match[1]);
-    const unit = match[2];
-    
-    let ms;
-    let display;
-    
-    switch (unit) {
-        case 'd':
-            ms = value * 24 * 60 * 60 * 1000;
-            display = `${value} day${value > 1 ? 's' : ''}`;
-            break;
-        case 'h':
-            ms = value * 60 * 60 * 1000;
-            display = `${value} hour${value > 1 ? 's' : ''}`;
-            break;
-        case 'm':
-            ms = value * 60 * 1000;
-            display = `${value} minute${value > 1 ? 's' : ''}`;
-            break;
-        case 's':
-            ms = value * 1000;
-            display = `${value} second${value > 1 ? 's' : ''}`;
-            break;
-        default:
-            return null;
-    }
-    
-    return {
-        ms,
-        expiresAt: new Date(Date.now() + ms),
-        isPermanent: false,
-        display
-    };
 }
 
 /**
@@ -2169,6 +2077,8 @@ async function processExpiredMutes(client) {
     }
 }
 
+let muteProcessorInterval = null;
+
 /**
  * Initialize mute expiration processor
  * Checks every 30 seconds for expired mutes
@@ -2178,8 +2088,15 @@ function initMuteProcessor(client) {
     processExpiredMutes(client);
     
     // Then check every 30 seconds
-    setInterval(() => processExpiredMutes(client), 30 * 1000);
+    muteProcessorInterval = setInterval(() => processExpiredMutes(client), 30 * 1000);
     console.log(' Mute expiration processor initialized');
+}
+
+function stopMuteProcessor() {
+    if (muteProcessorInterval) {
+        clearInterval(muteProcessorInterval);
+        muteProcessorInterval = null;
+    }
 }
 
 module.exports = {
@@ -2187,5 +2104,6 @@ module.exports = {
     slashCommands,
     lookupMcProfile,
     getAllLinkedAccounts,
-    initMuteProcessor
+    initMuteProcessor,
+    stopMuteProcessor
 };

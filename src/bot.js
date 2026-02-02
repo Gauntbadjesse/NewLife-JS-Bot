@@ -734,7 +734,7 @@ client.on('guildMemberRemove', async (member) => {
 // Detect when user gains NewLife+ role and send welcome DM
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     try {
-        const PREMIUM_ROLE_ID = '1463405789241802895';
+        const PREMIUM_ROLE_ID = process.env.NEWLIFE_PLUS;
         
         // Check if user gained the NewLife+ role (didn't have before, has now)
         const hadPremium = oldMember.roles.cache.has(PREMIUM_ROLE_ID);
@@ -904,15 +904,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 client.on('messageReactionAdd', async (reaction, user) => {
     try {
         if (user.bot) return;
-        // Try main reactionRoles module
-        const { handleReactionAdd } = require('./cogs/reactionRoles');
-        if (handleReactionAdd) await handleReactionAdd(reaction, user, client);
-    } catch (e) {
-        // Module may not exist yet or error occurred
-    }
-    try {
-        if (user.bot) return;
-        // Try legacy emojiReactionRoles module
         const { handleReactionAdd } = require('./cogs/emojiReactionRoles');
         if (handleReactionAdd) await handleReactionAdd(reaction, user, client);
     } catch (e) {
@@ -923,15 +914,6 @@ client.on('messageReactionAdd', async (reaction, user) => {
 client.on('messageReactionRemove', async (reaction, user) => {
     try {
         if (user.bot) return;
-        // Try main reactionRoles module
-        const { handleReactionRemove } = require('./cogs/reactionRoles');
-        if (handleReactionRemove) await handleReactionRemove(reaction, user, client);
-    } catch (e) {
-        // Module may not exist yet or error occurred
-    }
-    try {
-        if (user.bot) return;
-        // Try legacy emojiReactionRoles module
         const { handleReactionRemove } = require('./cogs/emojiReactionRoles');
         if (handleReactionRemove) await handleReactionRemove(reaction, user, client);
     } catch (e) {
@@ -941,8 +923,44 @@ client.on('messageReactionRemove', async (reaction, user) => {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-    console.log('\n Shutting down gracefully...');
+    console.log('\n🛑 Shutting down gracefully...');
+    
+    // Stop all intervals
+    try {
+        const { stopEndItemsClear } = require('./cogs/endItemsClear');
+        await stopEndItemsClear();
+    } catch (e) {}
+    
+    try {
+        const { stopGiveawayChecker } = require('./cogs/giveaways');
+        stopGiveawayChecker();
+    } catch (e) {}
+    
+    try {
+        const { stopMuteProcessor } = require('./cogs/serverBans');
+        stopMuteProcessor();
+    } catch (e) {}
+    
+    try {
+        const { stopStaffOnlineTracker } = require('./cogs/staffOnline');
+        stopStaffOnlineTracker();
+    } catch (e) {}
+    
+    try {
+        const { stopTicketProcessors } = require('./cogs/tickets');
+        stopTicketProcessors();
+    } catch (e) {}
+    
+    // Close database connection
+    try {
+        const mongoose = require('mongoose');
+        await mongoose.connection.close();
+        console.log('📦 Database connection closed');
+    } catch (e) {}
+    
+    // Destroy Discord client
     client.destroy();
+    console.log('✅ Shutdown complete');
     process.exit(0);
 });
 

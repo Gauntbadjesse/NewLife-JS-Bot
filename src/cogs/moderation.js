@@ -638,7 +638,7 @@ const commands = {
                 process.env.OWNER_ROLE_ID,
                 process.env.STAFF_TEAM,
                 process.env.WHITELIST_GURU_ROLE_ID,
-                '1463405789241802895' // NewLife+ Premium role
+                process.env.NEWLIFE_PLUS // NewLife+ Premium role
             ].filter(Boolean);
 
             if (blockedRoleIds.includes(role.id)) {

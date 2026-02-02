@@ -46,7 +46,7 @@ const WHITELIST_GURU_ROLE_ID = process.env.WHITELIST_GURU_ROLE_ID || '1456563910
 const APPLY_CATEGORY_ID = process.env.APPLY_CATEGORY_ID || '1437529831398047755';
 
 // Premium role ID - gets priority tickets
-const PREMIUM_ROLE_ID = '1463405789241802895';
+const PREMIUM_ROLE_ID = process.env.NEWLIFE_PLUS;
 
 /**
  * Check if a member has premium role
@@ -57,6 +57,10 @@ function hasPremiumRole(member) {
 
 // Store ticket creation times for guru tracking (ticket channel ID -> timestamp)
 const ticketCreationTimes = new Map();
+
+// Interval references for cleanup
+let cleanupInterval = null;
+let timedCloseInterval = null;
 
 // Clean up old entries from ticketCreationTimes (older than 24 hours)
 function cleanupTicketCreationTimes() {
@@ -70,7 +74,7 @@ function cleanupTicketCreationTimes() {
 }
 
 // Run cleanup every hour
-setInterval(cleanupTicketCreationTimes, 60 * 60 * 1000);
+cleanupInterval = setInterval(cleanupTicketCreationTimes, 60 * 60 * 1000);
 
 /**
  * Check if member is whitelist guru or staff
@@ -1428,8 +1432,19 @@ function initTimedCloseProcessor(client) {
     processTimedCloses(client);
     
     // Then check every 30 seconds
-    setInterval(() => processTimedCloses(client), 30 * 1000);
+    timedCloseInterval = setInterval(() => processTimedCloses(client), 30 * 1000);
     console.log(' Timed close processor initialized');
+}
+
+function stopTicketProcessors() {
+    if (timedCloseInterval) {
+        clearInterval(timedCloseInterval);
+        timedCloseInterval = null;
+    }
+    if (cleanupInterval) {
+        clearInterval(cleanupInterval);
+        cleanupInterval = null;
+    }
 }
 
 module.exports = {
@@ -1441,6 +1456,7 @@ module.exports = {
     handleSelectMenu,
     handleModalSubmit,
     initTimedCloseProcessor,
+    stopTicketProcessors,
     trackGuruMessageInTicket,
     ticketCreationTimes
 };

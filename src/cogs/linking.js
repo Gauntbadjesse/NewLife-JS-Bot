@@ -7,8 +7,8 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const LinkedAccount = require('../database/models/LinkedAccount');
 const { isAdmin, isSupervisor, isManagement, isOwner, isStaff } = require('../utils/permissions');
-const fetch = require('node-fetch');
 const { executeRcon } = require('../utils/rcon');
+const { lookupMcProfile } = require('../utils/minecraft');
 
 // Pending link verifications (in-memory, cleared on restart)
 const pendingLinks = new Map();
@@ -16,40 +16,6 @@ const pendingLinks = new Map();
 // Cooldowns to prevent spam
 const cooldowns = new Map();
 const COOLDOWN_MS = 30000; // 30 seconds
-
-/**
- * Lookup Minecraft profile from API (supports java and bedrock)
- */
-async function lookupMcProfile(username, platform = 'java') {
-    try {
-        const url = platform === 'bedrock'
-            ? `https://mcprofile.io/api/v1/bedrock/gamertag/${encodeURIComponent(username)}`
-            : `https://mcprofile.io/api/v1/java/username/${encodeURIComponent(username)}`;
-        
-        const res = await fetch(url);
-        if (!res.ok) return null;
-        
-        const data = await res.json();
-        
-        let uuid = null;
-        if (platform === 'bedrock') {
-            uuid = data.fuuid || data.floodgateuid || data.id || data.uuid;
-        } else {
-            uuid = data.uuid || data.id;
-        }
-        
-        if (!uuid) return null;
-        
-        return {
-            uuid,
-            name: data.name || data.username || username,
-            platform
-        };
-    } catch (e) {
-        console.error('MC Profile lookup error:', e);
-        return null;
-    }
-}
 
 /**
  * Get embed color from env

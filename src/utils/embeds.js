@@ -7,7 +7,7 @@ const { EmbedBuilder } = require('discord.js');
 const emojis = require('./emojis');
 
 // Premium role ID for custom embed colors
-const PREMIUM_ROLE_ID = '1463405789241802895';
+const PREMIUM_ROLE_ID = process.env.NEWLIFE_PLUS;
 
 // Get embed color from environment or use default
 const getEmbedColor = () => {

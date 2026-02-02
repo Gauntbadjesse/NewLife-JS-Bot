@@ -155,44 +155,6 @@ function generateSourceChart(analytics, barLength = 20) {
 }
 
 /**
- * Lookup Minecraft profile from mcprofile.io
- */
-async function lookupMcProfile(platform, username) {
-    try {
-        let fetcher = globalThis.fetch;
-        if (!fetcher) fetcher = require('node-fetch');
-        
-        // Different endpoint for bedrock vs java
-        const endpoint = platform === 'bedrock' 
-            ? `https://mcprofile.io/api/v1/bedrock/gamertag/${encodeURIComponent(username)}`
-            : `https://mcprofile.io/api/v1/java/username/${encodeURIComponent(username)}`;
-        
-        const res = await fetcher(endpoint);
-        if (!res.ok) throw new Error(`Lookup failed: ${res.status}`);
-        
-        const data = await res.json();
-        
-        // For bedrock, use fuuid; for java, use uuid
-        let id = null;
-        if (platform === 'bedrock') {
-            id = data.fuuid || data.floodgateuid || data.id;
-        } else {
-            id = data.uuid || data.id;
-        }
-        
-        if (!id) throw new Error('Could not determine UUID from response');
-        
-        return {
-            uuid: id,
-            username: data.name || data.username || username,
-            platform
-        };
-    } catch (e) {
-        throw e;
-    }
-}
-
-/**
  * Slash Commands
  */
 const slashCommands = [
