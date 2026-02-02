@@ -36,15 +36,15 @@ const commands = {
 
             // Create the survey embed
             const surveyEmbed = new EmbedBuilder()
-                .setTitle('🎮 Season 3 Feedback Survey')
+                .setTitle(' Season 3 Feedback Survey')
                 .setDescription(
                     'We want to hear from you! Help us make Season 3 amazing by sharing your thoughts.\n\n' +
                     '**Click the button below to fill out the survey!**\n\n' +
-                    '📝 Your feedback is anonymous to other players but logged for staff review.'
+                    ' Your feedback is anonymous to other players but logged for staff review.'
                 )
                 .setColor(0x5865F2)
-                .setImage('https://i.imgur.com/placeholder.png') // You can add a banner image
-                .setFooter({ text: 'NewLife SMP • Season 3 Planning' })
+                .setImage('http://193.218.34.214:5000/uploads/image.png') // You can add a banner image
+                .setFooter({ text: 'NewLife SMP' })
                 .setTimestamp();
 
             // Create button
