@@ -1,23 +1,114 @@
 /**
  * End Items Clear Cog
- * Automatically clears elytras from players on join using RCON polling
+ * Automatically clears elytras from players on join using PERSISTENT RCON connection
  * 
  * Features:
- * - Auto-clear elytras on player join (via RCON /list polling)
- * - Manual /clearend command for staff to clear items from specific players
+ * - Persistent RCON connection (no console spam!)
+ * - Auto-clear elytras/shulker shells on player join
+ * - Remove stellarity.creative_shock tag on join
+ * - Reset max_health attribute on join
+ * - Teleport players out of The End
+ * - Manual /clearend command for staff
  */
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { executeRcon } = require('../utils/rcon');
+const { Rcon } = require('rcon-client');
 const { isAdmin, isModerator } = require('../utils/permissions');
 const { createSuccessEmbed, createErrorEmbed } = require('../utils/embeds');
 
 // =====================================================
-// PLAYER JOIN DETECTION VIA RCON POLLING
+// PERSISTENT RCON CONNECTION
 // =====================================================
+let rconConnection = null;
+let isConnecting = false;
 let onlinePlayers = new Set();
 let pollingInterval = null;
 const POLL_INTERVAL_MS = 5000; // Check every 5 seconds
+
+/**
+ * Get or create a persistent RCON connection
+ */
+async function getRcon() {
+    // If we have a valid connection, return it
+    if (rconConnection && rconConnection.authenticated) {
+        return rconConnection;
+    }
+    
+    // Prevent multiple simultaneous connection attempts
+    if (isConnecting) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return getRcon();
+    }
+    
+    isConnecting = true;
+    
+    try {
+        const host = process.env.RCON_HOST;
+        const port = parseInt(process.env.RCON_PORT) || 25575;
+        const password = process.env.RCON_PASSWORD;
+        
+        if (!host || !password) {
+            console.error('[EndClear] RCON not configured');
+            isConnecting = false;
+            return null;
+        }
+        
+        // Close existing connection if any
+        if (rconConnection) {
+            try {
+                await rconConnection.end();
+            } catch (e) { /* ignore */ }
+        }
+        
+        rconConnection = await Rcon.connect({
+            host,
+            port,
+            password,
+            timeout: 10000
+        });
+        
+        console.log('[EndClear] Persistent RCON connection established');
+        
+        // Handle disconnection
+        rconConnection.on('end', () => {
+            console.log('[EndClear] RCON connection closed');
+            rconConnection = null;
+        });
+        
+        rconConnection.on('error', (err) => {
+            console.error('[EndClear] RCON error:', err.message);
+            rconConnection = null;
+        });
+        
+        isConnecting = false;
+        return rconConnection;
+        
+    } catch (error) {
+        console.error('[EndClear] Failed to connect to RCON:', error.message);
+        rconConnection = null;
+        isConnecting = false;
+        return null;
+    }
+}
+
+/**
+ * Send a command using the persistent RCON connection
+ * @param {string} command - Command to send
+ * @returns {Promise<string|null>} Response or null on failure
+ */
+async function sendCommand(command) {
+    try {
+        const rcon = await getRcon();
+        if (!rcon) return null;
+        
+        const response = await rcon.send(command);
+        return response;
+    } catch (error) {
+        // Connection might be dead, reset it
+        rconConnection = null;
+        return null;
+    }
+}
 
 /**
  * Parse the /list command response to get player names
@@ -27,91 +118,76 @@ const POLL_INTERVAL_MS = 5000; // Check every 5 seconds
 function parsePlayerList(response) {
     if (!response) return [];
     
-    // Response format: "There are X of a max of Y players online: Player1, Player2, Player3"
-    // Or: "There are 0 of a max of Y players online:"
     const match = response.match(/players online:\s*(.*)/i);
     if (!match || !match[1] || match[1].trim() === '') return [];
     
     return match[1].split(',').map(name => {
-        // Strip any special characters/prefixes (like ○, ●, etc.) and trim whitespace
+        // Strip any special characters/prefixes (like ○, ●, etc.)
         return name.replace(/[^\w_]/g, '').trim();
     }).filter(name => name.length > 0);
 }
 
 /**
- * Clear elytra and shulker shells from a player
+ * Handle a new player joining - run all join commands
  * @param {string} username - Player's Minecraft username
  */
-async function clearElytraFromPlayer(username) {
-    let totalCleared = 0;
+async function handlePlayerJoin(username) {
+    console.log(`[EndClear] Running join commands for ${username}`);
     
-    try {
-        // Clear elytras
-        const elytraResult = await executeRcon(`clear ${username} minecraft:elytra`);
-        if (elytraResult.success && elytraResult.response) {
-            const match = elytraResult.response.match(/Removed (\d+) item/i);
-            if (match) {
-                const count = parseInt(match[1]);
-                if (count > 0) {
-                    console.log(`[EndClear] Cleared ${count} elytra(s) from ${username}`);
-                    totalCleared += count;
-                }
-            }
+    // 1. Clear elytras
+    const elytraResult = await sendCommand(`clear ${username} minecraft:elytra`);
+    if (elytraResult && elytraResult.includes('Removed')) {
+        const match = elytraResult.match(/Removed (\d+)/);
+        if (match && parseInt(match[1]) > 0) {
+            console.log(`[EndClear] Cleared ${match[1]} elytra(s) from ${username}`);
+            await sendCommand(`tellraw ${username} {"text":"[NewLife] Elytras have been cleared from your inventory.","color":"yellow"}`);
         }
-        
-        // Clear shulker shells
-        const shellResult = await executeRcon(`clear ${username} minecraft:shulker_shell`);
-        if (shellResult.success && shellResult.response) {
-            const match = shellResult.response.match(/Removed (\d+) item/i);
-            if (match) {
-                const count = parseInt(match[1]);
-                if (count > 0) {
-                    console.log(`[EndClear] Cleared ${count} shulker shell(s) from ${username}`);
-                    totalCleared += count;
-                }
-            }
-        }
-        
-        // Notify the player if anything was cleared
-        if (totalCleared > 0) {
-            await executeRcon(`tellraw ${username} {"text":"[NewLife] End items (elytras/shulker shells) have been cleared from your inventory.","color":"yellow"}`);
-        }
-        
-        return totalCleared;
-    } catch (error) {
-        console.error(`[EndClear] Error clearing items from ${username}:`, error);
-        return 0;
     }
+    
+    // 2. Clear shulker shells
+    const shellResult = await sendCommand(`clear ${username} minecraft:shulker_shell`);
+    if (shellResult && shellResult.includes('Removed')) {
+        const match = shellResult.match(/Removed (\d+)/);
+        if (match && parseInt(match[1]) > 0) {
+            console.log(`[EndClear] Cleared ${match[1]} shulker shell(s) from ${username}`);
+        }
+    }
+    
+    // 3. Remove stellarity.creative_shock tag
+    await sendCommand(`tag ${username} remove stellarity.creative_shock`);
+    
+    // 4. Remove stellarity modifiers from block_break_speed
+    await sendCommand(`attribute ${username} minecraft:block_break_speed modifier remove stellarity:creative_shock`);
+    
+    // 5. Remove stellarity:voided modifier from max_health
+    await sendCommand(`attribute ${username} minecraft:max_health modifier remove stellarity:voided`);
+    
+    // 6. Set max_health to 20 (10 hearts default)
+    await sendCommand(`attribute ${username} minecraft:max_health base set 20`);
+    
+    // 7. Set gamemode to survival
+    await sendCommand(`gamemode survival ${username}`);
+    
+    // 8. Check if in The End and teleport out
+    await checkAndTeleportFromEnd(username);
 }
 
 /**
  * Check if a player is in The End and teleport them out
  * @param {string} username - Player's Minecraft username
+ * @returns {Promise<boolean>} True if player was teleported
  */
 async function checkAndTeleportFromEnd(username) {
-    try {
-        // Get player's current dimension
-        const result = await executeRcon(`data get entity ${username} Dimension`);
-        if (result.success && result.response) {
-            // Response format: "Player has the following entity data: "minecraft:the_end""
-            if (result.response.includes('the_end')) {
-                console.log(`[EndClear] ${username} is in The End! Teleporting them out...`);
-                
-                // Teleport to overworld at specified coordinates
-                const tpResult = await executeRcon(`execute in minecraft:overworld run tp ${username} -835 108 356`);
-                
-                if (tpResult.success) {
-                    console.log(`[EndClear] Teleported ${username} from The End to overworld`);
-                    await executeRcon(`tellraw ${username} {"text":"[NewLife] The End is currently disabled. You have been teleported to the overworld.","color":"red"}`);
-                    return true;
-                }
-            }
-        }
-        return false;
-    } catch (error) {
-        console.error(`[EndClear] Error checking dimension for ${username}:`, error);
-        return false;
+    const dimResult = await sendCommand(`data get entity ${username} Dimension`);
+    
+    if (dimResult && dimResult.includes('the_end')) {
+        console.log(`[EndClear] ${username} is in The End! Teleporting out...`);
+        await sendCommand(`execute in minecraft:overworld run tp ${username} -835 108 356`);
+        await sendCommand(`tellraw ${username} {"text":"[NewLife] The End is currently disabled. You have been teleported to the overworld.","color":"red"}`);
+        return true;
     }
+    
+    return false;
 }
 
 /**
@@ -119,26 +195,20 @@ async function checkAndTeleportFromEnd(username) {
  */
 async function pollForJoins() {
     try {
-        const result = await executeRcon('list');
-        if (!result.success) return;
+        const response = await sendCommand('list');
+        if (!response) return;
         
-        const currentPlayers = new Set(parsePlayerList(result.response));
+        const currentPlayers = new Set(parsePlayerList(response));
         
-        // Find new players (in current but not in previous)
+        // Find new players (joined since last poll)
         for (const player of currentPlayers) {
             if (!onlinePlayers.has(player)) {
-                // New player detected!
-                console.log(`[EndClear] Player joined: ${player}`);
-                
-                // Small delay to ensure player is fully loaded
-                setTimeout(async () => {
-                    await clearElytraFromPlayer(player);
-                    await checkAndTeleportFromEnd(player);
-                }, 1500);
+                // New player detected - run join commands after short delay
+                setTimeout(() => handlePlayerJoin(player), 1500);
             }
         }
         
-        // Check ALL online players for being in The End (not just new joins)
+        // Check ALL players for being in The End (continuous enforcement)
         for (const player of currentPlayers) {
             await checkAndTeleportFromEnd(player);
         }
@@ -147,38 +217,53 @@ async function pollForJoins() {
         onlinePlayers = currentPlayers;
         
     } catch (error) {
-        // Silently ignore polling errors (server might be restarting)
+        // Silently ignore polling errors
     }
 }
 
 /**
- * Initialize the RCON polling for player joins
+ * Initialize the persistent RCON connection and polling
  */
-function initEndItemsClear() {
+async function initEndItemsClear() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
     }
     
-    console.log('[EndClear] Starting RCON polling for player joins...');
+    console.log('[EndClear] Initializing with persistent RCON connection...');
     
-    // Initial poll to get current players
-    pollForJoins();
+    // Establish initial connection
+    await getRcon();
+    
+    // Initial poll to get current players (without running join commands)
+    const response = await sendCommand('list');
+    if (response) {
+        onlinePlayers = new Set(parsePlayerList(response));
+        console.log(`[EndClear] Found ${onlinePlayers.size} players already online`);
+    }
     
     // Start polling interval
     pollingInterval = setInterval(pollForJoins, POLL_INTERVAL_MS);
     
-    console.log(`[EndClear] Polling every ${POLL_INTERVAL_MS / 1000} seconds for new players`);
+    console.log(`[EndClear] Polling every ${POLL_INTERVAL_MS / 1000} seconds`);
 }
 
 /**
- * Stop the polling
+ * Stop the polling and close RCON connection
  */
-function stopEndItemsClear() {
+async function stopEndItemsClear() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
         pollingInterval = null;
-        console.log('[EndClear] Stopped RCON polling');
     }
+    
+    if (rconConnection) {
+        try {
+            await rconConnection.end();
+        } catch (e) { /* ignore */ }
+        rconConnection = null;
+    }
+    
+    console.log('[EndClear] Stopped');
 }
 
 const slashCommands = [
@@ -212,12 +297,12 @@ const slashCommands = [
             const silent = interaction.options.getBoolean('silent') || false;
             
             try {
-                // Clear elytra
-                const result = await executeRcon(`clear ${username} minecraft:elytra`);
+                // Clear elytra using persistent connection
+                const result = await sendCommand(`clear ${username} minecraft:elytra`);
                 
                 let count = 0;
-                if (result.success && result.response) {
-                    const match = result.response.match(/Removed (\d+) item/i);
+                if (result) {
+                    const match = result.match(/Removed (\d+) item/i);
                     if (match) {
                         count = parseInt(match[1]);
                     }
@@ -235,7 +320,7 @@ const slashCommands = [
                 
                 // Notify the player unless silent
                 if (!silent && count > 0) {
-                    await executeRcon(`tellraw ${username} {"text":"[NewLife] A staff member has cleared elytras from your inventory.","color":"yellow"}`);
+                    await sendCommand(`tellraw ${username} {"text":"[NewLife] A staff member has cleared elytras from your inventory.","color":"yellow"}`);
                 }
                 
                 await interaction.editReply({ embeds: [embed] });
@@ -257,5 +342,5 @@ module.exports = {
     slashCommands,
     initEndItemsClear,
     stopEndItemsClear,
-    clearElytraFromPlayer
+    sendCommand
 };
