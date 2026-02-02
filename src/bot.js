@@ -504,6 +504,14 @@ client.on('interactionCreate', async (interaction) => {
             } catch (e) {
                 if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: customRoles', e, { customId: interaction.customId, user: interaction.user.tag });
             }
+
+            // Try survey cog
+            try {
+                const surveyCog = require('./cogs/survey');
+                if (surveyCog.handleSurveyButton) await surveyCog.handleSurveyButton(interaction);
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: survey', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
         } catch (error) {
             await logError('Button Handler', error, { customId: interaction.customId, user: interaction.user.tag });
             if (!interaction.replied && !interaction.deferred) {
@@ -548,6 +556,14 @@ client.on('interactionCreate', async (interaction) => {
                 if (applicationsCog.handleModal) await applicationsCog.handleModal(interaction);
             } catch (e) {
                 if (e.code !== 'MODULE_NOT_FOUND') await logError('Modal: applications', e, { customId: interaction.customId, user: interaction.user.tag });
+            }
+
+            // Try survey cog
+            try {
+                const surveyCog = require('./cogs/survey');
+                if (surveyCog.handleSurveySubmit) await surveyCog.handleSurveySubmit(interaction, client);
+            } catch (e) {
+                if (e.code !== 'MODULE_NOT_FOUND') await logError('Modal: survey', e, { customId: interaction.customId, user: interaction.user.tag });
             }
         } catch (error) {
             await logError('Modal Handler', error, { customId: interaction.customId, user: interaction.user.tag });
