@@ -35,7 +35,7 @@ function getEmbedColor() {
 function normalizeUuid(uuid) {
     return uuid.replace(/-/g, '').toLowerCase();
 }
-}
+
 
 /**
  * Get all linked accounts for a discord user or minecraft account
