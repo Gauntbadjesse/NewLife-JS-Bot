@@ -12,7 +12,6 @@ const { initWatcher } = require('./database/watcher');
 const { logCommand, sendCommandLogToChannel } = require('./utils/commandLogger');
 const { initErrorLogger, logError } = require('./utils/errorLogger');
 const { startApiServer } = require('./api/server');
-const { startAnalyticsServer } = require('./api/analyticsServer');
 const emojis = require('./utils/emojis');
 
 // Create Discord client with necessary intents
@@ -254,22 +253,7 @@ client.once('ready', async () => {
         console.error('Failed to initialize End Items Clear:', e);
     }
 
-    // Initialize Analytics system (ALT detection, TPS monitoring, lag alerts)
-    try {
-        const { initAnalytics, handleButtonInteraction } = require('./cogs/analytics');
-        initAnalytics(client);
-        
-        // Register button handler for analytics resolution buttons
-        client.on('interactionCreate', async (interaction) => {
-            if (interaction.isButton()) {
-                await handleButtonInteraction(interaction);
-            }
-        });
-        
-        console.log('[Analytics] Initialized analytics system');
-    } catch (e) {
-        console.error('Failed to initialize analytics:', e);
-    }
+
 
     // Initialize Minecraft DM handler
     try {
@@ -914,15 +898,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 });
 
-// Analytics Event Logging - Handle analytics alerts from the API
-client.on('analyticsEvent', async (data) => {
-    try {
-        const { handleAnalyticsEvent } = require('./cogs/discordLogger');
-        await handleAnalyticsEvent(data, client);
-    } catch (e) {
-        console.error('[AnalyticsEvent] Failed to handle analytics event:', e);
-    }
-});
+
 
 // Reaction Role Events - Handle reactions for reaction roles
 client.on('messageReactionAdd', async (reaction, user) => {
@@ -1012,13 +988,6 @@ async function main() {
             await startApiServer();
         } catch (apiErr) {
             console.error('Failed to start Link API server:', apiErr);
-        }
-        
-        // Start the Analytics API server
-        try {
-            startAnalyticsServer(client);
-        } catch (analyticsErr) {
-            console.error('Failed to start Analytics API server:', analyticsErr);
         }
         
         await client.login(process.env.DISCORD_TOKEN);

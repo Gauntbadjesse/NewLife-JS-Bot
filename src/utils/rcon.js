@@ -1,9 +1,92 @@
 /**
  * RCON Utility
  * Handles RCON connections to Minecraft server for NewLife Management Bot
+ * Uses a persistent connection to avoid console spam
  */
 
 const { Rcon } = require('rcon-client');
+
+// Persistent connection state
+let rconConnection = null;
+let isConnecting = false;
+let isConnected = false;
+let reconnectTimeout = null;
+const RECONNECT_DELAY_MS = 10000;
+
+/**
+ * Get or create a persistent RCON connection
+ */
+async function getConnection() {
+    if (isConnected && rconConnection) {
+        return rconConnection;
+    }
+    
+    if (isConnecting) {
+        // Wait a bit and check again
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return isConnected ? rconConnection : null;
+    }
+    
+    isConnecting = true;
+    
+    const host = process.env.RCON_HOST;
+    const port = parseInt(process.env.RCON_PORT) || 25575;
+    const password = process.env.RCON_PASSWORD;
+
+    if (!host || !password) {
+        isConnecting = false;
+        return null;
+    }
+
+    try {
+        rconConnection = await Rcon.connect({
+            host,
+            port,
+            password,
+            timeout: 5000
+        });
+        
+        isConnected = true;
+        isConnecting = false;
+        console.log('[RCON] Connected');
+        
+        // Handle disconnection silently
+        rconConnection.on('end', () => {
+            if (isConnected) {
+                console.log('[RCON] Disconnected - will reconnect when server is back');
+            }
+            isConnected = false;
+            rconConnection = null;
+            scheduleReconnect();
+        });
+        
+        rconConnection.on('error', () => {
+            isConnected = false;
+            rconConnection = null;
+        });
+        
+        return rconConnection;
+        
+    } catch (error) {
+        isConnecting = false;
+        isConnected = false;
+        rconConnection = null;
+        scheduleReconnect();
+        return null;
+    }
+}
+
+/**
+ * Schedule a reconnection attempt
+ */
+function scheduleReconnect() {
+    if (reconnectTimeout) return;
+    
+    reconnectTimeout = setTimeout(async () => {
+        reconnectTimeout = null;
+        await getConnection();
+    }, RECONNECT_DELAY_MS);
+}
 
 /**
  * Execute an RCON command on the Minecraft server
@@ -11,54 +94,31 @@ const { Rcon } = require('rcon-client');
  * @returns {Promise<{success: boolean, response: string}>}
  */
 async function executeRcon(command) {
-    const host = process.env.RCON_HOST;
-    const port = parseInt(process.env.RCON_PORT) || 25575;
-    const password = process.env.RCON_PASSWORD;
-
-    if (!host || !password) {
-        return {
-            success: false,
-            response: 'RCON is not configured. Please set RCON_HOST and RCON_PASSWORD in .env'
-        };
-    }
-
-    let rcon = null;
-
     try {
-        rcon = await Rcon.connect({
-            host: host,
-            port: port,
-            password: password,
-            timeout: 5000
-        });
+        const rcon = await getConnection();
+        
+        if (!rcon) {
+            return {
+                success: false,
+                response: 'RCON not connected (server may be offline)'
+            };
+        }
 
         const response = await rcon.send(command);
         
-        await rcon.end();
-        // Log success (trim response for logs)
-        try {
-            console.log(`[ProxyRCON] Executed "${command}" on ${host}:${port} - response: ${String(response).slice(0, 300)}`);
-        } catch (e) {
-            console.log('[ProxyRCON] Executed command (response logging failed)');
-        }        
         return {
             success: true,
             response: response || 'Command executed successfully'
         };
     } catch (error) {
-        console.error('RCON Error:', error.message);
-        
-        if (rcon) {
-            try {
-                await rcon.end();
-            } catch (e) {
-                // Ignore close errors
-            }
-        }
+        // Connection died
+        isConnected = false;
+        rconConnection = null;
+        scheduleReconnect();
 
         return {
             success: false,
-            response: `RCON connection failed: ${error.message}`
+            response: `RCON error: ${error.message}`
         };
     }
 }

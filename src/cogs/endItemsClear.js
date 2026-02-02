@@ -21,24 +21,18 @@ const { createSuccessEmbed, createErrorEmbed } = require('../utils/embeds');
 // =====================================================
 let rconConnection = null;
 let isConnecting = false;
+let isConnected = false;
 let onlinePlayers = new Set();
 let pollingInterval = null;
+let reconnectTimeout = null;
 const POLL_INTERVAL_MS = 5000; // Check every 5 seconds
+const RECONNECT_DELAY_MS = 10000; // Wait 10 seconds before reconnecting
 
 /**
- * Get or create a persistent RCON connection
+ * Connect to RCON (only logs on state changes)
  */
-async function getRcon() {
-    // If we have a valid connection, return it
-    if (rconConnection && rconConnection.authenticated) {
-        return rconConnection;
-    }
-    
-    // Prevent multiple simultaneous connection attempts
-    if (isConnecting) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return getRcon();
-    }
+async function connectRcon() {
+    if (isConnecting || isConnected) return rconConnection;
     
     isConnecting = true;
     
@@ -48,64 +42,81 @@ async function getRcon() {
         const password = process.env.RCON_PASSWORD;
         
         if (!host || !password) {
-            console.error('[EndClear] RCON not configured');
             isConnecting = false;
             return null;
-        }
-        
-        // Close existing connection if any
-        if (rconConnection) {
-            try {
-                await rconConnection.end();
-            } catch (e) { /* ignore */ }
         }
         
         rconConnection = await Rcon.connect({
             host,
             port,
             password,
-            timeout: 10000
+            timeout: 5000
         });
         
-        console.log('[EndClear] Persistent RCON connection established');
-        
-        // Handle disconnection
-        rconConnection.on('end', () => {
-            console.log('[EndClear] RCON connection closed');
-            rconConnection = null;
-        });
-        
-        rconConnection.on('error', (err) => {
-            console.error('[EndClear] RCON error:', err.message);
-            rconConnection = null;
-        });
-        
+        isConnected = true;
         isConnecting = false;
+        console.log('[EndClear] RCON connected');
+        
+        // Handle disconnection SILENTLY - just set flags
+        rconConnection.on('end', () => {
+            if (isConnected) {
+                console.log('[EndClear] RCON disconnected - will reconnect when server is back');
+            }
+            isConnected = false;
+            rconConnection = null;
+            scheduleReconnect();
+        });
+        
+        // Handle errors SILENTLY - don't crash the bot
+        rconConnection.on('error', () => {
+            isConnected = false;
+            rconConnection = null;
+            // Don't log errors - just schedule reconnect
+        });
+        
         return rconConnection;
         
     } catch (error) {
-        console.error('[EndClear] Failed to connect to RCON:', error.message);
-        rconConnection = null;
+        // Server is probably offline - silently fail and retry later
         isConnecting = false;
+        isConnected = false;
+        rconConnection = null;
+        scheduleReconnect();
         return null;
     }
 }
 
 /**
- * Send a command using the persistent RCON connection
- * @param {string} command - Command to send
- * @returns {Promise<string|null>} Response or null on failure
+ * Schedule a reconnection attempt
+ */
+function scheduleReconnect() {
+    if (reconnectTimeout) return; // Already scheduled
+    
+    reconnectTimeout = setTimeout(async () => {
+        reconnectTimeout = null;
+        await connectRcon();
+    }, RECONNECT_DELAY_MS);
+}
+
+/**
+ * Send a command - returns null if not connected (no reconnect spam)
  */
 async function sendCommand(command) {
+    if (!isConnected || !rconConnection) {
+        // Try to connect if not already
+        if (!isConnecting && !reconnectTimeout) {
+            connectRcon();
+        }
+        return null;
+    }
+    
     try {
-        const rcon = await getRcon();
-        if (!rcon) return null;
-        
-        const response = await rcon.send(command);
-        return response;
+        return await rconConnection.send(command);
     } catch (error) {
-        // Connection might be dead, reset it
+        // Connection died - mark as disconnected
+        isConnected = false;
         rconConnection = null;
+        scheduleReconnect();
         return null;
     }
 }
@@ -229,10 +240,10 @@ async function initEndItemsClear() {
         clearInterval(pollingInterval);
     }
     
-    console.log('[EndClear] Initializing with persistent RCON connection...');
+    console.log('[EndClear] Initializing...');
     
-    // Establish initial connection
-    await getRcon();
+    // Try to establish initial connection (will silently retry if server is offline)
+    await connectRcon();
     
     // Initial poll to get current players (without running join commands)
     const response = await sendCommand('list');
@@ -244,7 +255,7 @@ async function initEndItemsClear() {
     // Start polling interval
     pollingInterval = setInterval(pollForJoins, POLL_INTERVAL_MS);
     
-    console.log(`[EndClear] Polling every ${POLL_INTERVAL_MS / 1000} seconds`);
+    console.log('[EndClear] Started - polling every 5 seconds');
 }
 
 /**
@@ -256,12 +267,20 @@ async function stopEndItemsClear() {
         pollingInterval = null;
     }
     
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+    
     if (rconConnection) {
         try {
             await rconConnection.end();
         } catch (e) { /* ignore */ }
         rconConnection = null;
     }
+    
+    isConnected = false;
+    isConnecting = false;
     
     console.log('[EndClear] Stopped');
 }
