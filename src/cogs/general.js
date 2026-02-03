@@ -173,6 +173,43 @@ function createComprehensiveHistoryEmbeds(displayName, data) {
  * Prefix Commands
  */
 const commands = {
+    // !e - Send fake edited maintenance message (one-time use)
+    e: {
+        name: 'e',
+        description: 'Send maintenance announcement',
+        usage: '!e',
+        async execute(message, args, client) {
+            if (!isOwner(message.member)) {
+                return message.reply({ content: 'No permission.', allowedMentions: { repliedUser: false } });
+            }
+            
+            // Delete the command message
+            await message.delete().catch(() => {});
+            
+            const announcementContent = `## Server Maintenance Complete
+
+Fixes:
+
+- The time-freeze issue has been fully resolved. All lag-related problems have been addressed and performance is now stable.
+
+- Changes
+  1. Nether Rollback:  
+     The Nether has been rolled back by two days due to corruption caused when the End was removed. We're sorry for any progress lost.
+  2. End Reset & Item Removal:  
+      All Elytras and Dragon Eggs will be temporarily removed.
+
+We'll be redoing the End fight soon—our last attempt looked more like a slideshow than a battle, and everyone deserves a proper experience.
+
+We appreciate your patience and understanding while we worked through these issues. Thanks for sticking with us. If you need anything because of this downtime please make a ticket!
+ 
+– NewLife HR
+
+<@&1374421917284565046>`;
+            
+            await message.channel.send(announcementContent);
+        }
+    },
+
     // !help - Show all available commands
     help: {
         name: 'help',

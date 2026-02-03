@@ -54,6 +54,13 @@ function parsePlayerList(response) {
 }
 
 /**
+ * Players excluded from End item clearing
+ */
+const EXCLUDED_PLAYERS = [
+    'torevyn',
+];
+
+/**
  * List of End-related items to clear on player join
  * Note: Ender pearls are NOT included (allowed)
  */
@@ -100,6 +107,12 @@ const END_ITEMS_TO_CLEAR = [
  * @param {string} username - Player's Minecraft username
  */
 async function handlePlayerJoin(username) {
+    // Skip excluded players
+    if (EXCLUDED_PLAYERS.some(p => p.toLowerCase() === username.toLowerCase())) {
+        console.log(`[EndClear] Skipping excluded player: ${username}`);
+        return;
+    }
+    
     console.log(`[EndClear] Checking ${username} for End items...`);
     
     let totalCleared = 0;
@@ -196,6 +209,11 @@ async function pollForJoins() {
  * @param {string} username - Player's Minecraft username
  */
 async function clearEndItemsSilent(username) {
+    // Skip excluded players
+    if (EXCLUDED_PLAYERS.some(p => p.toLowerCase() === username.toLowerCase())) {
+        return;
+    }
+    
     let totalCleared = 0;
     const itemsCleared = [];
     
