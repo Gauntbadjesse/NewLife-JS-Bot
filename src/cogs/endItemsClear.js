@@ -23,6 +23,10 @@ let onlinePlayers = new Set();
 let pollingInterval = null;
 const POLL_INTERVAL_MS = 1000; // Check every 1 second
 
+// Track players with shulker box warnings (username -> warning timestamp)
+const shulkerWarnings = new Map();
+const SHULKER_GRACE_PERIOD_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Send a command using shared RCON connection
  * @param {string} command - Command to send
@@ -58,14 +62,13 @@ function parsePlayerList(response) {
  */
 const EXCLUDED_PLAYERS = [
     'torevyn',
+    'squarv2',
 ];
 
 /**
- * List of End-related items to clear on player join
- * Note: Ender pearls are NOT included (allowed)
+ * Shulker box items (these get a 5-min grace period)
  */
-const END_ITEMS_TO_CLEAR = [
-    'minecraft:elytra',
+const SHULKER_ITEMS = [
     'minecraft:shulker_shell',
     'minecraft:shulker_box',
     'minecraft:white_shulker_box',
@@ -84,6 +87,14 @@ const END_ITEMS_TO_CLEAR = [
     'minecraft:green_shulker_box',
     'minecraft:red_shulker_box',
     'minecraft:black_shulker_box',
+];
+
+/**
+ * Items cleared immediately (no grace period)
+ */
+const IMMEDIATE_CLEAR_ITEMS = [
+    'minecraft:elytra',
+    'minecraft:shulker_shell',
     'minecraft:end_crystal',
     'minecraft:dragon_egg',
     'minecraft:dragon_head',
@@ -101,6 +112,28 @@ const END_ITEMS_TO_CLEAR = [
     'minecraft:purpur_slab',
     'minecraft:purpur_stairs',
 ];
+
+/**
+ * Combined list for commands that need all items
+ */
+const END_ITEMS_TO_CLEAR = [...IMMEDIATE_CLEAR_ITEMS, ...SHULKER_ITEMS.filter(i => i !== 'minecraft:shulker_shell')];
+
+/**
+ * Check if a player has any shulker boxes
+ * @param {string} username - Player's Minecraft username
+ * @returns {Promise<boolean>} True if player has shulker boxes
+ */
+async function playerHasShulkers(username) {
+    for (const item of SHULKER_ITEMS) {
+        if (item === 'minecraft:shulker_shell') continue; // Skip shells, check boxes only
+        const result = await sendCommand(`clear ${username} ${item} 0`);
+        if (result && result.match(/(\d+)/)) {
+            const count = parseInt(result.match(/(\d+)/)[1]);
+            if (count > 0) return true;
+        }
+    }
+    return false;
+}
 
 /**
  * Handle a new player joining - run all join commands
@@ -206,6 +239,7 @@ async function pollForJoins() {
 
 /**
  * Clear End items from a player silently (no spam logging)
+ * Shulker boxes get a 5-minute grace period
  * @param {string} username - Player's Minecraft username
  */
 async function clearEndItemsSilent(username) {
@@ -214,10 +248,12 @@ async function clearEndItemsSilent(username) {
         return;
     }
     
+    const usernameLower = username.toLowerCase();
     let totalCleared = 0;
     const itemsCleared = [];
     
-    for (const item of END_ITEMS_TO_CLEAR) {
+    // Clear immediate items (elytra, end stone, etc.)
+    for (const item of IMMEDIATE_CLEAR_ITEMS) {
         const result = await sendCommand(`clear ${username} ${item}`);
         if (result) {
             const match = result.match(/Removed (\d+)/i);
@@ -230,8 +266,72 @@ async function clearEndItemsSilent(username) {
         }
     }
     
-    // Only log and notify if items were actually cleared
-    if (totalCleared > 0) {
+    // Handle shulker boxes with grace period
+    const hasShulkers = await playerHasShulkers(username);
+    
+    if (hasShulkers) {
+        const warningTime = shulkerWarnings.get(usernameLower);
+        const now = Date.now();
+        
+        if (!warningTime) {
+            // First time seeing shulkers - warn them and start timer
+            shulkerWarnings.set(usernameLower, now);
+            console.log(`[EndClear] ${username} has shulker boxes - giving 5 minute warning`);
+            await sendCommand(`tellraw ${username} {"text":"[NewLife] You have shulker boxes in your inventory. Please empty them within 5 minutes or they will be cleared!","color":"red","bold":true}`);
+            await sendCommand(`title ${username} subtitle {"text":"Empty your shulker boxes!","color":"yellow"}`);
+            await sendCommand(`title ${username} title {"text":"5 Minute Warning","color":"red"}`);
+            await sendCommand(`playsound minecraft:block.note_block.pling player ${username} ~ ~ ~ 1 0.5`);
+        } else if (now - warningTime >= SHULKER_GRACE_PERIOD_MS) {
+            // Grace period expired - clear the shulkers
+            console.log(`[EndClear] ${username}'s grace period expired - clearing shulker boxes`);
+            
+            for (const item of SHULKER_ITEMS) {
+                const result = await sendCommand(`clear ${username} ${item}`);
+                if (result) {
+                    const match = result.match(/Removed (\d+)/i);
+                    if (match && parseInt(match[1]) > 0) {
+                        const count = parseInt(match[1]);
+                        totalCleared += count;
+                        const itemName = item.replace('minecraft:', '');
+                        itemsCleared.push(`${count}x ${itemName}`);
+                    }
+                }
+            }
+            
+            // Remove from tracking
+            shulkerWarnings.delete(usernameLower);
+            
+            if (totalCleared > 0) {
+                await sendCommand(`tellraw ${username} {"text":"[NewLife] Your shulker boxes have been cleared. Time expired!","color":"red"}`);
+            }
+        } else {
+            // Still in grace period - remind them every minute
+            const timeLeft = Math.ceil((SHULKER_GRACE_PERIOD_MS - (now - warningTime)) / 60000);
+            const elapsed = now - warningTime;
+            
+            // Send reminder at 4, 3, 2, 1 minute marks
+            if (elapsed >= 60000 && elapsed < 61000) {
+                await sendCommand(`tellraw ${username} {"text":"[NewLife] 4 minutes remaining to empty your shulker boxes!","color":"gold"}`);
+            } else if (elapsed >= 120000 && elapsed < 121000) {
+                await sendCommand(`tellraw ${username} {"text":"[NewLife] 3 minutes remaining to empty your shulker boxes!","color":"gold"}`);
+            } else if (elapsed >= 180000 && elapsed < 181000) {
+                await sendCommand(`tellraw ${username} {"text":"[NewLife] 2 minutes remaining to empty your shulker boxes!","color":"yellow"}`);
+            } else if (elapsed >= 240000 && elapsed < 241000) {
+                await sendCommand(`tellraw ${username} {"text":"[NewLife] 1 minute remaining to empty your shulker boxes!","color":"red"}`);
+                await sendCommand(`playsound minecraft:block.note_block.pling player ${username} ~ ~ ~ 1 0.5`);
+            }
+        }
+    } else {
+        // No shulkers - remove from tracking if they were being tracked
+        if (shulkerWarnings.has(usernameLower)) {
+            shulkerWarnings.delete(usernameLower);
+            console.log(`[EndClear] ${username} emptied their shulker boxes in time!`);
+            await sendCommand(`tellraw ${username} {"text":"[NewLife] Thanks for emptying your shulker boxes!","color":"green"}`);
+        }
+    }
+    
+    // Only log and notify if non-shulker items were cleared
+    if (totalCleared > 0 && itemsCleared.some(i => !i.includes('shulker'))) {
         console.log(`[EndClear] Cleared from ${username}: ${itemsCleared.join(', ')}`);
         await sendCommand(`tellraw ${username} {"text":"[NewLife] End items have been cleared from your inventory (${totalCleared} items).","color":"yellow"}`);
     }
