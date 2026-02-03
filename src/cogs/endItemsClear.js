@@ -21,7 +21,7 @@ const { executeRcon } = require('../utils/rcon');
 // =====================================================
 let onlinePlayers = new Set();
 let pollingInterval = null;
-const POLL_INTERVAL_MS = 5000; // Check every 5 seconds
+const POLL_INTERVAL_MS = 1000; // Check every 1 second
 
 /**
  * Send a command using shared RCON connection
@@ -77,7 +77,6 @@ const END_ITEMS_TO_CLEAR = [
     'minecraft:green_shulker_box',
     'minecraft:red_shulker_box',
     'minecraft:black_shulker_box',
-    'minecraft:ender_chest',
     'minecraft:end_crystal',
     'minecraft:dragon_egg',
     'minecraft:dragon_head',
@@ -169,34 +168,54 @@ async function checkAndTeleportFromEnd(username) {
 }
 
 /**
- * Poll the server for online players and detect joins
+ * Poll the server and clear End items from ALL players continuously
  */
 async function pollForJoins() {
     try {
         const response = await sendCommand('list');
         if (!response) return;
         
-        const currentPlayers = new Set(parsePlayerList(response));
+        const currentPlayers = parsePlayerList(response);
         
-        // Find new players (joined since last poll)
+        // Clear End items from ALL players every poll
         for (const player of currentPlayers) {
-            if (!onlinePlayers.has(player)) {
-                // New player detected - run join commands after short delay
-                console.log(`[EndClear] New player detected: ${player}`);
-                setTimeout(() => handlePlayerJoin(player), 1500);
-            }
-        }
-        
-        // Check ALL players for being in The End (continuous enforcement)
-        for (const player of currentPlayers) {
+            await clearEndItemsSilent(player);
             await checkAndTeleportFromEnd(player);
         }
         
         // Update the online players set
-        onlinePlayers = currentPlayers;
+        onlinePlayers = new Set(currentPlayers);
         
     } catch (error) {
         // Silently ignore polling errors
+    }
+}
+
+/**
+ * Clear End items from a player silently (no spam logging)
+ * @param {string} username - Player's Minecraft username
+ */
+async function clearEndItemsSilent(username) {
+    let totalCleared = 0;
+    const itemsCleared = [];
+    
+    for (const item of END_ITEMS_TO_CLEAR) {
+        const result = await sendCommand(`clear ${username} ${item}`);
+        if (result) {
+            const match = result.match(/Removed (\d+)/i);
+            if (match && parseInt(match[1]) > 0) {
+                const count = parseInt(match[1]);
+                totalCleared += count;
+                const itemName = item.replace('minecraft:', '');
+                itemsCleared.push(`${count}x ${itemName}`);
+            }
+        }
+    }
+    
+    // Only log and notify if items were actually cleared
+    if (totalCleared > 0) {
+        console.log(`[EndClear] Cleared from ${username}: ${itemsCleared.join(', ')}`);
+        await sendCommand(`tellraw ${username} {"text":"[NewLife] End items have been cleared from your inventory (${totalCleared} items).","color":"yellow"}`);
     }
 }
 
@@ -229,7 +248,7 @@ async function initEndItemsClear() {
     // Start polling interval
     pollingInterval = setInterval(pollForJoins, POLL_INTERVAL_MS);
     
-    console.log('[EndClear] Started - polling every 5 seconds');
+    console.log('[EndClear] Started - clearing End items every 1 second');
 }
 
 /**
