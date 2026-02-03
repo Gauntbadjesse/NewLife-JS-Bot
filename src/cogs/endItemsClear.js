@@ -139,47 +139,94 @@ function parsePlayerList(response) {
 }
 
 /**
+ * List of End-related items to clear on player join
+ */
+const END_ITEMS_TO_CLEAR = [
+    'minecraft:elytra',
+    'minecraft:shulker_shell',
+    'minecraft:shulker_box',
+    'minecraft:white_shulker_box',
+    'minecraft:orange_shulker_box',
+    'minecraft:magenta_shulker_box',
+    'minecraft:light_blue_shulker_box',
+    'minecraft:yellow_shulker_box',
+    'minecraft:lime_shulker_box',
+    'minecraft:pink_shulker_box',
+    'minecraft:gray_shulker_box',
+    'minecraft:light_gray_shulker_box',
+    'minecraft:cyan_shulker_box',
+    'minecraft:purple_shulker_box',
+    'minecraft:blue_shulker_box',
+    'minecraft:brown_shulker_box',
+    'minecraft:green_shulker_box',
+    'minecraft:red_shulker_box',
+    'minecraft:black_shulker_box',
+    'minecraft:ender_chest',
+    'minecraft:end_crystal',
+    'minecraft:dragon_egg',
+    'minecraft:dragon_head',
+    'minecraft:chorus_fruit',
+    'minecraft:chorus_flower',
+    'minecraft:popped_chorus_fruit',
+    'minecraft:end_rod',
+    'minecraft:end_stone',
+    'minecraft:end_stone_bricks',
+    'minecraft:end_stone_brick_slab',
+    'minecraft:end_stone_brick_stairs',
+    'minecraft:end_stone_brick_wall',
+    'minecraft:purpur_block',
+    'minecraft:purpur_pillar',
+    'minecraft:purpur_slab',
+    'minecraft:purpur_stairs',
+];
+
+/**
  * Handle a new player joining - run all join commands
  * @param {string} username - Player's Minecraft username
  */
 async function handlePlayerJoin(username) {
     console.log(`[EndClear] Running join commands for ${username}`);
     
-    // 1. Clear elytras
-    const elytraResult = await sendCommand(`clear ${username} minecraft:elytra`);
-    if (elytraResult && elytraResult.includes('Removed')) {
-        const match = elytraResult.match(/Removed (\d+)/);
-        if (match && parseInt(match[1]) > 0) {
-            console.log(`[EndClear] Cleared ${match[1]} elytra(s) from ${username}`);
-            await sendCommand(`tellraw ${username} {"text":"[NewLife] Elytras have been cleared from your inventory.","color":"yellow"}`);
+    let totalCleared = 0;
+    const itemsCleared = [];
+    
+    // Clear all End-related items
+    for (const item of END_ITEMS_TO_CLEAR) {
+        const result = await sendCommand(`clear ${username} ${item}`);
+        if (result && result.includes('Removed')) {
+            const match = result.match(/Removed (\d+)/);
+            if (match && parseInt(match[1]) > 0) {
+                const count = parseInt(match[1]);
+                totalCleared += count;
+                const itemName = item.replace('minecraft:', '');
+                itemsCleared.push(`${count}x ${itemName}`);
+                console.log(`[EndClear] Cleared ${count} ${itemName}(s) from ${username}`);
+            }
         }
     }
     
-    // 2. Clear shulker shells
-    const shellResult = await sendCommand(`clear ${username} minecraft:shulker_shell`);
-    if (shellResult && shellResult.includes('Removed')) {
-        const match = shellResult.match(/Removed (\d+)/);
-        if (match && parseInt(match[1]) > 0) {
-            console.log(`[EndClear] Cleared ${match[1]} shulker shell(s) from ${username}`);
-        }
+    // Notify player if items were cleared
+    if (totalCleared > 0) {
+        await sendCommand(`tellraw ${username} {"text":"[NewLife] End items have been cleared from your inventory (${totalCleared} items).","color":"yellow"}`);
+        console.log(`[EndClear] Total cleared from ${username}: ${itemsCleared.join(', ')}`);
     }
     
-    // 3. Remove stellarity.creative_shock tag
+    // Remove stellarity.creative_shock tag
     await sendCommand(`tag ${username} remove stellarity.creative_shock`);
     
-    // 4. Remove stellarity modifiers from block_break_speed
+    // Remove stellarity modifiers from block_break_speed
     await sendCommand(`attribute ${username} minecraft:block_break_speed modifier remove stellarity:creative_shock`);
     
-    // 5. Remove stellarity:voided modifier from max_health
+    // Remove stellarity:voided modifier from max_health
     await sendCommand(`attribute ${username} minecraft:max_health modifier remove stellarity:voided`);
     
-    // 6. Set max_health to 20 (10 hearts default)
+    // Set max_health to 20 (10 hearts default)
     await sendCommand(`attribute ${username} minecraft:max_health base set 20`);
     
-    // 7. Set gamemode to survival
+    // Set gamemode to survival
     await sendCommand(`gamemode survival ${username}`);
     
-    // 8. Check if in The End and teleport out
+    // Check if in The End and teleport out
     await checkAndTeleportFromEnd(username);
 }
 
@@ -289,10 +336,10 @@ const slashCommands = [
     {
         data: new SlashCommandBuilder()
             .setName('clearend')
-            .setDescription('Clear elytras from a player\'s inventory')
+            .setDescription('Clear all End items from a player\'s inventory')
             .addStringOption(option =>
                 option.setName('player')
-                    .setDescription('Minecraft username to clear elytras from')
+                    .setDescription('Minecraft username to clear End items from')
                     .setRequired(true)
             )
             .addBooleanOption(option =>
@@ -316,35 +363,45 @@ const slashCommands = [
             const silent = interaction.options.getBoolean('silent') || false;
             
             try {
-                // Clear elytra using persistent connection
-                const result = await sendCommand(`clear ${username} minecraft:elytra`);
+                // Clear all End items using persistent connection
+                let totalCleared = 0;
+                const itemsCleared = [];
                 
-                let count = 0;
-                if (result) {
-                    const match = result.match(/Removed (\d+) item/i);
-                    if (match) {
-                        count = parseInt(match[1]);
+                for (const item of END_ITEMS_TO_CLEAR) {
+                    const result = await sendCommand(`clear ${username} ${item}`);
+                    if (result && result.includes('Removed')) {
+                        const match = result.match(/Removed (\d+)/);
+                        if (match && parseInt(match[1]) > 0) {
+                            const count = parseInt(match[1]);
+                            totalCleared += count;
+                            const itemName = item.replace('minecraft:', '');
+                            itemsCleared.push(`${count}x ${itemName}`);
+                        }
                     }
                 }
                 
                 const embed = new EmbedBuilder()
-                    .setTitle('🔮 Elytras Cleared')
+                    .setTitle('🔮 End Items Cleared')
                     .setColor(0x9B59B6)
                     .addFields(
                         { name: 'Player', value: username, inline: true },
-                        { name: 'Elytras Removed', value: String(count), inline: true },
+                        { name: 'Items Removed', value: String(totalCleared), inline: true },
                         { name: 'Cleared By', value: interaction.user.tag, inline: true }
                     )
                     .setTimestamp();
                 
+                if (itemsCleared.length > 0) {
+                    embed.addFields({ name: 'Items', value: itemsCleared.join('\n').substring(0, 1024) || 'None' });
+                }
+                
                 // Notify the player unless silent
-                if (!silent && count > 0) {
-                    await sendCommand(`tellraw ${username} {"text":"[NewLife] A staff member has cleared elytras from your inventory.","color":"yellow"}`);
+                if (!silent && totalCleared > 0) {
+                    await sendCommand(`tellraw ${username} {"text":"[NewLife] A staff member has cleared End items from your inventory (${totalCleared} items).","color":"yellow"}`);
                 }
                 
                 await interaction.editReply({ embeds: [embed] });
                 
-                console.log(`[EndClear] ${interaction.user.tag} cleared ${count} elytra(s) from ${username}`);
+                console.log(`[EndClear] ${interaction.user.tag} cleared ${totalCleared} End item(s) from ${username}: ${itemsCleared.join(', ')}`);
                 
             } catch (error) {
                 console.error('[EndClear] Command error:', error);
