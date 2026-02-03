@@ -101,7 +101,7 @@ const END_ITEMS_TO_CLEAR = [
  * @param {string} username - Player's Minecraft username
  */
 async function handlePlayerJoin(username) {
-    console.log(`[EndClear] Running join commands for ${username}`);
+    console.log(`[EndClear] Checking ${username} for End items...`);
     
     let totalCleared = 0;
     const itemsCleared = [];
@@ -109,7 +109,6 @@ async function handlePlayerJoin(username) {
     // Clear all End-related items
     for (const item of END_ITEMS_TO_CLEAR) {
         const result = await sendCommand(`clear ${username} ${item}`);
-        console.log(`[EndClear] clear ${username} ${item} -> ${result}`);
         
         if (result) {
             // Check for "Removed X items" pattern
@@ -129,7 +128,7 @@ async function handlePlayerJoin(username) {
         await sendCommand(`tellraw ${username} {"text":"[NewLife] End items have been cleared from your inventory (${totalCleared} items).","color":"yellow"}`);
         console.log(`[EndClear] Total cleared from ${username}: ${itemsCleared.join(', ')}`);
     } else {
-        console.log(`[EndClear] No End items found on ${username}`);
+        console.log(`[EndClear] ${username} has no End items`);
     }
     
     // Remove stellarity.creative_shock tag
@@ -211,11 +210,20 @@ async function initEndItemsClear() {
     
     console.log('[EndClear] Initializing...');
     
-    // Initial poll to get current players (without running join commands)
+    // Initial poll to get current players AND clear their items
     const response = await sendCommand('list');
     if (response) {
-        onlinePlayers = new Set(parsePlayerList(response));
-        console.log(`[EndClear] Found ${onlinePlayers.size} players already online`);
+        const players = parsePlayerList(response);
+        onlinePlayers = new Set(players);
+        console.log(`[EndClear] Found ${onlinePlayers.size} players already online: ${players.join(', ') || 'none'}`);
+        
+        // Clear End items from ALL currently online players
+        if (players.length > 0) {
+            console.log('[EndClear] Clearing End items from all online players...');
+            for (const player of players) {
+                await handlePlayerJoin(player);
+            }
+        }
     }
     
     // Start polling interval
@@ -306,6 +314,89 @@ const slashCommands = [
                 await interaction.editReply({ embeds: [embed] });
                 
                 console.log(`[EndClear] ${interaction.user.tag} cleared ${totalCleared} End item(s) from ${username}: ${itemsCleared.join(', ')}`);
+                
+            } catch (error) {
+                console.error('[EndClear] Command error:', error);
+                await interaction.editReply({
+                    embeds: [createErrorEmbed('Error', `An error occurred: ${error.message}`)]
+                });
+            }
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('clearallend')
+            .setDescription('Clear End items from ALL online players'),
+        
+        async execute(interaction) {
+            // Permission check - Admin+
+            if (!isAdmin(interaction.member)) {
+                return interaction.reply({
+                    embeds: [createErrorEmbed('Permission Denied', 'You need Admin permissions to use this command.')],
+                    ephemeral: true
+                });
+            }
+            
+            await interaction.deferReply();
+            
+            try {
+                // Get all online players
+                const response = await sendCommand('list');
+                if (!response) {
+                    return interaction.editReply({
+                        embeds: [createErrorEmbed('Error', 'Could not connect to the server.')]
+                    });
+                }
+                
+                const players = parsePlayerList(response);
+                if (players.length === 0) {
+                    return interaction.editReply({
+                        embeds: [createErrorEmbed('No Players', 'No players are currently online.')]
+                    });
+                }
+                
+                let grandTotal = 0;
+                const results = [];
+                
+                for (const player of players) {
+                    let playerTotal = 0;
+                    
+                    for (const item of END_ITEMS_TO_CLEAR) {
+                        const result = await sendCommand(`clear ${player} ${item}`);
+                        if (result) {
+                            const match = result.match(/Removed (\d+)/i);
+                            if (match && parseInt(match[1]) > 0) {
+                                playerTotal += parseInt(match[1]);
+                            }
+                        }
+                    }
+                    
+                    if (playerTotal > 0) {
+                        results.push(`${player}: ${playerTotal} items`);
+                        grandTotal += playerTotal;
+                        await sendCommand(`tellraw ${player} {"text":"[NewLife] End items have been cleared from your inventory (${playerTotal} items).","color":"yellow"}`);
+                    }
+                }
+                
+                const embed = new EmbedBuilder()
+                    .setTitle('🔮 End Items Cleared - All Players')
+                    .setColor(0x9B59B6)
+                    .addFields(
+                        { name: 'Players Checked', value: String(players.length), inline: true },
+                        { name: 'Total Items Removed', value: String(grandTotal), inline: true },
+                        { name: 'Cleared By', value: interaction.user.tag, inline: true }
+                    )
+                    .setTimestamp();
+                
+                if (results.length > 0) {
+                    embed.addFields({ name: 'Players Affected', value: results.join('\n').substring(0, 1024) });
+                } else {
+                    embed.addFields({ name: 'Players Affected', value: 'None - no End items found on any player' });
+                }
+                
+                await interaction.editReply({ embeds: [embed] });
+                
+                console.log(`[EndClear] ${interaction.user.tag} cleared ${grandTotal} End items from ${players.length} players`);
                 
             } catch (error) {
                 console.error('[EndClear] Command error:', error);
