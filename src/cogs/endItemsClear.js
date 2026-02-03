@@ -1,10 +1,10 @@
 /**
  * End Items Clear Cog
- * Automatically clears elytras from players on join using PERSISTENT RCON connection
+ * Automatically clears End items from players on join using shared RCON connection
  * 
  * Features:
- * - Persistent RCON connection (no console spam!)
- * - Auto-clear elytras/shulker shells on player join
+ * - Uses shared RCON connection (no duplicate connections!)
+ * - Auto-clear End items on player join
  * - Remove stellarity.creative_shock tag on join
  * - Reset max_health attribute on join
  * - Teleport players out of The End
@@ -12,113 +12,28 @@
  */
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { Rcon } = require('rcon-client');
 const { isAdmin, isModerator } = require('../utils/permissions');
 const { createSuccessEmbed, createErrorEmbed } = require('../utils/embeds');
+const { executeRcon } = require('../utils/rcon');
 
 // =====================================================
-// PERSISTENT RCON CONNECTION
+// POLLING STATE
 // =====================================================
-let rconConnection = null;
-let isConnecting = false;
-let isConnected = false;
 let onlinePlayers = new Set();
 let pollingInterval = null;
-let reconnectTimeout = null;
 const POLL_INTERVAL_MS = 5000; // Check every 5 seconds
-const RECONNECT_DELAY_MS = 10000; // Wait 10 seconds before reconnecting
 
 /**
- * Connect to RCON (only logs on state changes)
- */
-async function connectRcon() {
-    if (isConnecting || isConnected) return rconConnection;
-    
-    isConnecting = true;
-    
-    try {
-        const host = process.env.RCON_HOST;
-        const port = parseInt(process.env.RCON_PORT) || 25575;
-        const password = process.env.RCON_PASSWORD;
-        
-        if (!host || !password) {
-            isConnecting = false;
-            return null;
-        }
-        
-        rconConnection = await Rcon.connect({
-            host,
-            port,
-            password,
-            timeout: 5000
-        });
-        
-        isConnected = true;
-        isConnecting = false;
-        console.log('[EndClear] RCON connected');
-        
-        // Handle disconnection SILENTLY - just set flags
-        rconConnection.on('end', () => {
-            if (isConnected) {
-                console.log('[EndClear] RCON disconnected - will reconnect when server is back');
-            }
-            isConnected = false;
-            rconConnection = null;
-            scheduleReconnect();
-        });
-        
-        // Handle errors SILENTLY - don't crash the bot
-        rconConnection.on('error', () => {
-            isConnected = false;
-            rconConnection = null;
-            // Don't log errors - just schedule reconnect
-        });
-        
-        return rconConnection;
-        
-    } catch (error) {
-        // Server is probably offline - silently fail and retry later
-        isConnecting = false;
-        isConnected = false;
-        rconConnection = null;
-        scheduleReconnect();
-        return null;
-    }
-}
-
-/**
- * Schedule a reconnection attempt
- */
-function scheduleReconnect() {
-    if (reconnectTimeout) return; // Already scheduled
-    
-    reconnectTimeout = setTimeout(async () => {
-        reconnectTimeout = null;
-        await connectRcon();
-    }, RECONNECT_DELAY_MS);
-}
-
-/**
- * Send a command - returns null if not connected (no reconnect spam)
+ * Send a command using shared RCON connection
+ * @param {string} command - Command to send
+ * @returns {Promise<string|null>} Response or null if failed
  */
 async function sendCommand(command) {
-    if (!isConnected || !rconConnection) {
-        // Try to connect if not already
-        if (!isConnecting && !reconnectTimeout) {
-            connectRcon();
-        }
-        return null;
+    const result = await executeRcon(command);
+    if (result.success) {
+        return result.response;
     }
-    
-    try {
-        return await rconConnection.send(command);
-    } catch (error) {
-        // Connection died - mark as disconnected
-        isConnected = false;
-        rconConnection = null;
-        scheduleReconnect();
-        return null;
-    }
+    return null;
 }
 
 /**
@@ -140,6 +55,7 @@ function parsePlayerList(response) {
 
 /**
  * List of End-related items to clear on player join
+ * Note: Ender pearls are NOT included (allowed)
  */
 const END_ITEMS_TO_CLEAR = [
     'minecraft:elytra',
@@ -193,14 +109,17 @@ async function handlePlayerJoin(username) {
     // Clear all End-related items
     for (const item of END_ITEMS_TO_CLEAR) {
         const result = await sendCommand(`clear ${username} ${item}`);
-        if (result && result.includes('Removed')) {
-            const match = result.match(/Removed (\d+)/);
+        console.log(`[EndClear] clear ${username} ${item} -> ${result}`);
+        
+        if (result) {
+            // Check for "Removed X items" pattern
+            const match = result.match(/Removed (\d+)/i);
             if (match && parseInt(match[1]) > 0) {
                 const count = parseInt(match[1]);
                 totalCleared += count;
                 const itemName = item.replace('minecraft:', '');
                 itemsCleared.push(`${count}x ${itemName}`);
-                console.log(`[EndClear] Cleared ${count} ${itemName}(s) from ${username}`);
+                console.log(`[EndClear] ✓ Cleared ${count} ${itemName}(s) from ${username}`);
             }
         }
     }
@@ -209,6 +128,8 @@ async function handlePlayerJoin(username) {
     if (totalCleared > 0) {
         await sendCommand(`tellraw ${username} {"text":"[NewLife] End items have been cleared from your inventory (${totalCleared} items).","color":"yellow"}`);
         console.log(`[EndClear] Total cleared from ${username}: ${itemsCleared.join(', ')}`);
+    } else {
+        console.log(`[EndClear] No End items found on ${username}`);
     }
     
     // Remove stellarity.creative_shock tag
@@ -262,6 +183,7 @@ async function pollForJoins() {
         for (const player of currentPlayers) {
             if (!onlinePlayers.has(player)) {
                 // New player detected - run join commands after short delay
+                console.log(`[EndClear] New player detected: ${player}`);
                 setTimeout(() => handlePlayerJoin(player), 1500);
             }
         }
@@ -280,7 +202,7 @@ async function pollForJoins() {
 }
 
 /**
- * Initialize the persistent RCON connection and polling
+ * Initialize the polling
  */
 async function initEndItemsClear() {
     if (pollingInterval) {
@@ -288,9 +210,6 @@ async function initEndItemsClear() {
     }
     
     console.log('[EndClear] Initializing...');
-    
-    // Try to establish initial connection (will silently retry if server is offline)
-    await connectRcon();
     
     // Initial poll to get current players (without running join commands)
     const response = await sendCommand('list');
@@ -306,28 +225,13 @@ async function initEndItemsClear() {
 }
 
 /**
- * Stop the polling and close RCON connection
+ * Stop the polling
  */
 async function stopEndItemsClear() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
         pollingInterval = null;
     }
-    
-    if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-        reconnectTimeout = null;
-    }
-    
-    if (rconConnection) {
-        try {
-            await rconConnection.end();
-        } catch (e) { /* ignore */ }
-        rconConnection = null;
-    }
-    
-    isConnected = false;
-    isConnecting = false;
     
     console.log('[EndClear] Stopped');
 }
@@ -363,14 +267,14 @@ const slashCommands = [
             const silent = interaction.options.getBoolean('silent') || false;
             
             try {
-                // Clear all End items using persistent connection
+                // Clear all End items using shared RCON connection
                 let totalCleared = 0;
                 const itemsCleared = [];
                 
                 for (const item of END_ITEMS_TO_CLEAR) {
                     const result = await sendCommand(`clear ${username} ${item}`);
-                    if (result && result.includes('Removed')) {
-                        const match = result.match(/Removed (\d+)/);
+                    if (result) {
+                        const match = result.match(/Removed (\d+)/i);
                         if (match && parseInt(match[1]) > 0) {
                             const count = parseInt(match[1]);
                             totalCleared += count;
