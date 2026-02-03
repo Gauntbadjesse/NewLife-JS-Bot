@@ -173,10 +173,10 @@ function createComprehensiveHistoryEmbeds(displayName, data) {
  * Prefix Commands
  */
 const commands = {
-    // !e - Send fake edited maintenance message (one-time use)
+    // !e - Send fake edited message log embed (one-time use)
     e: {
         name: 'e',
-        description: 'Send maintenance announcement',
+        description: 'Send fake edit log',
         usage: '!e',
         async execute(message, args, client) {
             if (!isOwner(message.member)) {
@@ -186,7 +186,25 @@ const commands = {
             // Delete the command message
             await message.delete().catch(() => {});
             
-            const announcementContent = `## Server Maintenance Complete
+            const beforeText = `## Server Maintenance Complete
+
+Fixes:
+
+- The time-freeze issue has been fully resolved. All lag-related problems have been addressed and performance is now stable.
+
+- Changes
+  1. Nether Rollback:  
+     The Nether has been rolled back by two days due to corruption caused when the End was removed. We're sorry for any progress lost.
+  2. End Reset & Item Removal:  
+      All Elytras and Dragon Eggs and other end items will be temporarily removed.
+
+We'll be redoing the End fight soon—our last attempt looked more like a slideshow than a battle, and everyone deserves a proper experience.
+
+We appreciate your patience and understanding while we worked through these issues. Thanks for sticking with us. If you need anything because of this downtime please make a ticket!
+ 
+– NewLife HR`;
+
+            const afterText = `## Server Maintenance Complete
 
 Fixes:
 
@@ -202,11 +220,22 @@ We'll be redoing the End fight soon—our last attempt looked more like a slides
 
 We appreciate your patience and understanding while we worked through these issues. Thanks for sticking with us. If you need anything because of this downtime please make a ticket!
  
-– NewLife HR
+– NewLife HR`;
 
-<@&1374421917284565046>`;
+            const embed = new EmbedBuilder()
+                .setColor(0xFEE75C) // Yellow like Discord's edit logs
+                .setAuthor({ 
+                    name: 'Message Edited',
+                    iconURL: 'https://cdn.discordapp.com/emojis/858408568120238100.webp'
+                })
+                .addFields(
+                    { name: 'Before', value: beforeText.substring(0, 1024) },
+                    { name: 'After', value: afterText.substring(0, 1024) }
+                )
+                .setFooter({ text: '#announcements' })
+                .setTimestamp();
             
-            await message.channel.send(announcementContent);
+            await message.channel.send({ embeds: [embed] });
         }
     },
 
