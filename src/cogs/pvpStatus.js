@@ -10,7 +10,7 @@ const { isStaff } = require('../utils/permissions');
 
 // Channel for good stuff (status changes, consensual kills)
 const PVP_GOOD_CHANNEL_ID = '1442649468586561616';
-// Channel for alerts/investigations (damage sessions, combat logs, invalid pvp, non-consensual kills)
+// Channel for alerts/investigations (damage sessions, invalid pvp, non-consensual kills)
 const PVP_ALERT_CHANNEL_ID = '1439438975151505419';
 
 /**
@@ -46,7 +46,6 @@ function getChannelForLogType(logData) {
             return logData.consensual ? PVP_GOOD_CHANNEL_ID : PVP_ALERT_CHANNEL_ID;
         case 'invalid_pvp':
         case 'pvp_damage_session':
-        case 'combat_log':
             // All alerts/issues go to alert channel
             return PVP_ALERT_CHANNEL_ID;
         case 'death':
@@ -101,9 +100,6 @@ async function handlePvpLog(client, logData) {
             break;
         case 'pvp_damage_session':
             embed = createDamageSessionEmbed(logData);
-            break;
-        case 'combat_log':
-            embed = createCombatLogEmbed(logData);
             break;
         case 'low_hp_alert':
             embed = createLowHpAlertEmbed(logData);
@@ -285,45 +281,6 @@ function createDamageSessionEmbed(data) {
         )
         .setTimestamp(new Date(data.timestamp))
         .setFooter({ text: `NewLife SMP | ${total_hits} hits in ${durationSeconds}s` });
-    
-    return embed;
-}
-
-/**
- * Create embed for combat log
- */
-function createCombatLogEmbed(data) {
-    const { player, location } = data;
-    
-    const embed = new EmbedBuilder()
-        .setColor(0xdc2626)
-        .setAuthor({ name: 'Combat Log Detected' })
-        .setDescription(`**${player.username}** logged out during combat with PvP enabled`)
-        .addFields(
-            { 
-                name: 'Player', 
-                value: `**${player.username}**\nPvP was enabled`, 
-                inline: true 
-            },
-            { 
-                name: 'Action Taken', 
-                value: `Player killed\nItems dropped`, 
-                inline: true 
-            },
-            { 
-                name: 'Location', 
-                value: `**World:** ${location.world}\n**Coords:** ${location.x.toFixed(0)}, ${location.y.toFixed(0)}, ${location.z.toFixed(0)}`, 
-                inline: true 
-            },
-            { name: 'Player UUID', value: `\`${player.uuid}\``, inline: false },
-            { 
-                name: 'Notification', 
-                value: 'Player has been notified via Discord DM about the combat log penalty.', 
-                inline: false 
-            }
-        )
-        .setTimestamp(new Date(data.timestamp))
-        .setFooter({ text: 'NewLife SMP | Combat Logging Prevention' });
     
     return embed;
 }

@@ -2830,7 +2830,7 @@ app.get('/viewer/pvp-logs', staffAuth, async (req, res) => {
         let query = {};
         
         // Type filter
-        if (type && ['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'combat_log', 'low_hp_alert'].includes(type)) {
+        if (type && ['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'low_hp_alert'].includes(type)) {
             query.type = type;
         }
         
@@ -2867,12 +2867,11 @@ app.get('/viewer/pvp-logs', staffAuth, async (req, res) => {
         const totalPages = Math.ceil(total / limit);
         
         // Get type counts
-        const [statusCount, killCount, damageCount, lowHpCount, combatLogCount] = await Promise.all([
+        const [statusCount, killCount, damageCount, lowHpCount] = await Promise.all([
             PvpLog.countDocuments({ type: 'status_change' }),
             PvpLog.countDocuments({ type: 'pvp_kill' }),
             PvpLog.countDocuments({ type: 'pvp_damage_session' }),
-            PvpLog.countDocuments({ type: 'low_hp_alert' }),
-            PvpLog.countDocuments({ type: 'combat_log' })
+            PvpLog.countDocuments({ type: 'low_hp_alert' })
         ]);
         
         // Get type tag
@@ -2883,7 +2882,6 @@ app.get('/viewer/pvp-logs', staffAuth, async (req, res) => {
                 case 'invalid_pvp': return '<span class="tag tag-o">Invalid</span>';
                 case 'death': return '<span class="tag tag-g">Death</span>';
                 case 'pvp_damage_session': return '<span class="tag tag-y">Damage</span>';
-                case 'combat_log': return '<span class="tag tag-p">Combat Log</span>';
                 case 'low_hp_alert': return '<span class="tag tag-r">Low HP</span>';
                 default: return '<span class="tag tag-g">' + (logType || 'Unknown') + '</span>';
             }
@@ -2902,8 +2900,6 @@ app.get('/viewer/pvp-logs', staffAuth, async (req, res) => {
                     return `<strong>${log.username}</strong> died: ${log.cause || 'unknown'}`;
                 case 'pvp_damage_session':
                     return `<strong>${log.player1?.username || '?'}</strong> vs <strong>${log.player2?.username || '?'}</strong> - ${log.total_damage?.toFixed(1) || 0} HP`;
-                case 'combat_log':
-                    return `<strong>${log.player?.username || '?'}</strong> combat logged`;
                 case 'low_hp_alert':
                     return `<strong>${log.victim?.username || '?'}</strong> dropped to ${log.health_remaining?.toFixed(1) || '?'} HP (attacker: ${log.attacker?.username || '?'})`;
                 default:
@@ -2954,7 +2950,6 @@ ${getHeader('pvp-logs', req.session)}
         <div class="stat"><div class="num">${killCount}</div><div class="lbl">Kills</div></div>
         <div class="stat"><div class="num">${damageCount}</div><div class="lbl">Damage</div></div>
         <div class="stat"><div class="num">${lowHpCount}</div><div class="lbl">Low HP</div></div>
-        <div class="stat"><div class="num">${combatLogCount}</div><div class="lbl">Combat Logs</div></div>
     </div>
     
     <div class="filter-card">
@@ -2973,7 +2968,6 @@ ${getHeader('pvp-logs', req.session)}
                         <option value="pvp_kill" ${type === 'pvp_kill' ? 'selected' : ''}>Kills</option>
                         <option value="pvp_damage_session" ${type === 'pvp_damage_session' ? 'selected' : ''}>Damage Sessions</option>
                         <option value="low_hp_alert" ${type === 'low_hp_alert' ? 'selected' : ''}>Low HP Alerts</option>
-                        <option value="combat_log" ${type === 'combat_log' ? 'selected' : ''}>Combat Logs</option>
                         <option value="invalid_pvp" ${type === 'invalid_pvp' ? 'selected' : ''}>Invalid PvP</option>
                         <option value="death" ${type === 'death' ? 'selected' : ''}>Deaths</option>
                     </select>
@@ -3032,8 +3026,7 @@ ${getHeader('pvp-logs', req.session)}
                 case 'invalid_pvp': return '<span class="tag tag-o">Invalid PvP</span>';
                 case 'death': return '<span class="tag tag-g">Death</span>';
                 case 'pvp_damage_session': return '<span class="tag tag-y">Damage Session</span>';
-                case 'combat_log': return '<span class="tag tag-p">Combat Log</span>';
-                case 'low_hp_alert': return '<span class="tag tag-r">Low HP Alert</span>';
+                case 'low_hp_alert': return '<span class="tag tag-r">Low HP Alert</span>';;
                 default: return '<span class="tag tag-g">' + (logType || 'Unknown') + '</span>';
             }
         };
@@ -3100,21 +3093,6 @@ ${getHeader('pvp-logs', req.session)}
                             <div class="info-item"><label>Session Hits</label><span>${log.session.total_hits || 0}</span></div>
                             <div class="info-item"><label>Consensual</label><span class="${log.session.consensual ? 'status-inactive' : 'status-active'}">${log.session.consensual ? 'Yes' : 'No'}</span></div>
                         ` : ''}
-                        <div class="info-item"><label>Time</label><span>${formatCentralDateTime(log.timestamp)}</span></div>
-                    </div>
-                    ${log.location ? `
-                        <div class="info-item" style="margin-top:16px">
-                            <label>Location</label>
-                            <span>${log.location.world} (${log.location.x?.toFixed(0)}, ${log.location.y?.toFixed(0)}, ${log.location.z?.toFixed(0)})</span>
-                        </div>` : ''}`;
-                break;
-                
-            case 'combat_log':
-                detailHtml = `
-                    <div class="info-grid">
-                        <div class="info-item"><label>Player</label><span>${log.player?.username || 'Unknown'}</span></div>
-                        <div class="info-item"><label>UUID</label><span style="font-family:monospace;font-size:0.85em">${log.player?.uuid || '—'}</span></div>
-                        <div class="info-item"><label>PvP Status</label><span>${log.player?.pvp_enabled ? 'ON' : 'OFF'}</span></div>
                         <div class="info-item"><label>Time</label><span>${formatCentralDateTime(log.timestamp)}</span></div>
                     </div>
                     ${log.location ? `
@@ -3571,7 +3549,7 @@ app.post('/api/pvp/log', validateApiKey, async (req, res) => {
         const { type, timestamp, ...data } = req.body;
         console.log('[PvP API] Received log request:', { type, ...data });
         
-        if (!type || !['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'combat_log', 'low_hp_alert'].includes(type)) {
+        if (!type || !['status_change', 'pvp_kill', 'invalid_pvp', 'death', 'pvp_damage_session', 'low_hp_alert'].includes(type)) {
             console.log('[PvP API] Invalid type:', type);
             return res.status(400).json({ success: false, error: 'Invalid or missing type' });
         }
@@ -3619,23 +3597,6 @@ app.post('/api/pvp/damage-session', validateApiKey, async (req, res) => {
     }
 });
 
-app.post('/api/pvp/combat-log', validateApiKey, async (req, res) => {
-    try {
-        const logData = { type: 'combat_log', ...req.body };
-        const log = new PvpLog(logData);
-        await log.save();
-        
-        if (global.discordClient) {
-            global.discordClient.emit('pvpLog', log.toObject());
-        }
-        
-        return res.json({ success: true, logId: log._id });
-    } catch (error) {
-        console.error('Combat Log Error:', error);
-        return res.status(500).json({ success: false, error: 'Internal server error' });
-    }
-});
-
 app.post('/api/pvp/low-hp', validateApiKey, async (req, res) => {
     try {
         const logData = { type: 'low_hp_alert', ...req.body };
@@ -3667,7 +3628,7 @@ app.post('/api/pvp/send-dm', validateApiKey, async (req, res) => {
                 minecraft_uuid,
                 minecraft_username,
                 message,
-                type: 'combat_log'
+                type: 'pvp_notification'
             });
         }
         

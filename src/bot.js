@@ -14,6 +14,17 @@ const { initErrorLogger, logError } = require('./utils/errorLogger');
 const { startApiServer } = require('./api/server');
 const emojis = require('./utils/emojis');
 
+// Global error handlers to prevent bot crashes
+process.on('uncaughtException', (error) => {
+    console.error('[FATAL] Uncaught Exception:', error.message);
+    // Don't exit - let the bot continue running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[WARN] Unhandled Promise Rejection:', reason);
+    // Don't exit - let the bot continue running
+});
+
 // Create Discord client with necessary intents
 const client = new Client({
     intents: [

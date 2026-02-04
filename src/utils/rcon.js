@@ -60,9 +60,12 @@ async function getConnection() {
             scheduleReconnect();
         });
         
-        rconConnection.on('error', () => {
+        rconConnection.on('error', (err) => {
+            // Silently handle errors - don't crash the bot
+            console.log('[RCON] Connection error (server may be restarting)');
             isConnected = false;
             rconConnection = null;
+            scheduleReconnect();
         });
         
         return rconConnection;
