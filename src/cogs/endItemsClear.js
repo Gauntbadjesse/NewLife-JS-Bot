@@ -127,9 +127,14 @@ async function playerHasShulkers(username) {
     for (const item of SHULKER_ITEMS) {
         if (item === 'minecraft:shulker_shell') continue; // Skip shells, check boxes only
         const result = await sendCommand(`clear ${username} ${item} 0`);
-        if (result && result.match(/(\d+)/)) {
-            const count = parseInt(result.match(/(\d+)/)[1]);
-            if (count > 0) return true;
+        if (result) {
+            // Check for "has X" pattern (e.g., "Player has 5 [Shulker Box]")
+            const hasMatch = result.match(/has (\d+)/i);
+            if (hasMatch && parseInt(hasMatch[1]) > 0) return true;
+            
+            // Also check for "Found X" pattern
+            const foundMatch = result.match(/[Ff]ound (\d+)/);
+            if (foundMatch && parseInt(foundMatch[1]) > 0) return true;
         }
     }
     return false;
