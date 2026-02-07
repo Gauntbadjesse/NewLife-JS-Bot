@@ -20,6 +20,8 @@ let scheduledTask = null;
 let scheduledRestartTimer = null;
 let scheduledRestartTime = null;
 let botClient = null;
+let actionbarInterval = null;
+let dailyActionbarInterval = null;
 
 const OWNER_ID = () => process.env.OWNER_ID || process.env.OWNER_USER_ID;
 
@@ -94,6 +96,36 @@ async function playSound(rcon, sound = 'minecraft:block.note_block.pling') {
         await rcon.send(`playsound ${sound} master @a ~ ~ ~ 1 1`);
     } catch (e) {
         // Sound is optional, silently fail
+    }
+}
+
+/**
+ * Send an actionbar message to all players
+ */
+async function sendActionBar(rcon, message, color = 'red') {
+    try {
+        const actionbarJson = JSON.stringify({ text: message, color: color, bold: true });
+        await rcon.send(`title @a actionbar ${actionbarJson}`);
+    } catch (e) {
+        // Actionbar is optional, silently fail
+    }
+}
+
+/**
+ * Format time remaining for display
+ */
+function formatTimeRemaining(ms) {
+    const totalSeconds = Math.ceil(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes}m ${seconds}s`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${seconds}s`;
+    } else {
+        return `${seconds}s`;
     }
 }
 
@@ -213,12 +245,102 @@ function initScheduler(client) {
     // CST = UTC-6
     scheduledTask = cron.schedule('0 6 * * *', async () => {
         console.log('[ServerRestart] Scheduled restart triggered');
+        // Stop the daily actionbar countdown
+        if (dailyActionbarInterval) {
+            clearInterval(dailyActionbarInterval);
+            dailyActionbarInterval = null;
+        }
         await executeRestart('Daily scheduled restart');
+    }, {
+        timezone: 'UTC'
+    });
+    
+    // Schedule actionbar warnings starting 5 minutes before daily restart
+    // 5:55 AM UTC = 11:55 PM CST (5 minutes before restart)
+    cron.schedule('55 5 * * *', () => {
+        console.log('[ServerRestart] Starting daily restart actionbar countdown');
+        startDailyActionBarCountdown();
     }, {
         timezone: 'UTC'
     });
 
     console.log('[ServerRestart] Daily restart scheduler initialized (12:00 AM CST / 6:00 AM UTC)');
+}
+
+/**
+ * Start actionbar countdown for daily 12 AM restart
+ */
+function startDailyActionBarCountdown() {
+    // Clear any existing daily actionbar interval
+    if (dailyActionbarInterval) {
+        clearInterval(dailyActionbarInterval);
+    }
+    
+    // Calculate the target restart time (next 6:00 AM UTC)
+    const now = new Date();
+    const target = new Date(now);
+    target.setUTCHours(6, 0, 0, 0);
+    if (target <= now) {
+        target.setUTCDate(target.getUTCDate() + 1);
+    }
+    const targetTime = target.getTime();
+    
+    dailyActionbarInterval = setInterval(async () => {
+        const remaining = targetTime - Date.now();
+        
+        if (remaining <= 30000) {
+            // Stop actionbar updates when we're in the final 30-second countdown
+            clearInterval(dailyActionbarInterval);
+            dailyActionbarInterval = null;
+            return;
+        }
+        
+        const timeStr = formatTimeRemaining(remaining);
+        
+        try {
+            const rcon = await connectRcon();
+            await sendActionBar(rcon, `⚠ Daily restart in ${timeStr}`, remaining <= 60000 ? 'red' : 'gold');
+            await rcon.end();
+        } catch (e) {
+            // Silently fail actionbar updates
+        }
+    }, 1000); // Update every second
+}
+
+/**
+ * Start actionbar countdown display
+ */
+function startActionBarCountdown() {
+    // Clear any existing actionbar interval
+    if (actionbarInterval) {
+        clearInterval(actionbarInterval);
+    }
+    
+    actionbarInterval = setInterval(async () => {
+        if (!scheduledRestartTime) {
+            clearInterval(actionbarInterval);
+            actionbarInterval = null;
+            return;
+        }
+        
+        const remaining = scheduledRestartTime - Date.now();
+        if (remaining <= 30000) {
+            // Stop actionbar updates when we're in the final 30-second countdown
+            clearInterval(actionbarInterval);
+            actionbarInterval = null;
+            return;
+        }
+        
+        const timeStr = formatTimeRemaining(remaining);
+        
+        try {
+            const rcon = await connectRcon();
+            await sendActionBar(rcon, `⚠ Server restart in ${timeStr}`, remaining <= 60000 ? 'red' : 'gold');
+            await rcon.end();
+        } catch (e) {
+            // Silently fail actionbar updates
+        }
+    }, 1000); // Update every second
 }
 
 /**
@@ -249,6 +371,9 @@ async function scheduleRestart(minutes, reason = 'Scheduled restart') {
     // Initial announcement
     await broadcastTellraw(rcon, `Server will restart in ${minutes} minute${minutes !== 1 ? 's' : ''}!`, 'yellow');
     await playSound(rcon);
+    
+    // Start the actionbar countdown
+    startActionBarCountdown();
     
     // Schedule warning messages
     for (const warnMin of warningMinutes) {
@@ -308,6 +433,10 @@ function cancelScheduledRestart() {
             clearTimeout(scheduledRestartTimer);
         }
         scheduledRestartTimer = null;
+    }
+    if (actionbarInterval) {
+        clearInterval(actionbarInterval);
+        actionbarInterval = null;
     }
     scheduledRestartTime = null;
     console.log('[ServerRestart] Scheduled restart cancelled');
