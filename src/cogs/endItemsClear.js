@@ -1,23 +1,31 @@
 /**
  * End Items Clear Cog
  * 
- * NOTE: The End is now OPEN! This cog is disabled.
- * All item clearing and teleportation functionality has been removed.
- * Keeping the file structure for potential future use.
+ * STATUS: DISABLED - The End is now open!
+ * 
+ * This cog previously cleared End items from players on join.
+ * All functionality has been disabled. To re-enable, set
+ * END_ITEMS_CLEAR_ENABLED=true in your environment variables.
  */
 
+const config = require('../config');
+
 /**
- * Initialize - disabled since The End is open
+ * Initialize - checks feature toggle
  */
 async function initEndItemsClear() {
-    console.log('[EndClear] Disabled - The End is now open!');
+    if (config.features.endItemsClear) {
+        console.log('[EndClear] Feature enabled but not implemented - The End is open!');
+    } else {
+        console.log('[EndClear] Disabled - The End is open!');
+    }
 }
 
 /**
  * Stop - no-op since nothing is running
  */
 async function stopEndItemsClear() {
-    console.log('[EndClear] Already disabled');
+    // No-op
 }
 
 // No slash commands - The End is open

@@ -1,22 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
-const mongoose = require('mongoose');
+const Suggestion = require('../database/models/Suggestion');
 
 const SUGGESTION_CHANNEL_ID = '1459777467551191110';
-
-// Suggestion schema
-const suggestionSchema = new mongoose.Schema({
-    guildId: String,
-    messageId: String,
-    threadId: String,
-    userId: String,
-    suggestion: String,
-    upvotes: [String], // Array of user IDs who upvoted
-    downvotes: [String], // Array of user IDs who downvoted
-    status: { type: String, default: 'pending' }, // pending, approved, denied
-    createdAt: { type: Date, default: Date.now }
-});
-
-const Suggestion = mongoose.models.Suggestion || mongoose.model('Suggestion', suggestionSchema);
 
 const slashCommands = [
     {

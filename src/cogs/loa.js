@@ -1,37 +1,13 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const mongoose = require('mongoose');
+const LOA = require('../database/models/LOA');
 const { isStaff } = require('../utils/permissions');
+const { parseDuration } = require('../utils/duration');
+const { registerTimeout, removeTimeout } = require('../utils/cleanup');
 
 const LOA_ROLE_ID = '1459778232206360681';
 
-// LOA schema
-const loaSchema = new mongoose.Schema({
-    guildId: String,
-    userId: String,
-    reason: String,
-    startDate: { type: Date, default: Date.now },
-    endDate: Date,
-    active: { type: Boolean, default: true }
-});
-
-const LOA = mongoose.models.LOA || mongoose.model('LOA', loaSchema);
-
-// Helper functions
-function parseDuration(str) {
-    const match = str.match(/^(\d+)([dwmh])$/i);
-    if (!match) return null;
-
-    const num = parseInt(match[1]);
-    const unit = match[2].toLowerCase();
-
-    switch (unit) {
-        case 'h': return num * 60 * 60 * 1000;
-        case 'd': return num * 24 * 60 * 60 * 1000;
-        case 'w': return num * 7 * 24 * 60 * 60 * 1000;
-        case 'm': return num * 30 * 24 * 60 * 60 * 1000;
-        default: return null;
-    }
-}
+// Track scheduled auto-ends for cleanup
+const scheduledAutoEnds = new Map();
 
 function scheduleAutoEnd(client, guildId, userId, endDate) {
     const timeUntilEnd = endDate.getTime() - Date.now();
@@ -41,7 +17,14 @@ function scheduleAutoEnd(client, guildId, userId, endDate) {
     // Don't schedule if more than 24 hours (will be checked on bot restart)
     if (timeUntilEnd > 24 * 60 * 60 * 1000) return;
 
-    setTimeout(async () => {
+    // Cancel any existing timeout for this user
+    const existingKey = `${guildId}_${userId}`;
+    if (scheduledAutoEnds.has(existingKey)) {
+        removeTimeout(scheduledAutoEnds.get(existingKey));
+    }
+
+    const timeout = setTimeout(async () => {
+        scheduledAutoEnds.delete(existingKey);
         try {
             const loa = await LOA.findOne({ guildId, userId, active: true });
             if (!loa) return;
@@ -66,6 +49,9 @@ function scheduleAutoEnd(client, guildId, userId, endDate) {
             console.error('[LOA] Error in auto-end:', error);
         }
     }, timeUntilEnd);
+
+    const timeoutId = registerTimeout(`loa-autoend-${userId}`, timeout);
+    scheduledAutoEnds.set(existingKey, timeoutId);
 }
 
 const slashCommands = [

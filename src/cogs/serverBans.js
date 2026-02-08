@@ -15,19 +15,12 @@ const { isStaff, isAdmin, isModerator } = require('../utils/permissions');
 const { sendDm } = require('../utils/dm');
 const { executeRcon, kickFromProxy } = require('../utils/rcon');
 const { resolveDiscordFromMinecraft } = require('../utils/playerResolver');
-const { lookupMcProfile, parseDuration } = require('../utils/minecraft');
+const { lookupMcProfile } = require('../utils/minecraft');
+const { parseDuration } = require('../utils/duration');
+const { getEmbedColor } = require('../utils/embeds');
 
 // Environment config
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || process.env.BAN_LOG_CHANNEL_ID;
-const EMBED_COLOR = process.env.EMBED_COLOR || '#10b981';
-
-/**
- * Get embed color as integer
- */
-function getEmbedColor() {
-    const color = EMBED_COLOR;
-    return color.startsWith('#') ? parseInt(color.slice(1), 16) : parseInt(color, 16);
-}
 
 /**
  * Normalize UUID - remove dashes and lowercase

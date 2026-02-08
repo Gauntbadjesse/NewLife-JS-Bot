@@ -7,21 +7,31 @@ const execAsync = util.promisify(exec);
 const { Client, GatewayIntentBits, Collection, Routes } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 
+// Core utilities
+const config = require('./config');
+const logger = require('./utils/logger');
+const scheduler = require('./utils/scheduler');
+const cleanup = require('./utils/cleanup');
 const { connectDatabase } = require('./database/connection');
 const { initWatcher } = require('./database/watcher');
 const { logCommand, sendCommandLogToChannel } = require('./utils/commandLogger');
 const { initErrorLogger, logError } = require('./utils/errorLogger');
 const { startApiServer } = require('./api/server');
+const interactionRouter = require('./utils/interactionRouter');
 const emojis = require('./utils/emojis');
+
+// Initialize shutdown handlers for graceful cleanup
+cleanup.initShutdownHandlers();
 
 // Global error handlers to prevent bot crashes
 process.on('uncaughtException', (error) => {
-    console.error('[FATAL] Uncaught Exception:', error.message);
+    logger.error('Process', `Uncaught Exception: ${error.message}`);
+    console.error(error.stack);
     // Don't exit - let the bot continue running
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('[WARN] Unhandled Promise Rejection:', reason);
+    logger.warn('Process', `Unhandled Promise Rejection: ${reason}`);
     // Don't exit - let the bot continue running
 });
 
@@ -130,6 +140,9 @@ client.once('ready', async () => {
     initErrorLogger(client);
 
     await initWatcher(client);
+
+    // Initialize interaction router handlers (buttons, modals, select menus)
+    interactionRouter.initializeHandlers();
 
     // Set activity with version
     const botVersion = process.env.BOT_VERSION || require('../package.json').version || '1.0.0';
@@ -456,132 +469,29 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Interaction handler (buttons, modals, slash commands)
+// Interaction handler (buttons, modals, slash commands) - uses centralized router
 client.on('interactionCreate', async (interaction) => {
+    // Button interactions
     if (interaction.isButton()) {
-        try {
-            // Try tickets cog
-            try {
-                const ticketsCog = require('./cogs/tickets');
-                if (ticketsCog.handleButton) await ticketsCog.handleButton(interaction);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: tickets', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-
-            // Try verification cog
-            try {
-                const verificationCog = require('./cogs/verification');
-                if (verificationCog.handleButton) await verificationCog.handleButton(interaction);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: verification', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-
-            // Try applications cog
-            try {
-                const applicationsCog = require('./cogs/applications');
-                if (applicationsCog.handleButton) await applicationsCog.handleButton(interaction);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: applications', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-
-            // Try giveaways cog
-            try {
-                const giveawaysCog = require('./cogs/giveaways');
-                if (giveawaysCog.handleGiveawayButton) await giveawaysCog.handleGiveawayButton(interaction, client);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: giveaways', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-
-            // Try temp VC cog
-            try {
-                const tempVCCog = require('./cogs/tempVC');
-                if (tempVCCog.handleTempVCButton) await tempVCCog.handleTempVCButton(interaction, client);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: tempVC', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-
-            // Try suggestions cog
-            try {
-                const suggestionsCog = require('./cogs/suggestions');
-                if (suggestionsCog.handleButton) await suggestionsCog.handleButton(interaction);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: suggestions', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-
-            // Try customRoles cog
-            try {
-                const customRolesCog = require('./cogs/customRoles');
-                if (customRolesCog.handleButton) await customRolesCog.handleButton(interaction);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: customRoles', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-
-            // Try survey cog
-            try {
-                const surveyCog = require('./cogs/survey');
-                if (surveyCog.handleSurveyButton) await surveyCog.handleSurveyButton(interaction);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Button: survey', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-        } catch (error) {
-            await logError('Button Handler', error, { customId: interaction.customId, user: interaction.user.tag });
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
-            }
-        }
+        await interactionRouter.handleButton(interaction, client);
         return;
     }
 
-    // String Select Menu handler
+    // String Select Menu interactions
     if (interaction.isStringSelectMenu()) {
-        try {
-            // Try tickets cog
-            try {
-                const ticketsCog = require('./cogs/tickets');
-                if (ticketsCog.handleSelectMenu) await ticketsCog.handleSelectMenu(interaction);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('SelectMenu: tickets', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-        } catch (error) {
-            await logError('SelectMenu Handler', error, { customId: interaction.customId, user: interaction.user.tag });
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
-            }
-        }
+        await interactionRouter.handleSelectMenu(interaction, client);
         return;
     }
 
+    // Modal submit interactions
     if (interaction.isModalSubmit()) {
-        try {
-            // Try tickets cog
-            try {
-                const ticketsCog = require('./cogs/tickets');
-                if (ticketsCog.handleModalSubmit) await ticketsCog.handleModalSubmit(interaction);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Modal: tickets', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
+        await interactionRouter.handleModal(interaction, client);
+        return;
+    }
 
-            // Try applications cog
-            try {
-                const applicationsCog = require('./cogs/applications');
-                if (applicationsCog.handleModal) await applicationsCog.handleModal(interaction);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Modal: applications', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-
-            // Try survey cog
-            try {
-                const surveyCog = require('./cogs/survey');
-                if (surveyCog.handleSurveySubmit) await surveyCog.handleSurveySubmit(interaction, client);
-            } catch (e) {
-                if (e.code !== 'MODULE_NOT_FOUND') await logError('Modal: survey', e, { customId: interaction.customId, user: interaction.user.tag });
-            }
-        } catch (error) {
-            await logError('Modal Handler', error, { customId: interaction.customId, user: interaction.user.tag });
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: `${emojis.CROSS} An error occurred.`, ephemeral: true });
-            }
-        }
+    // Autocomplete interactions
+    if (interaction.isAutocomplete()) {
+        await interactionRouter.handleAutocomplete(interaction);
         return;
     }
 

@@ -4,8 +4,8 @@
  * Tracks weekly stats per staff member in MongoDB
  */
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { Rcon } = require('rcon-client');
 const LinkedAccount = require('../database/models/LinkedAccount');
+const { executeRcon } = require('../utils/rcon');
 const WhitelistStats = require('../database/models/WhitelistStats');
 const { isStaff, isOwner } = require('../utils/permissions');
 
@@ -126,20 +126,11 @@ async function lookupProfile(platform, username) {
     return id;
 }
 
+// RCON now uses shared persistent connection from utils/rcon.js
 async function sendRconCommand(cmd) {
-    const host = process.env.RCON_HOST;
-    const port = Number(process.env.RCON_PORT || 25575);
-    const password = process.env.RCON_PASSWORD;
-    if (!host || !port || !password) throw new Error('RCON not configured');
-    const conn = await Rcon.connect({ host, port, password });
-    try {
-        const res = await conn.send(cmd);
-        await conn.end();
-        return res;
-    } catch (err) {
-        try { await conn.end(); } catch (e) {}
-        throw err;
-    }
+    const result = await executeRcon(cmd);
+    if (!result.success) throw new Error(result.error || 'RCON command failed');
+    return result.response;
 }
 
 const slashCommands = [

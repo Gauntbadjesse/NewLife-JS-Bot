@@ -18,22 +18,11 @@ const {
 } = require('../utils/embeds');
 const { isAdmin, isModerator } = require('../utils/permissions');
 const { testProxyConnection } = require('../utils/rcon');
+const { parseDuration } = require('../utils/duration');
 
-// Duration parser: accepts formats like 10m, 1h, 2d or minutes as number
-function parseDuration(str) {
-    if (!str) return 10 * 60 * 1000; // default 10 minutes
-    const match = String(str).toLowerCase().match(/^(\d+)(s|m|h|d)?$/);
-    if (!match) return 10 * 60 * 1000;
-    const value = parseInt(match[1], 10);
-    const unit = match[2] || 'm';
-    switch (unit) {
-        case 's': return value * 1000;
-        case 'm': return value * 60 * 1000;
-        case 'h': return value * 60 * 60 * 1000;
-        case 'd': return value * 24 * 60 * 60 * 1000;
-        default: return value * 60 * 1000;
-    }
-}
+// parseDuration now imported from utils/duration.js
+// Default 10 minutes if not provided
+const DEFAULT_MUTE_DURATION = 10 * 60 * 1000;
 
 /**
  * Helper: resolve a guild member from an argument (mention or id)
@@ -266,7 +255,7 @@ const commands = {
             if (!member) return message.reply({ embeds: [createErrorEmbed('Not Found', 'Member not found.')], allowedMentions: { repliedUser: false } });
 
             // optional duration
-            let durationMs = parseDuration(args[1]);
+            let durationMs = parseDuration(args[1], DEFAULT_MUTE_DURATION);
             let reason = '';
             if (args.length >= 3) {
                 // args[1] was duration, rest is reason
@@ -280,6 +269,7 @@ const commands = {
             if (durationMs > MAX) durationMs = MAX;
 
             const caseId = randomUUID();
+            const caseNumber = await getNextCaseNumber();
 
             try {
                 await member.timeout(durationMs, `${message.author.tag}: ${reason}`);

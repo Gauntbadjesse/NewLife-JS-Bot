@@ -33,6 +33,31 @@ async function connectDatabase() {
 
         isConnected = true;
         
+        // Connection event handlers for monitoring
+        mongoose.connection.on('disconnected', () => {
+            console.error('[MongoDB] ⚠️ Connection lost - Mongoose will attempt to reconnect');
+            isConnected = false;
+        });
+
+        mongoose.connection.on('reconnected', () => {
+            console.log('[MongoDB] ✓ Reconnected successfully');
+            isConnected = true;
+        });
+
+        mongoose.connection.on('error', (err) => {
+            console.error('[MongoDB] Connection error:', err.message);
+        });
+
+        // Log connection state changes
+        mongoose.connection.on('connecting', () => {
+            console.log('[MongoDB] Connecting...');
+        });
+
+        mongoose.connection.on('connected', () => {
+            console.log('[MongoDB] Connected');
+            isConnected = true;
+        });
+        
         console.log('╔════════════════════════════════════════╗');
         console.log('║     MongoDB Connection Established     ║');
         console.log('╠════════════════════════════════════════╣');
@@ -55,6 +80,14 @@ function getDatabase() {
 }
 
 /**
+ * Check if database is connected
+ * @returns {boolean}
+ */
+function isDatabaseConnected() {
+    return mongoose.connection.readyState === 1;
+}
+
+/**
  * Disconnect from MongoDB
  * @returns {Promise<void>}
  */
@@ -69,5 +102,6 @@ async function disconnectDatabase() {
 module.exports = {
     connectDatabase,
     getDatabase,
-    disconnectDatabase
+    disconnectDatabase,
+    isDatabaseConnected
 };

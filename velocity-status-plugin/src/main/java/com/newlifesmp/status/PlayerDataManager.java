@@ -49,10 +49,15 @@ public class PlayerDataManager {
         try {
             String json = Files.readString(file);
             PlayerData data = gson.fromJson(json, PlayerData.class);
-            cache.put(uuid, data);
+            if (data != null) {
+                cache.put(uuid, data);
+            }
             return data;
         } catch (IOException e) {
             logger.warning("Failed to load player data for " + uuid + ": " + e.getMessage());
+            return null;
+        } catch (Exception e) {
+            logger.warning("Failed to parse player data for " + uuid + ": " + e.getMessage());
             return null;
         }
     }

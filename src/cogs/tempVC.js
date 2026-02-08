@@ -18,7 +18,8 @@ const {
     ButtonBuilder,
     ButtonStyle
 } = require('discord.js');
-const mongoose = require('mongoose');
+const TempVCHub = require('../database/models/TempVCHub');
+const TempChannel = require('../database/models/TempChannel');
 const { isAdmin, isOwner } = require('../utils/permissions');
 
 // Premium role ID - gets soundboard access in temp VCs
@@ -30,34 +31,6 @@ const PREMIUM_ROLE_ID = process.env.NEWLIFE_PLUS;
 function hasPremiumRole(member) {
     return member && member.roles && member.roles.cache.has(PREMIUM_ROLE_ID);
 }
-
-// Schema for temp VC hub configuration
-const tempVCHubSchema = new mongoose.Schema({
-    guildId: { type: String, required: true },
-    hubChannelId: { type: String, required: true },
-    categoryId: { type: String },
-    defaultName: { type: String, default: "{user}'s Channel" },
-    defaultLimit: { type: Number, default: 0 },
-    createdAt: { type: Date, default: Date.now }
-});
-
-tempVCHubSchema.index({ guildId: 1, hubChannelId: 1 }, { unique: true });
-
-const TempVCHub = mongoose.models.TempVCHub || mongoose.model('TempVCHub', tempVCHubSchema);
-
-// Schema for active temp channels
-const tempChannelSchema = new mongoose.Schema({
-    guildId: { type: String, required: true },
-    channelId: { type: String, required: true, unique: true },
-    ownerId: { type: String, required: true },
-    hubId: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now }
-});
-
-tempChannelSchema.index({ channelId: 1 });
-tempChannelSchema.index({ guildId: 1 });
-
-const TempChannel = mongoose.models.TempChannel || mongoose.model('TempChannel', tempChannelSchema);
 
 /**
  * Create a temporary voice channel for a user

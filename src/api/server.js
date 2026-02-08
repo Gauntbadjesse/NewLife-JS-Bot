@@ -77,22 +77,74 @@ const DISCORD_REDIRECT_URI = 'https://staff.newlifesmp.com/home';
 const STAFF_ROLE_ID = process.env.STAFF_TEAM;
 const GUILD_ID = process.env.GUILD_ID;
 
-// Simple in-memory session store (consider Redis for production scaling)
-const sessions = new Map();
+// =====================================================
+// SESSION STORE - MongoDB backed for persistence
+// =====================================================
+const mongoose = require('mongoose');
+
+// Session schema for MongoDB persistence
+const sessionSchema = new mongoose.Schema({
+    _id: String, // session ID
+    discordId: String,
+    username: String,
+    avatar: String,
+    isStaff: Boolean,
+    roles: [String],
+    adminMode: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now, expires: 86400 } // Auto-delete after 24 hours (TTL index)
+});
+
+let Session;
+try {
+    Session = mongoose.model('Session');
+} catch {
+    Session = mongoose.model('Session', sessionSchema);
+}
+
+// Session helper functions (async, MongoDB-backed)
+async function getSessionById(sessionId) {
+    try {
+        return await Session.findById(sessionId).lean();
+    } catch {
+        return null;
+    }
+}
+
+async function setSession(sessionId, data) {
+    try {
+        await Session.findByIdAndUpdate(sessionId, { _id: sessionId, ...data }, { upsert: true });
+    } catch (e) {
+        console.error('[Sessions] Failed to save session:', e.message);
+    }
+}
+
+async function deleteSession(sessionId) {
+    try {
+        await Session.findByIdAndDelete(sessionId);
+    } catch (e) {
+        console.error('[Sessions] Failed to delete session:', e.message);
+    }
+}
 
 // Generate session ID
 function generateSessionId() {
     return crypto.randomBytes(32).toString('hex');
 }
 
-// Get session from cookie
-function getSession(req) {
+// Get session from cookie (async version)
+async function getSession(req) {
     const cookie = req.headers.cookie || '';
     const match = cookie.match(/session_id=([^;]+)/);
-    if (match && sessions.has(match[1])) {
-        return sessions.get(match[1]);
+    if (match) {
+        return await getSessionById(match[1]);
     }
     return null;
+}
+
+// Sync version for middleware compat (uses cache or returns null)
+function getSessionSync(req) {
+    // For sync contexts, we attach the session in async middleware first
+    return req._session || null;
 }
 
 const viewerStyles = `
@@ -827,14 +879,14 @@ app.get('/home', async (req, res) => {
         
         // Create session
         const sessionId = generateSessionId();
-        sessions.set(sessionId, {
+        await setSession(sessionId, {
             discordId: userId,
             username: username,
             avatar: avatar,
             isStaff: isStaff,
             roles: userRoles,
             adminMode: false, // Start in user mode, staff can toggle to admin
-            createdAt: Date.now()
+            createdAt: new Date()
         });
         
         // Set session cookie (24 hour expiry)
@@ -855,29 +907,30 @@ app.get('/home', async (req, res) => {
 });
 
 // Logout
-app.get('/viewer/logout', (req, res) => {
+app.get('/viewer/logout', async (req, res) => {
     const cookie = req.headers.cookie || '';
     const match = cookie.match(/session_id=([^;]+)/);
     if (match) {
-        sessions.delete(match[1]);
+        await deleteSession(match[1]);
     }
     res.setHeader('Set-Cookie', 'session_id=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0');
     res.redirect('/viewer/login');
 });
 
-// Auth middleware - for any logged in user
-function viewerAuth(req, res, next) {
-    const session = getSession(req);
+// Auth middleware - for any logged in user (async)
+async function viewerAuth(req, res, next) {
+    const session = await getSession(req);
     if (!session) {
         return res.redirect('/viewer/login');
     }
     req.session = session;
+    req._session = session;
     next();
 }
 
-// Auth middleware - for staff admin pages only
-function staffAuth(req, res, next) {
-    const session = getSession(req);
+// Auth middleware - for staff admin pages only (async)
+async function staffAuth(req, res, next) {
+    const session = await getSession(req);
     if (!session) {
         return res.redirect('/viewer/login');
     }
@@ -885,6 +938,7 @@ function staffAuth(req, res, next) {
         return res.redirect('/viewer/dashboard');
     }
     req.session = session;
+    req._session = session;
     next();
 }
 
@@ -3688,13 +3742,43 @@ app.post('/api/kick/notify', async (req, res) => {
     }
 });
 
-// Health check endpoint (no auth required)
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: Date.now() });
+// Health check endpoint (no auth required) - comprehensive status
+app.get('/health', async (req, res) => {
+    const { isDatabaseConnected } = require('../database/connection');
+    
+    const status = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(process.uptime()),
+        version: process.env.BOT_VERSION || require('../../package.json').version || '1.0.0',
+        services: {
+            mongodb: isDatabaseConnected() ? 'connected' : 'disconnected',
+            discord: global.discordClient?.isReady() ? 'connected' : 'disconnected',
+        },
+        memory: {
+            heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+            heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB',
+        }
+    };
+    
+    // Set status to degraded if any service is down
+    if (!isDatabaseConnected() || !global.discordClient?.isReady()) {
+        status.status = 'degraded';
+    }
+    
+    res.json(status);
 });
 
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: Date.now() });
+app.get('/api/health', async (req, res) => {
+    const { isDatabaseConnected } = require('../database/connection');
+    
+    res.json({
+        status: isDatabaseConnected() && global.discordClient?.isReady() ? 'ok' : 'degraded',
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(process.uptime()),
+        mongodb: isDatabaseConnected(),
+        discord: global.discordClient?.isReady() || false,
+    });
 });
 
 function startApiServer(port = null) {

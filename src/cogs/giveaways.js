@@ -10,73 +10,18 @@
  */
 
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const mongoose = require('mongoose');
+const Giveaway = require('../database/models/Giveaway');
 const { isOwner } = require('../utils/permissions');
+const { parseDuration, formatDuration } = require('../utils/duration');
+const { registerInterval, removeInterval } = require('../utils/cleanup');
 
 // Premium role ID - gets double entries in giveaways
 const PREMIUM_ROLE_ID = process.env.NEWLIFE_PLUS;
 
-// Giveaway schema
-const giveawaySchema = new mongoose.Schema({
-    guildId: { type: String, required: true },
-    channelId: { type: String, required: true },
-    messageId: { type: String, required: true },
-    hostId: { type: String, required: true },
-    prize: { type: String, required: true },
-    description: { type: String },
-    winners: { type: Number, default: 1 },
-    endsAt: { type: Date, required: true },
-    ended: { type: Boolean, default: false },
-    winnerIds: [{ type: String }],
-    participants: [{ type: String }],
-    requiredRole: { type: String },
-    createdAt: { type: Date, default: Date.now }
-});
-
-giveawaySchema.index({ endsAt: 1, ended: 1 });
-giveawaySchema.index({ guildId: 1 });
-
-const Giveaway = mongoose.models.Giveaway || mongoose.model('Giveaway', giveawaySchema);
-
 // Store interval reference for cleanup
-let giveawayInterval = null;
+let giveawayIntervalId = null;
 
-/**
- * Parse duration string to milliseconds
- * Accepts: 30s, 5m, 1h, 2d, 1w
- */
-function parseDuration(str) {
-    if (!str) return null;
-    const match = String(str).toLowerCase().match(/^(\d+)(s|m|h|d|w)$/);
-    if (!match) return null;
-    
-    const value = parseInt(match[1], 10);
-    const unit = match[2];
-    
-    switch (unit) {
-        case 's': return value * 1000;
-        case 'm': return value * 60 * 1000;
-        case 'h': return value * 60 * 60 * 1000;
-        case 'd': return value * 24 * 60 * 60 * 1000;
-        case 'w': return value * 7 * 24 * 60 * 60 * 1000;
-        default: return null;
-    }
-}
-
-/**
- * Format milliseconds to human-readable duration
- */
-function formatDuration(ms) {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days}d ${hours % 24}h`;
-    if (hours > 0) return `${hours}h ${minutes % 60}m`;
-    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-    return `${seconds}s`;
-}
+// parseDuration and formatDuration now imported from utils/duration.js
 
 /**
  * Create giveaway embed
@@ -248,8 +193,19 @@ async function checkGiveaways(client) {
  */
 function initGiveawayChecker(client) {
     // Check every 10 seconds
-    giveawayInterval = setInterval(() => checkGiveaways(client), 10000);
+    const interval = setInterval(() => checkGiveaways(client), 10000);
+    giveawayIntervalId = registerInterval('giveaway-checker', interval);
     console.log('[Giveaways] Giveaway checker initialized');
+}
+
+/**
+ * Cleanup function for graceful shutdown
+ */
+function cleanup() {
+    if (giveawayIntervalId) {
+        removeInterval(giveawayIntervalId);
+        giveawayIntervalId = null;
+    }
 }
 
 const slashCommands = [
@@ -623,5 +579,6 @@ module.exports = {
     slashCommands,
     handleGiveawayButton,
     initGiveawayChecker,
-    stopGiveawayChecker
+    stopGiveawayChecker,
+    cleanup
 };
