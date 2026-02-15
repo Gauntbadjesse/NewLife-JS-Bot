@@ -797,8 +797,8 @@ function accessDeniedPage(username, avatar) {
 }
 
 // Login route - redirect to Discord OAuth
-app.get('/viewer/login', (req, res) => {
-    const session = getSession(req);
+app.get('/viewer/login', async (req, res) => {
+    const session = await getSession(req);
     if (session) {
         // Already logged in, redirect to dashboard
         return res.redirect('/viewer/dashboard');

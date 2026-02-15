@@ -8,13 +8,14 @@
  * - In-game countdown warnings (15m, 10m, 5m, 1m, 30s, 10s, 5, 4, 3, 2, 1)
  * - Discord DM notification to owner on success/failure
  * - Manual restart command for admins
+ * - World backup on restart (handled by start.sh)
  */
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { Rcon } = require('rcon-client');
 const cron = require('node-cron');
 const { sendDm } = require('../utils/dm');
-const { isOwner } = require('../utils/permissions');
+const { isOwner, isManagement } = require('../utils/permissions');
 
 let scheduledTask = null;
 let scheduledRestartTimer = null;
@@ -144,8 +145,13 @@ async function executeRestart(reason = 'Scheduled maintenance') {
         rcon = await connectRcon();
         console.log('[ServerRestart] Connected to RCON');
 
+        // Save the world before restart to ensure backup has latest data
+        console.log('[ServerRestart] Saving world before restart...');
+        await rcon.send('save-all');
+        await new Promise(r => setTimeout(r, 2000)); // Wait for save to complete
+
         // Send countdown warnings with tellraw
-        await broadcastTellraw(rcon, 'Server restarting in 30 seconds!', 'yellow');
+        await broadcastTellraw(rcon, 'Server restarting in 30 seconds! Creating backup...', 'yellow');
         await playSound(rcon);
         await new Promise(r => setTimeout(r, 10000));
 
@@ -585,7 +591,8 @@ const slashCommands = [
                         .addFields(
                             { name: 'Daily Scheduler', value: isRunning ? '✅ Active' : '❌ Inactive', inline: true },
                             { name: 'Next Daily', value: nextDaily, inline: true },
-                            { name: 'RCON', value: process.env.RCON_HOST ? '✅ Configured' : '❌ Not set', inline: true }
+                            { name: 'RCON', value: process.env.RCON_HOST ? '✅ Configured' : '❌ Not set', inline: true },
+                            { name: '💾 Backups', value: 'Auto-created on each restart\nKept: 7 days (rotating)', inline: false }
                         )
                         .setTimestamp();
 
@@ -599,7 +606,7 @@ const slashCommands = [
                         embed.setColor(0xED4245);
                     }
 
-                    embed.setFooter({ text: 'Use /restart now for immediate restart, /restart schedule for timed restart' });
+                    embed.setFooter({ text: 'Backups created before each restart • World saved via save-all' });
 
                     await interaction.reply({ embeds: [embed], ephemeral: true });
                     break;
