@@ -12,9 +12,7 @@ const Warning = require('../database/models/Warning');
 const Mute = require('../database/models/Mute');
 const { getNextCaseNumber } = require('../database/caseCounter');
 const { isStaff, isAdmin, isModerator } = require('../utils/permissions');
-const { sendDm } = require('../utils/dm');
-const { executeRcon, kickFromProxy } = require('../utils/rcon');
-const { resolveDiscordFromMinecraft } = require('../utils/playerResolver');
+const { banPlayer, unbanPlayer, kickFromProxy } = require('../utils/rcon');
 const { lookupMcProfile } = require('../utils/minecraft');
 const { parseDuration } = require('../utils/duration');
 const { getEmbedColor } = require('../utils/embeds');
@@ -27,6 +25,130 @@ const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || process.env.BAN_LOG_CHANNEL
  */
 function normalizeUuid(uuid) {
     return uuid.replace(/-/g, '').toLowerCase();
+}
+
+function getMentionedDiscordId(target) {
+    const mentionMatch = target.match(/<@!?(\d+)>/);
+    return mentionMatch ? mentionMatch[1] : null;
+}
+
+async function resolvePrimaryLinkedProfile(linkedAccounts, client) {
+    if (!linkedAccounts || linkedAccounts.length === 0) {
+        return null;
+    }
+
+    const primaryAccount = linkedAccounts.find(acc => acc.primary) || linkedAccounts[0];
+    const freshProfile = await lookupMcProfile(primaryAccount.minecraftUsername, primaryAccount.platform);
+
+    if (freshProfile) {
+        return {
+            uuid: normalizeUuid(freshProfile.uuid),
+            name: freshProfile.name,
+            platform: freshProfile.platform
+        };
+    }
+
+    return {
+        uuid: normalizeUuid(primaryAccount.uuid),
+        name: primaryAccount.minecraftUsername,
+        platform: primaryAccount.platform
+    };
+}
+
+async function resolveMinecraftTarget(target, platformOption, client) {
+    const discordId = getMentionedDiscordId(target);
+    let discordUser = null;
+    let linkedAccounts = [];
+    let primaryProfile = null;
+
+    if (discordId) {
+        try {
+            discordUser = await client.users.fetch(discordId);
+        } catch (e) {
+            return { error: 'Could not find that Discord user.' };
+        }
+
+        linkedAccounts = await getAllLinkedAccounts(discordId);
+        if (linkedAccounts.length === 0) {
+            return { error: 'This Discord user has no linked Minecraft accounts.' };
+        }
+
+        primaryProfile = await resolvePrimaryLinkedProfile(linkedAccounts, client);
+        if (!primaryProfile) {
+            return { error: 'Could not resolve the linked Minecraft account for that user.' };
+        }
+    } else {
+        primaryProfile = await lookupMcProfile(target, platformOption);
+
+        if (!primaryProfile && platformOption === 'java') {
+            primaryProfile = await lookupMcProfile(target, 'bedrock');
+        }
+
+        if (!primaryProfile) {
+            return {
+                error: `Could not find Minecraft account: **${target}**\n\nTry specifying the platform with the \`platform\` option.`
+            };
+        }
+
+        primaryProfile.uuid = normalizeUuid(primaryProfile.uuid);
+        linkedAccounts = await getAllLinkedAccounts(null, primaryProfile.uuid);
+
+        if (linkedAccounts.length > 0) {
+            const linkedDiscordId = linkedAccounts[0].discordId;
+            try {
+                discordUser = await client.users.fetch(linkedDiscordId);
+            } catch (e) {
+                discordUser = null;
+            }
+        }
+    }
+
+    return {
+        discordId: discordId || linkedAccounts[0]?.discordId || null,
+        discordUser,
+        linkedAccounts,
+        primaryProfile
+    };
+}
+
+async function applyMinecraftBan(targets, reason) {
+    const results = [];
+    for (const target of targets) {
+        const result = await banPlayer(target.name, reason);
+        results.push({ target, result });
+    }
+    return results;
+}
+
+async function applyMinecraftUnban(targets) {
+    const results = [];
+    for (const target of targets) {
+        const result = await unbanPlayer(target.name);
+        results.push({ target, result });
+    }
+    return results;
+}
+
+function dedupeTargets(primaryProfile, linkedAccounts) {
+    const targets = [];
+    const seen = new Set();
+
+    for (const account of [
+        { uuid: primaryProfile.uuid, name: primaryProfile.name, platform: primaryProfile.platform },
+        ...linkedAccounts.map(acc => ({
+            uuid: normalizeUuid(acc.uuid),
+            name: acc.minecraftUsername,
+            platform: acc.platform || primaryProfile.platform
+        }))
+    ]) {
+        const key = account.uuid || account.name.toLowerCase();
+        if (!seen.has(key)) {
+            seen.add(key);
+            targets.push(account);
+        }
+    }
+
+    return targets;
 }
 
 
@@ -58,51 +180,6 @@ async function getAllLinkedAccounts(discordId = null, uuid = null, mcUsername = 
     }
     
     return LinkedAccount.find(query);
-}
-
-/**
- * Send ban DM to user
- */
-async function sendBanDm(client, discordId, banData) {
-    const viewUrl = banData.caseNumber 
-        ? `https://staff.newlifesmp.com/home?case=ban-${banData.caseNumber}`
-        : null;
-    
-    const embed = new EmbedBuilder()
-        .setTitle('You Have Been Banned')
-        .setColor(0xff4444)
-        .setDescription(`You have been banned from **NewLife SMP**.`)
-        .addFields(
-            { name: 'Reason', value: banData.reason, inline: false },
-            { name: 'Duration', value: banData.isPermanent ? 'Permanent' : banData.durationDisplay, inline: true },
-            { name: 'Banned At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
-        )
-        .setFooter({ text: 'NewLife SMP' })
-        .setTimestamp();
-    
-    if (!banData.isPermanent && banData.expiresAt) {
-        embed.addFields({
-            name: 'Expires',
-            value: `<t:${Math.floor(banData.expiresAt.getTime() / 1000)}:R>`,
-            inline: true
-        });
-    }
-    
-    if (viewUrl) {
-        embed.addFields({
-            name: 'View Case Details',
-            value: `[Click here to view this case with evidence](${viewUrl})`,
-            inline: false
-        });
-    }
-    
-    embed.addFields({
-        name: 'Appeal',
-        value: 'If you believe this ban was issued in error, you may appeal in our Discord server.',
-        inline: false
-    });
-    
-    return sendDm(client, discordId, { embeds: [embed] });
 }
 
 /**
@@ -156,56 +233,6 @@ async function logBan(client, ban, linkedAccounts) {
 }
 
 /**
- * Log softban to channel
- */
-async function logSoftban(client, softban, linkedAccounts) {
-    if (!LOG_CHANNEL_ID) return;
-
-    try {
-        const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
-        if (!channel) return;
-
-        const accountsList = linkedAccounts.map(acc => {
-            const platform = acc.platform === 'bedrock' ? 'Bedrock' : 'Java';
-            return `${acc.minecraftUsername} (${platform})`;
-        }).join('\n') || 'None linked';
-
-        const embed = new EmbedBuilder()
-            .setTitle('Player Softbanned')
-            .setColor(0xff4444)
-            .addFields(
-                { name: 'Player', value: `**${softban.primaryUsername}**\n\`${softban.primaryUuid}\``, inline: true },
-                { name: 'Platform', value: softban.primaryPlatform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
-                { name: 'Softbanned By', value: `<@${softban.staffId}>`, inline: true },
-                { name: 'Reason', value: softban.reason, inline: false },
-                { name: 'Duration', value: '**Softban**', inline: true }
-            )
-            .setFooter({ text: `Case #${softban.caseNumber || 'N/A'}` })
-            .setTimestamp();
-
-        if (softban.discordId) {
-            embed.addFields({ name: 'Discord', value: `<@${softban.discordId}>`, inline: true });
-        }
-
-        if (!softban.isPermanent && softban.expiresAt) {
-            embed.addFields({ name: 'Expires', value: `<t:${Math.floor(softban.expiresAt.getTime() / 1000)}:R>`, inline: true });
-        }
-
-        if (linkedAccounts.length > 1) {
-            embed.addFields({
-                name: `All Linked Accounts (${linkedAccounts.length})`,
-                value: accountsList,
-                inline: false
-            });
-        }
-
-        await channel.send({ embeds: [embed] });
-    } catch (e) {
-        console.error('Failed to log softban:', e);
-    }
-}
-
-/**
  * Log unban to channel
  */
 async function logUnban(client, ban, staffMember) {
@@ -234,86 +261,6 @@ async function logUnban(client, ban, staffMember) {
     } catch (e) {
         console.error('Failed to log unban:', e);
     }
-}
-
-/**
- * Kick player from server via RCON
- */
-async function kickPlayer(username, reason) {
-    try {
-        const result = await executeRcon(`kick ${username} ${reason}`);
-        return result.success;
-    } catch (e) {
-        console.error('Failed to kick player via RCON:', e);
-        return false;
-    }
-}
-
-/**
- * Send kick DM to user
- */
-async function sendKickDm(client, discordId, kickData) {
-    const viewUrl = kickData.caseNumber 
-        ? `https://staff.newlifesmp.com/home?case=kick-${kickData.caseNumber}`
-        : null;
-    
-    const embed = new EmbedBuilder()
-        .setTitle('You Have Been Kicked')
-        .setColor(0xFFA500)
-        .setDescription(`You have been kicked from **NewLife SMP**.`)
-        .addFields(
-            { name: 'Reason', value: kickData.reason, inline: false },
-            { name: 'Kicked At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
-        )
-        .setFooter({ text: 'NewLife SMP | You may rejoin the server' })
-        .setTimestamp();
-    
-    if (viewUrl) {
-        embed.addFields({
-            name: 'View Case Details',
-            value: `[Click here to view this case with evidence](${viewUrl})`,
-            inline: false
-        });
-    }
-    
-    return sendDm(client, discordId, { embeds: [embed] });
-}
-
-/**
- * Send softban DM to user
- */
-async function sendSoftbanDm(client, discordId, softbanData) {
-    const viewUrl = softbanData.caseNumber
-        ? `https://staff.newlifesmp.com/home?case=ban-${softbanData.caseNumber}`
-        : null;
-
-    const embed = new EmbedBuilder()
-        .setTitle('You Have Been Softbanned')
-        .setColor(0xff4444)
-        .setDescription(`You have been softbanned from **NewLife SMP**.`)
-        .addFields(
-            { name: 'Reason', value: softbanData.reason, inline: false },
-            { name: 'Duration', value: 'Softban', inline: true },
-            { name: 'Banned At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
-        )
-        .setFooter({ text: 'NewLife SMP' })
-        .setTimestamp();
-
-    if (viewUrl) {
-        embed.addFields({
-            name: 'View Case Details',
-            value: `[Click here to view this case with evidence](${viewUrl})`,
-            inline: false
-        });
-    }
-
-    embed.addFields({
-        name: 'Appeal',
-        value: 'If you believe this softban was issued in error, you may appeal in our Discord server.',
-        inline: false
-    });
-
-    return sendDm(client, discordId, { embeds: [embed] });
 }
 
 /**
@@ -346,50 +293,6 @@ async function logKick(client, kick, linkedAccounts) {
     } catch (e) {
         console.error('Failed to log kick:', e);
     }
-}
-
-/**
- * Send warning DM to user
- */
-async function sendWarningDm(client, discordId, warningData) {
-    const severityColors = {
-        minor: 0xFFFF00,
-        moderate: 0xFFA500,
-        severe: 0xFF4444
-    };
-    
-    const viewUrl = warningData.caseNumber 
-        ? `https://staff.newlifesmp.com/home?case=warning-${warningData.caseNumber}`
-        : null;
-    
-    const embed = new EmbedBuilder()
-        .setTitle('You Have Been Warned')
-        .setColor(severityColors[warningData.severity] || 0xFFA500)
-        .setDescription(`You have received a warning on **NewLife SMP**.`)
-        .addFields(
-            { name: 'Reason', value: warningData.reason, inline: false },
-            { name: 'Severity', value: warningData.severity.charAt(0).toUpperCase() + warningData.severity.slice(1), inline: true },
-            { name: 'Category', value: warningData.category.charAt(0).toUpperCase() + warningData.category.slice(1), inline: true },
-            { name: 'Warned At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: false }
-        )
-        .setFooter({ text: `Case #${warningData.caseNumber} | NewLife SMP` })
-        .setTimestamp();
-    
-    if (viewUrl) {
-        embed.addFields({
-            name: 'View Case Details',
-            value: `[Click here to view this case with evidence](${viewUrl})`,
-            inline: false
-        });
-    }
-    
-    embed.addFields({
-        name: 'Notice',
-        value: 'Continued violations may result in further action including kicks or bans.',
-        inline: false
-    });
-    
-    return sendDm(client, discordId, { embeds: [embed] });
 }
 
 /**
@@ -444,10 +347,10 @@ const slashCommands = [
     {
         data: new SlashCommandBuilder()
             .setName('ban')
-            .setDescription('Ban a player from the server')
+            .setDescription('Ban a linked Minecraft player from the server')
             .addStringOption(opt => opt
                 .setName('target')
-                .setDescription('Minecraft username or @Discord user')
+                .setDescription('Minecraft username or @Discord user linked to Minecraft')
                 .setRequired(true)
             )
             .addStringOption(opt => opt
@@ -462,7 +365,7 @@ const slashCommands = [
             )
             .addStringOption(opt => opt
                 .setName('platform')
-                .setDescription('Platform (if banning by username)')
+                .setDescription('Platform (if resolving by username)')
                 .setRequired(false)
                 .addChoices(
                     { name: 'Java', value: 'java' },
@@ -494,80 +397,12 @@ const slashCommands = [
                 });
             }
 
-            let primaryProfile = null;
-            let discordId = null;
-            let discordUser = null;
-            let linkedAccounts = [];
-
-            // Check if target is a Discord mention
-            const mentionMatch = target.match(/<@!?(\d+)>/);
-            if (mentionMatch) {
-                discordId = mentionMatch[1];
-                
-                try {
-                    discordUser = await client.users.fetch(discordId);
-                } catch (e) {
-                    return interaction.editReply({ content: 'Could not find that Discord user.' });
-                }
-                
-                // Get linked accounts for this Discord user
-                linkedAccounts = await getAllLinkedAccounts(discordId);
-                
-                if (linkedAccounts.length === 0) {
-                    return interaction.editReply({ 
-                        content: 'This Discord user has no linked Minecraft accounts.' 
-                    });
-                }
-                
-                // Use first account as primary - also lookup fresh profile to ensure we have correct data
-                const primary = linkedAccounts[0];
-                const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
-                
-                if (freshProfile) {
-                    primaryProfile = {
-                        uuid: normalizeUuid(freshProfile.uuid),
-                        name: freshProfile.name,
-                        platform: freshProfile.platform
-                    };
-                } else {
-                    primaryProfile = {
-                        uuid: normalizeUuid(primary.uuid),
-                        name: primary.minecraftUsername,
-                        platform: primary.platform
-                    };
-                }
-            } else {
-                // Target is a Minecraft username - lookup profile
-                primaryProfile = await lookupMcProfile(target, platformOption);
-                
-                if (!primaryProfile) {
-                    // Try bedrock if java failed
-                    if (platformOption === 'java') {
-                        primaryProfile = await lookupMcProfile(target, 'bedrock');
-                    }
-                }
-                
-                if (!primaryProfile) {
-                    return interaction.editReply({ 
-                        content: `Could not find Minecraft account: **${target}**\n\nTry specifying the platform with the \`platform\` option.` 
-                    });
-                }
-                
-                // Normalize the UUID
-                primaryProfile.uuid = normalizeUuid(primaryProfile.uuid);
-                
-                // Find linked accounts from this UUID
-                linkedAccounts = await getAllLinkedAccounts(null, primaryProfile.uuid);
-                
-                if (linkedAccounts.length > 0) {
-                    discordId = linkedAccounts[0].discordId;
-                    try {
-                        discordUser = await client.users.fetch(discordId);
-                    } catch (e) {
-                        // Discord user not found, continue without
-                    }
-                }
+            const resolvedTarget = await resolveMinecraftTarget(target, platformOption, client);
+            if (resolvedTarget.error) {
+                return interaction.editReply({ content: resolvedTarget.error });
             }
+
+            const { primaryProfile, discordId, discordUser, linkedAccounts } = resolvedTarget;
 
             // Check if already banned
             const existingBan = await ServerBan.findActiveBan(primaryProfile.uuid);
@@ -578,13 +413,7 @@ const slashCommands = [
             }
 
             // Collect all UUIDs to ban (normalized)
-            const bannedUuids = [primaryProfile.uuid];
-            for (const account of linkedAccounts) {
-                const normalizedAccUuid = normalizeUuid(account.uuid);
-                if (!bannedUuids.includes(normalizedAccUuid)) {
-                    bannedUuids.push(normalizedAccUuid);
-                }
-            }
+            const bannedUuids = dedupeTargets(primaryProfile, linkedAccounts).map(target => target.uuid);
 
             // Get case number
             let caseNumber;
@@ -614,90 +443,8 @@ const slashCommands = [
 
             await ban.save();
 
-            // Send DM to banned user (works for both Discord mention and MC username if linked)
-            if (discordId) {
-                await sendBanDm(client, discordId, {
-                    reason,
-                    isPermanent: durationData.isPermanent,
-                    durationDisplay: durationData.display,
-                    expiresAt: durationData.expiresAt,
-                    caseNumber: ban.caseNumber
-                });
-            }
-
-            // Kick all linked players from the proxy with "Ban loading..." message and create Kick records
-            const kickedPlayers = [];
-            for (const account of linkedAccounts) {
-                const kicked = await kickFromProxy(account.minecraftUsername, 'Ban loading...');
-
-                // Create Kick record
-                try {
-                    const { randomUUID } = require('crypto');
-                    let kickCaseNumber = null;
-                    try { kickCaseNumber = await getNextCaseNumber('kick'); } catch (e) { kickCaseNumber = null; }
-
-                    const kickDoc = new Kick({
-                        _id: randomUUID(),
-                        caseNumber: kickCaseNumber,
-                        primaryUuid: normalizeUuid(account.uuid || primaryProfile.uuid),
-                        primaryUsername: account.minecraftUsername,
-                        primaryPlatform: account.platform || primaryProfile.platform,
-                        discordId: discordId || null,
-                        discordTag: discordUser?.tag || null,
-                        reason: 'Ban loading...',
-                        staffId: interaction.user.id,
-                        staffTag: interaction.user.tag,
-                        kickedAt: new Date(),
-                        rconExecuted: Boolean(kicked.success)
-                    });
-
-                    await kickDoc.save();
-
-                    // Log the kick to the log channel
-                    await logKick(client, kickDoc, [account]).catch(() => {});
-
-                    console.log(`[ServerBan] Recorded kick for ${account.minecraftUsername} (rcon: ${kicked.success})`);
-                } catch (e) {
-                    console.error('[ServerBan] Failed to record kick:', e);
-                }
-
-                if (kicked.success) kickedPlayers.push(account.minecraftUsername);
-            }
-
-            // Also try to kick the primary profile if not in linked accounts
-            if (!linkedAccounts.find(a => a.minecraftUsername.toLowerCase() === primaryProfile.name.toLowerCase())) {
-                const kicked = await kickFromProxy(primaryProfile.name, 'Ban loading...');
-
-                try {
-                    const { randomUUID } = require('crypto');
-                    let kickCaseNumber = null;
-                    try { kickCaseNumber = await getNextCaseNumber('kick'); } catch (e) { kickCaseNumber = null; }
-
-                    const kickDoc = new Kick({
-                        _id: randomUUID(),
-                        caseNumber: kickCaseNumber,
-                        primaryUuid: normalizeUuid(primaryProfile.uuid),
-                        primaryUsername: primaryProfile.name,
-                        primaryPlatform: primaryProfile.platform,
-                        discordId: discordId || null,
-                        discordTag: discordUser?.tag || null,
-                        reason: 'Ban loading...',
-                        staffId: interaction.user.id,
-                        staffTag: interaction.user.tag,
-                        kickedAt: new Date(),
-                        rconExecuted: Boolean(kicked.success)
-                    });
-
-                    await kickDoc.save();
-                    await logKick(client, kickDoc, []).catch(() => {});
-
-                    console.log(`[ServerBan] Recorded kick for ${primaryProfile.name} (rcon: ${kicked.success})`);
-                } catch (e) {
-                    console.error('[ServerBan] Failed to record kick for primary profile:', e);
-                }
-
-                if (kicked.success) kickedPlayers.push(primaryProfile.name);
-            }
+            const banTargets = dedupeTargets(primaryProfile, linkedAccounts);
+            const banResults = await applyMinecraftBan(banTargets, reason);
 
             // Log to channel
             await logBan(client, ban, linkedAccounts);
@@ -710,14 +457,11 @@ const slashCommands = [
                     { name: 'Player', value: `**${primaryProfile.name}**`, inline: true },
                     { name: 'Platform', value: primaryProfile.platform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
                     { name: 'Duration', value: durationData.isPermanent ? '**Permanent**' : durationData.display, inline: true },
-                    { name: 'Reason', value: reason, inline: false }
+                    { name: 'Reason', value: reason, inline: false },
+                    { name: 'Minecraft Enforcement', value: banResults.map(entry => `**${entry.target.name}**: ${entry.result.success ? 'Applied' : 'Failed'}${entry.result.success ? '' : ` (${entry.result.response})`}`).join('\n').substring(0, 1024), inline: false }
                 )
                 .setFooter({ text: `Case #${caseNumber || 'N/A'} | Banned by ${interaction.user.tag}` })
                 .setTimestamp();
-
-            if (discordUser) {
-                embed.addFields({ name: 'Discord', value: `${discordUser.tag} (<@${discordId}>)`, inline: false });
-            }
 
             if (linkedAccounts.length > 1) {
                 embed.addFields({ 
@@ -741,10 +485,10 @@ const slashCommands = [
     {
         data: new SlashCommandBuilder()
             .setName('softban')
-            .setDescription('Softban a player by banning and immediately unbanning them')
+            .setDescription('Softban a linked Minecraft player by banning and immediately unbanning them')
             .addStringOption(opt => opt
                 .setName('target')
-                .setDescription('Minecraft username or @Discord user')
+                .setDescription('Minecraft username or @Discord user linked to Minecraft')
                 .setRequired(true)
             )
             .addStringOption(opt => opt
@@ -754,7 +498,7 @@ const slashCommands = [
             )
             .addStringOption(opt => opt
                 .setName('platform')
-                .setDescription('Platform (if softbanning by username)')
+                .setDescription('Platform (if resolving by username)')
                 .setRequired(false)
                 .addChoices(
                     { name: 'Java', value: 'java' },
@@ -776,73 +520,12 @@ const slashCommands = [
             const reason = interaction.options.getString('reason');
             const platformOption = interaction.options.getString('platform') || 'java';
 
-            let primaryProfile = null;
-            let discordId = null;
-            let discordUser = null;
-            let linkedAccounts = [];
-
-            const mentionMatch = target.match(/<@!?(\d+)>/);
-            if (mentionMatch) {
-                discordId = mentionMatch[1];
-
-                try {
-                    discordUser = await client.users.fetch(discordId);
-                } catch (e) {
-                    return interaction.editReply({ content: 'Could not find that Discord user.' });
-                }
-
-                linkedAccounts = await getAllLinkedAccounts(discordId);
-
-                if (linkedAccounts.length > 0) {
-                    const primary = linkedAccounts[0];
-                    const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
-
-                    if (freshProfile) {
-                        primaryProfile = {
-                            uuid: normalizeUuid(freshProfile.uuid),
-                            name: freshProfile.name,
-                            platform: freshProfile.platform
-                        };
-                    } else {
-                        primaryProfile = {
-                            uuid: normalizeUuid(primary.uuid),
-                            name: primary.minecraftUsername,
-                            platform: primary.platform
-                        };
-                    }
-                }
-            } else {
-                primaryProfile = await lookupMcProfile(target, platformOption);
-
-                if (!primaryProfile && platformOption === 'java') {
-                    primaryProfile = await lookupMcProfile(target, 'bedrock');
-                }
-
-                if (!primaryProfile) {
-                    return interaction.editReply({
-                        content: `Could not find Minecraft account: **${target}**\n\nTry specifying the platform with the \`platform\` option.`
-                    });
-                }
-
-                primaryProfile.uuid = normalizeUuid(primaryProfile.uuid);
-
-                linkedAccounts = await getAllLinkedAccounts(null, primaryProfile.uuid);
-
-                if (linkedAccounts.length > 0) {
-                    discordId = linkedAccounts[0].discordId;
-                    try {
-                        discordUser = await client.users.fetch(discordId);
-                    } catch (e) {
-                        // Continue without the user object
-                    }
-                }
+            const resolvedTarget = await resolveMinecraftTarget(target, platformOption, client);
+            if (resolvedTarget.error) {
+                return interaction.editReply({ content: resolvedTarget.error });
             }
 
-            if (!discordId) {
-                return interaction.editReply({
-                    content: 'Softban requires a Discord user. Please target a Discord mention or a linked Minecraft account.'
-                });
-            }
+            const { primaryProfile, discordId, discordUser, linkedAccounts } = resolvedTarget;
 
             const caseNumber = await getNextCaseNumber('ban').catch(() => Date.now());
             const { randomUUID } = require('crypto');
@@ -873,24 +556,15 @@ const slashCommands = [
             });
 
             try {
-                await interaction.guild.members.ban(discordId, {
-                    deleteMessageSeconds: 60 * 60 * 24 * 7,
-                    reason: `Softban: ${reason}`
-                });
-                await interaction.guild.members.unban(discordId, `Softban: ${reason}`);
+                const banTargets = dedupeTargets(primaryProfile, linkedAccounts);
+                await applyMinecraftBan(banTargets, `Softban: ${reason}`);
+                await applyMinecraftUnban(banTargets);
             } catch (error) {
                 console.error('Error executing softban:', error);
                 return interaction.editReply({ content: `Failed to softban the user: ${error.message}` });
             }
 
             await softban.save();
-
-            if (discordId) {
-                await sendSoftbanDm(client, discordId, {
-                    reason,
-                    caseNumber: softban.caseNumber
-                }).catch(() => {});
-            }
 
             await logSoftban(client, softban, linkedAccounts);
 
@@ -904,10 +578,6 @@ const slashCommands = [
                 )
                 .setFooter({ text: `Case #${caseNumber || 'N/A'} | Softbanned by ${interaction.user.tag}` })
                 .setTimestamp();
-
-            if (discordUser) {
-                embed.addFields({ name: 'Discord', value: `${discordUser.tag} (<@${discordId}>)`, inline: false });
-            }
 
             if (linkedAccounts.length > 1) {
                 embed.addFields({
@@ -923,10 +593,10 @@ const slashCommands = [
     {
         data: new SlashCommandBuilder()
             .setName('unban')
-            .setDescription('Unban a player from the server')
+            .setDescription('Unban a linked Minecraft player from the server')
             .addStringOption(opt => opt
                 .setName('target')
-                .setDescription('Minecraft username or @Discord user')
+                .setDescription('Minecraft username or @Discord user linked to Minecraft')
                 .setRequired(true)
             )
             .addStringOption(opt => opt
@@ -936,7 +606,7 @@ const slashCommands = [
             )
             .addStringOption(opt => opt
                 .setName('platform')
-                .setDescription('Platform (if unbanning by username)')
+                .setDescription('Platform (if resolving by username)')
                 .setRequired(false)
                 .addChoices(
                     { name: 'Java', value: 'java' },
@@ -959,110 +629,20 @@ const slashCommands = [
             const unbanReason = interaction.options.getString('reason') || 'No reason provided';
             const platformOption = interaction.options.getString('platform') || 'java';
 
-            let primaryProfile = null;
-            let discordId = null;
-            let discordUser = null;
-            let linkedAccounts = [];
-
-            // Check if target is a Discord mention
-            const mentionMatch = target.match(/<@!?(\d+)>/);
-            if (mentionMatch) {
-                discordId = mentionMatch[1];
-                
-                try {
-                    discordUser = await client.users.fetch(discordId);
-                } catch (e) {
-                    return interaction.editReply({ content: 'Could not find that Discord user.' });
-                }
-                
-                // Get linked accounts for this Discord user
-                linkedAccounts = await getAllLinkedAccounts(discordId);
-                
-                if (linkedAccounts.length === 0) {
-                    return interaction.editReply({ 
-                        content: 'This Discord user has no linked Minecraft accounts.' 
-                    });
-                }
-                
-                // Use first account as primary
-                const primary = linkedAccounts[0];
-                const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
-                
-                if (freshProfile) {
-                    primaryProfile = {
-                        uuid: normalizeUuid(freshProfile.uuid),
-                        name: freshProfile.name,
-                        platform: freshProfile.platform
-                    };
-                } else {
-                    primaryProfile = {
-                        uuid: normalizeUuid(primary.uuid),
-                        name: primary.minecraftUsername,
-                        platform: primary.platform
-                    };
-                }
-            } else {
-                // Target is a Minecraft username - lookup profile
-                primaryProfile = await lookupMcProfile(target, platformOption);
-                
-                if (!primaryProfile) {
-                    // Try bedrock if java failed
-                    if (platformOption === 'java') {
-                        primaryProfile = await lookupMcProfile(target, 'bedrock');
-                    }
-                }
-                
-                if (!primaryProfile) {
-                    // Try to find by username in existing bans
-                    const existingBan = await ServerBan.findOne({
-                        primaryUsername: { $regex: new RegExp(`^${target}$`, 'i') },
-                        active: true
-                    });
-                    
-                    if (existingBan) {
-                        primaryProfile = {
-                            uuid: existingBan.primaryUuid,
-                            name: existingBan.primaryUsername,
-                            platform: existingBan.primaryPlatform || 'java'
-                        };
-                        discordId = existingBan.discordId;
-                    } else {
-                        return interaction.editReply({ 
-                            content: `Could not find Minecraft account or active ban for: **${target}**` 
-                        });
-                    }
-                }
-                
-                if (primaryProfile) {
-                    // Normalize the UUID
-                    primaryProfile.uuid = normalizeUuid(primaryProfile.uuid);
-                    
-                    // Find linked accounts from this UUID
-                    linkedAccounts = await getAllLinkedAccounts(null, primaryProfile.uuid);
-                    
-                    if (linkedAccounts.length > 0 && !discordId) {
-                        discordId = linkedAccounts[0].discordId;
-                        try {
-                            discordUser = await client.users.fetch(discordId);
-                        } catch (e) {
-                            // Discord user not found, continue without
-                        }
-                    }
-                }
+            const resolvedTarget = await resolveMinecraftTarget(target, platformOption, client);
+            if (resolvedTarget.error) {
+                return interaction.editReply({ content: resolvedTarget.error });
             }
+
+            const { primaryProfile, discordId, discordUser, linkedAccounts } = resolvedTarget;
 
             // Collect all UUIDs to unban
-            const uuidsToUnban = [primaryProfile.uuid];
-            for (const account of linkedAccounts) {
-                const normalizedAccUuid = normalizeUuid(account.uuid);
-                if (!uuidsToUnban.includes(normalizedAccUuid)) {
-                    uuidsToUnban.push(normalizedAccUuid);
-                }
-            }
+            const uuidsToUnban = dedupeTargets(primaryProfile, linkedAccounts);
 
             // Find and unban ALL active bans for these UUIDs
             const unbannedBans = [];
-            for (const uuid of uuidsToUnban) {
+            for (const targetAccount of uuidsToUnban) {
+                const uuid = targetAccount.uuid;
                 const bans = await ServerBan.find({
                     $or: [
                         { primaryUuid: uuid, active: true },
@@ -1079,6 +659,14 @@ const slashCommands = [
                         ban.unbanReason = unbanReason;
                         await ban.save();
                         unbannedBans.push(ban);
+
+                        await unbanPlayer(ban.primaryUsername).catch(() => null);
+                        for (const bannedUuid of ban.bannedUuids || []) {
+                            const linkedAccount = linkedAccounts.find(acc => normalizeUuid(acc.uuid) === normalizeUuid(bannedUuid));
+                            if (linkedAccount) {
+                                await unbanPlayer(linkedAccount.minecraftUsername).catch(() => null);
+                            }
+                        }
                         
                         // Log each unban
                         await logUnban(client, ban, interaction.user);
@@ -1104,10 +692,6 @@ const slashCommands = [
                 )
                 .setFooter({ text: `Unbanned by ${interaction.user.tag}` })
                 .setTimestamp();
-
-            if (discordUser) {
-                embed.addFields({ name: 'Discord', value: `${discordUser.tag} (<@${discordId}>)`, inline: false });
-            }
 
             if (linkedAccounts.length > 1) {
                 embed.addFields({ 
@@ -1301,10 +885,10 @@ const slashCommands = [
     {
         data: new SlashCommandBuilder()
             .setName('kick')
-            .setDescription('Kick a player from the server')
+            .setDescription('Kick a linked Minecraft player from the server')
             .addStringOption(opt => opt
                 .setName('target')
-                .setDescription('Minecraft username or @Discord user')
+                .setDescription('Minecraft username or @Discord user linked to Minecraft')
                 .setRequired(true)
             )
             .addStringOption(opt => opt
@@ -1314,7 +898,7 @@ const slashCommands = [
             )
             .addStringOption(opt => opt
                 .setName('platform')
-                .setDescription('Platform (if kicking by username)')
+                .setDescription('Platform (if resolving by username)')
                 .setRequired(false)
                 .addChoices(
                     { name: 'Java', value: 'java' },
@@ -1337,76 +921,12 @@ const slashCommands = [
             const reason = interaction.options.getString('reason');
             const platformOption = interaction.options.getString('platform') || 'java';
 
-            let primaryProfile = null;
-            let discordId = null;
-            let discordUser = null;
-            let linkedAccounts = [];
-
-            // Check if target is a Discord mention
-            const mentionMatch = target.match(/<@!?(\d+)>/);
-            if (mentionMatch) {
-                discordId = mentionMatch[1];
-                
-                try {
-                    discordUser = await client.users.fetch(discordId);
-                } catch (e) {
-                    return interaction.editReply({ content: 'Could not find that Discord user.' });
-                }
-                
-                // Get linked accounts for this Discord user
-                linkedAccounts = await getAllLinkedAccounts(discordId);
-                
-                if (linkedAccounts.length === 0) {
-                    return interaction.editReply({ 
-                        content: 'This Discord user has no linked Minecraft accounts.' 
-                    });
-                }
-                
-                const primary = linkedAccounts[0];
-                const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
-                
-                if (freshProfile) {
-                    primaryProfile = {
-                        uuid: normalizeUuid(freshProfile.uuid),
-                        name: freshProfile.name,
-                        platform: freshProfile.platform
-                    };
-                } else {
-                    primaryProfile = {
-                        uuid: normalizeUuid(primary.uuid),
-                        name: primary.minecraftUsername,
-                        platform: primary.platform
-                    };
-                }
-            } else {
-                // Target is a Minecraft username - lookup profile
-                primaryProfile = await lookupMcProfile(target, platformOption);
-                
-                if (!primaryProfile) {
-                    if (platformOption === 'java') {
-                        primaryProfile = await lookupMcProfile(target, 'bedrock');
-                    }
-                }
-                
-                if (!primaryProfile) {
-                    return interaction.editReply({ 
-                        content: `Could not find Minecraft account: **${target}**\n\nTry specifying the platform with the \`platform\` option.` 
-                    });
-                }
-                
-                primaryProfile.uuid = normalizeUuid(primaryProfile.uuid);
-                
-                linkedAccounts = await getAllLinkedAccounts(null, primaryProfile.uuid);
-                
-                if (linkedAccounts.length > 0) {
-                    discordId = linkedAccounts[0].discordId;
-                    try {
-                        discordUser = await client.users.fetch(discordId);
-                    } catch (e) {
-                        // Discord user not found, continue without
-                    }
-                }
+            const resolvedTarget = await resolveMinecraftTarget(target, platformOption, client);
+            if (resolvedTarget.error) {
+                return interaction.editReply({ content: resolvedTarget.error });
             }
+
+            const { primaryProfile, discordId, discordUser, linkedAccounts } = resolvedTarget;
 
             // Get case number
             let caseNumber;
@@ -1433,44 +953,16 @@ const slashCommands = [
                 rconExecuted: false
             });
 
-            // Execute the kick via proxy RCON
-            const kickResult = await kickFromProxy(primaryProfile.name, reason);
-            kick.rconExecuted = kickResult.success;
-
-            // Also kick all linked accounts
-            for (const account of linkedAccounts) {
-                if (account.minecraftUsername.toLowerCase() !== primaryProfile.name.toLowerCase()) {
-                    await kickFromProxy(account.minecraftUsername, reason);
-                }
+            // Execute the kick via the proxy bridge
+            const kickTargets = dedupeTargets(primaryProfile, linkedAccounts);
+            const kickResults = [];
+            for (const targetAccount of kickTargets) {
+                const kickResult = await kickFromProxy(targetAccount.name, reason);
+                kickResults.push({ target: targetAccount, result: kickResult });
+                kick.rconExecuted = kick.rconExecuted || kickResult.success;
             }
 
             await kick.save();
-
-            // Notify Velocity plugin about kick cooldown (30 minutes)
-            try {
-                const response = await fetch('http://localhost:3002/kick', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${process.env.LINK_API_KEY}`
-                    },
-                    body: JSON.stringify({ uuid: primaryProfile.uuid })
-                });
-                
-                if (!response.ok) {
-                    console.error('Failed to notify Velocity about kick cooldown');
-                }
-            } catch (error) {
-                console.error('Error notifying Velocity about kick:', error);
-            }
-
-            // Send DM to kicked user
-            if (discordId) {
-                await sendKickDm(client, discordId, { 
-                    reason,
-                    caseNumber: kick.caseNumber
-                });
-            }
 
             // Log to channel
             await logKick(client, kick, linkedAccounts);
@@ -1482,15 +974,12 @@ const slashCommands = [
                 .addFields(
                     { name: 'Player', value: `**${primaryProfile.name}**`, inline: true },
                     { name: 'Platform', value: primaryProfile.platform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
-                    { name: 'RCON', value: kickResult.success ? 'Success' : 'Failed', inline: true },
-                    { name: 'Reason', value: reason, inline: false }
+                    { name: 'RCON', value: kickResults.some(entry => entry.result.success) ? 'Success' : 'Failed', inline: true },
+                    { name: 'Reason', value: reason, inline: false },
+                    { name: 'Minecraft Enforcement', value: kickResults.map(entry => `**${entry.target.name}**: ${entry.result.success ? 'Kicked' : 'Failed'}${entry.result.success ? '' : ` (${entry.result.response})`}`).join('\n').substring(0, 1024), inline: false }
                 )
                 .setFooter({ text: `Case #${caseNumber || 'N/A'} | Kicked by ${interaction.user.tag}` })
                 .setTimestamp();
-
-            if (discordUser) {
-                embed.addFields({ name: 'Discord', value: `${discordUser.tag} (<@${discordId}>)`, inline: false });
-            }
 
             if (linkedAccounts.length > 1) {
                 embed.addFields({ 
@@ -1506,7 +995,7 @@ const slashCommands = [
     {
         data: new SlashCommandBuilder()
             .setName('warn')
-            .setDescription('Warn a Discord user')
+            .setDescription('Warn a linked Minecraft player')
             .addStringOption(opt => opt
                 .setName('reason')
                 .setDescription('Reason for the warning')
@@ -1514,7 +1003,7 @@ const slashCommands = [
             )
             .addUserOption(opt => opt
                 .setName('target')
-                .setDescription('Discord user to warn')
+                .setDescription('Discord user linked to the Minecraft account')
                 .setRequired(false)
             )
             .addStringOption(opt => opt
@@ -1563,43 +1052,22 @@ const slashCommands = [
             const severity = interaction.options.getString('severity') || 'moderate';
             const category = interaction.options.getString('category') || 'other';
 
-            // Resolve target from mcname if no user provided
-            if (!targetUser && mcname) {
-                const resolved = await resolveDiscordFromMinecraft(mcname, interaction.client);
-                if (!resolved) {
-                    return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
-                }
-                targetUser = resolved;
+            let targetUserResolved = null;
+            if (targetUser) {
+                targetUserResolved = await resolveMinecraftTarget(`<@${targetUser.id}>`, 'java', interaction.client);
+            } else if (mcname) {
+                targetUserResolved = await resolveMinecraftTarget(mcname, 'java', interaction.client);
             }
 
-            if (!targetUser) {
-                return interaction.editReply({ content: 'You must provide either a Discord user or a Minecraft username.' });
+            if (!targetUserResolved || targetUserResolved.error) {
+                return interaction.editReply({ content: targetUserResolved?.error || 'You must provide either a Discord user or a Minecraft username.' });
             }
 
-            const discordId = targetUser.id;
-            const discordTag = targetUser.tag;
+            const { discordId, discordUser, linkedAccounts, primaryProfile } = targetUserResolved;
+            const discordTag = discordUser?.tag || targetUser?.tag || linkedAccounts[0]?.minecraftUsername;
 
-            // Get linked accounts for this user
-            const linkedAccounts = await getAllLinkedAccounts(discordId);
-
-            let primaryProfile = null;
-            if (linkedAccounts.length > 0) {
-                const primary = linkedAccounts[0];
-                const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
-                
-                if (freshProfile) {
-                    primaryProfile = {
-                        uuid: normalizeUuid(freshProfile.uuid),
-                        name: freshProfile.name,
-                        platform: freshProfile.platform
-                    };
-                } else {
-                    primaryProfile = {
-                        uuid: normalizeUuid(primary.uuid),
-                        name: primary.minecraftUsername,
-                        platform: primary.platform
-                    };
-                }
+            if (!discordId) {
+                return interaction.editReply({ content: 'That Minecraft account is not linked to Discord, so it cannot be warned from this command.' });
             }
 
             // Get case number
@@ -1637,21 +1105,8 @@ const slashCommands = [
 
             await warning.save();
 
-            // Send DM to warned user
-            let dmSent = false;
-            try {
-                const dmResult = await sendWarningDm(client, discordId, {
-                    reason,
-                    severity,
-                    category,
-                    caseNumber
-                });
-                dmSent = dmResult;
-                warning.dmSent = dmSent;
-                await warning.save();
-            } catch (e) {
-                console.error('Failed to send warning DM:', e);
-            }
+            warning.dmSent = false;
+            await warning.save();
 
             // Log to channel
             await logWarning(client, warning, linkedAccounts);
@@ -1675,18 +1130,10 @@ const slashCommands = [
                     { name: 'Category', value: category.charAt(0).toUpperCase() + category.slice(1), inline: true },
                     { name: 'Reason', value: reason, inline: false },
                     { name: 'Total Warnings', value: `${totalWarnings}`, inline: true },
-                    { name: 'DM Sent', value: dmSent ? 'Yes' : 'No', inline: true }
+                    { name: 'Minecraft Target', value: primaryProfile ? `**${primaryProfile.name}** (${primaryProfile.platform})` : 'Unknown', inline: false }
                 )
                 .setFooter({ text: `Case #${caseNumber} | Warned by ${interaction.user.tag}` })
                 .setTimestamp();
-
-            if (primaryProfile) {
-                embed.addFields({ 
-                    name: 'Minecraft Account', 
-                    value: `**${primaryProfile.name}** (${primaryProfile.platform})`, 
-                    inline: false 
-                });
-            }
 
             if (linkedAccounts.length > 1) {
                 embed.addFields({ 
@@ -1702,7 +1149,7 @@ const slashCommands = [
     {
         data: new SlashCommandBuilder()
             .setName('mute')
-            .setDescription('Mute a Discord user for a period of time')
+            .setDescription('Mute a linked Minecraft player for a period of time')
             .addStringOption(opt => opt
                 .setName('duration')
                 .setDescription('Mute duration (e.g., 10m, 1h, 1d)')
@@ -1715,7 +1162,7 @@ const slashCommands = [
             )
             .addUserOption(opt => opt
                 .setName('target')
-                .setDescription('Discord user to mute')
+                .setDescription('Discord user linked to the Minecraft account')
                 .setRequired(false)
             )
             .addStringOption(opt => opt
@@ -1740,17 +1187,15 @@ const slashCommands = [
             const reason = interaction.options.getString('reason');
             const durationStr = interaction.options.getString('duration');
 
-            // Resolve target from mcname if no user provided
-            if (!targetUser && mcname) {
-                const resolved = await resolveDiscordFromMinecraft(mcname, interaction.client);
-                if (!resolved) {
-                    return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
-                }
-                targetUser = resolved;
+            let targetUserResolved = null;
+            if (targetUser) {
+                targetUserResolved = await resolveMinecraftTarget(`<@${targetUser.id}>`, 'java', interaction.client);
+            } else if (mcname) {
+                targetUserResolved = await resolveMinecraftTarget(mcname, 'java', interaction.client);
             }
 
-            if (!targetUser) {
-                return interaction.editReply({ content: 'You must provide either a Discord user or a Minecraft username.' });
+            if (!targetUserResolved || targetUserResolved.error) {
+                return interaction.editReply({ content: targetUserResolved?.error || 'You must provide either a Discord user or a Minecraft username.' });
             }
 
             // Parse duration
@@ -1759,40 +1204,8 @@ const slashCommands = [
                 return interaction.editReply({ content: 'Invalid duration format. Use formats like: 10m, 1h, 1d, 7d' });
             }
 
-            // Discord timeout limit is 28 days
-            const MAX_TIMEOUT = 28 * 24 * 60 * 60 * 1000;
-            if (durationParsed.ms > MAX_TIMEOUT) {
-                return interaction.editReply({ 
-                    content: 'Discord timeout duration cannot exceed 28 days. Please use a shorter duration.' 
-                });
-            }
-
-            const discordId = targetUser.id;
-            const discordTag = targetUser.tag;
-
-            // Check if user is already timed out
-            const member = await interaction.guild.members.fetch(discordId).catch(() => null);
-            if (!member) {
-                return interaction.editReply({ content: `Could not find member in this server.` });
-            }
-
-            if (member.communicationDisabledUntil && member.communicationDisabledUntil > new Date()) {
-                return interaction.editReply({ 
-                    content: `**${discordTag}** is already timed out until <t:${Math.floor(member.communicationDisabledUntil.getTime() / 1000)}:f>` 
-                });
-            }
-
-            // Get linked accounts for context
-            const linkedAccounts = await getAllLinkedAccounts(discordId);
-            let primaryProfile = null;
-            if (linkedAccounts.length > 0) {
-                const primary = linkedAccounts[0];
-                primaryProfile = {
-                    uuid: normalizeUuid(primary.uuid),
-                    name: primary.minecraftUsername,
-                    platform: primary.platform
-                };
-            }
+            const { discordId, discordUser, linkedAccounts, primaryProfile } = targetUserResolved;
+            const discordTag = discordUser?.tag || targetUser?.tag || linkedAccounts[0]?.minecraftUsername;
 
             // Get case number
             let caseNumber;
@@ -1800,14 +1213,6 @@ const slashCommands = [
                 caseNumber = await getNextCaseNumber('mute');
             } catch (e) {
                 caseNumber = Date.now();
-            }
-
-            // Apply Discord timeout
-            try {
-                await member.timeout(durationParsed.ms, `${interaction.user.tag}: ${reason}`);
-            } catch (e) {
-                console.error('Failed to timeout member:', e);
-                return interaction.editReply({ content: `Failed to timeout member: ${e.message}` });
             }
 
             // Create the mute record
@@ -1833,29 +1238,6 @@ const slashCommands = [
 
             await mute.save();
 
-            // Send DM to muted user
-            let dmSent = false;
-            try {
-                const dmEmbed = new EmbedBuilder()
-                    .setTitle('You have been muted')
-                    .setColor(0xFF4444)
-                    .setDescription(`You have been muted in **${interaction.guild.name}**.`)
-                    .addFields(
-                        { name: 'Reason', value: reason, inline: false },
-                        { name: 'Duration', value: durationParsed.display, inline: true },
-                        { name: 'Expires', value: `<t:${Math.floor(durationParsed.expiresAt.getTime() / 1000)}:f>`, inline: true }
-                    )
-                    .setFooter({ text: `Case #${caseNumber}` })
-                    .setTimestamp();
-
-                await targetUser.send({ embeds: [dmEmbed] });
-                dmSent = true;
-                mute.dmSent = true;
-                await mute.save();
-            } catch (e) {
-                console.error('Failed to send mute DM:', e);
-            }
-
             // Log to channel
             if (LOG_CHANNEL_ID) {
                 try {
@@ -1869,8 +1251,7 @@ const slashCommands = [
                                 { name: 'Duration', value: durationParsed.display, inline: true },
                                 { name: 'Expires', value: `<t:${Math.floor(durationParsed.expiresAt.getTime() / 1000)}:f>`, inline: true },
                                 { name: 'Reason', value: reason, inline: false },
-                                { name: 'Moderator', value: interaction.user.tag, inline: true },
-                                { name: 'DM Sent', value: dmSent ? 'Yes' : 'No', inline: true }
+                                { name: 'Moderator', value: interaction.user.tag, inline: true }
                             )
                             .setFooter({ text: `Case #${caseNumber}` })
                             .setTimestamp();
@@ -1899,18 +1280,10 @@ const slashCommands = [
                     { name: 'Duration', value: durationParsed.display, inline: true },
                     { name: 'Expires', value: `<t:${Math.floor(durationParsed.expiresAt.getTime() / 1000)}:R>`, inline: true },
                     { name: 'Reason', value: reason, inline: false },
-                    { name: 'DM Sent', value: dmSent ? 'Yes' : 'No', inline: true }
+                    { name: 'Minecraft Target', value: primaryProfile ? `**${primaryProfile.name}** (${primaryProfile.platform})` : 'Unknown', inline: false }
                 )
                 .setFooter({ text: `Case #${caseNumber} | Muted by ${interaction.user.tag}` })
                 .setTimestamp();
-
-            if (primaryProfile) {
-                embed.addFields({ 
-                    name: 'Minecraft Account', 
-                    value: `**${primaryProfile.name}** (${primaryProfile.platform})`, 
-                    inline: false 
-                });
-            }
 
             return interaction.editReply({ embeds: [embed] });
         }
@@ -1918,10 +1291,10 @@ const slashCommands = [
     {
         data: new SlashCommandBuilder()
             .setName('unmute')
-            .setDescription('Unmute a Discord user')
+            .setDescription('Unmute a linked Minecraft player')
             .addUserOption(opt => opt
                 .setName('target')
-                .setDescription('Discord user to unmute')
+                .setDescription('Discord user linked to the Minecraft account')
                 .setRequired(true)
             )
             .addStringOption(opt => opt
@@ -1943,27 +1316,13 @@ const slashCommands = [
 
             const targetUser = interaction.options.getUser('target');
             const reason = interaction.options.getString('reason') || 'No reason provided';
-            const discordId = targetUser.id;
-            const discordTag = targetUser.tag;
-
-            // Get the member
-            const member = await interaction.guild.members.fetch(discordId).catch(() => null);
-            if (!member) {
-                return interaction.editReply({ content: `Could not find member in this server.` });
+            const resolvedTarget = await resolveMinecraftTarget(`<@${targetUser.id}>`, 'java', interaction.client);
+            if (resolvedTarget.error) {
+                return interaction.editReply({ content: resolvedTarget.error });
             }
 
-            // Check if user is currently timed out
-            if (!member.communicationDisabledUntil || member.communicationDisabledUntil <= new Date()) {
-                return interaction.editReply({ content: `**${discordTag}** is not currently timed out.` });
-            }
-
-            // Remove timeout
-            try {
-                await member.timeout(null, `Unmuted by ${interaction.user.tag}: ${reason}`);
-            } catch (e) {
-                console.error('Failed to remove timeout:', e);
-                return interaction.editReply({ content: `Failed to remove timeout: ${e.message}` });
-            }
+            const { discordId, discordUser, linkedAccounts, primaryProfile } = resolvedTarget;
+            const discordTag = discordUser?.tag || targetUser.tag;
 
             // Check if there's an active mute record and update it
             const activeMute = await Mute.getActiveMute(discordId);
@@ -1974,8 +1333,6 @@ const slashCommands = [
                 activeMute.unmutedByTag = interaction.user.tag;
                 await activeMute.save();
             }
-
-            // Log to channel
             if (LOG_CHANNEL_ID) {
                 try {
                     const logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
@@ -1989,6 +1346,10 @@ const slashCommands = [
                                 { name: 'Reason', value: reason, inline: false }
                             )
                             .setTimestamp();
+
+                        if (primaryProfile) {
+                            logEmbed.addFields({ name: 'Minecraft Target', value: `**${primaryProfile.name}** (${primaryProfile.platform})`, inline: false });
+                        }
 
                         if (activeMute) {
                             logEmbed.addFields({ name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true });
@@ -2010,6 +1371,10 @@ const slashCommands = [
                 )
                 .setFooter({ text: `Unmuted by ${interaction.user.tag}` })
                 .setTimestamp();
+
+            if (primaryProfile) {
+                embed.addFields({ name: 'Minecraft Target', value: `**${primaryProfile.name}** (${primaryProfile.platform})`, inline: false });
+            }
 
             if (activeMute) {
                 embed.addFields({ name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true });
@@ -2049,29 +1414,28 @@ const slashCommands = [
             const mcname = interaction.options.getString('mcname');
             const includeRemoved = interaction.options.getBoolean('include_removed') || false;
 
-            // Resolve target from mcname if no user provided
-            if (!targetUser && mcname) {
-                const resolved = await resolveDiscordFromMinecraft(mcname, interaction.client);
-                if (!resolved) {
-                    return interaction.editReply({ content: `Could not find a Discord user linked to Minecraft name: **${mcname}**` });
-                }
-                targetUser = resolved;
+            let targetUserResolved = null;
+            if (targetUser) {
+                targetUserResolved = await resolveMinecraftTarget(`<@${targetUser.id}>`, 'java', interaction.client);
+            } else if (mcname) {
+                targetUserResolved = await resolveMinecraftTarget(mcname, 'java', interaction.client);
             }
 
-            if (!targetUser) {
-                return interaction.editReply({ content: 'You must provide either a Discord user or a Minecraft username.' });
+            if (!targetUserResolved || targetUserResolved.error) {
+                return interaction.editReply({ content: targetUserResolved?.error || 'You must provide either a Discord user or a Minecraft username.' });
             }
 
-            const warnings = await Warning.getUserWarnings(targetUser.id, includeRemoved);
+            const { discordId, discordUser, linkedAccounts, primaryProfile } = targetUserResolved;
+            const warnings = await Warning.getUserWarnings(discordId, includeRemoved);
 
             if (warnings.length === 0) {
                 return interaction.editReply({ 
-                    content: `**${targetUser.tag}** has no${includeRemoved ? '' : ' active'} warnings.` 
+                    content: `**${discordUser?.tag || targetUser?.tag || linkedAccounts[0]?.minecraftUsername}** has no${includeRemoved ? '' : ' active'} warnings.` 
                 });
             }
 
             const embed = new EmbedBuilder()
-                .setTitle(`Warnings: ${targetUser.tag}`)
+                .setTitle(`Warnings: ${discordUser?.tag || targetUser?.tag || linkedAccounts[0]?.minecraftUsername}`)
                 .setColor(0xFFA500)
                 .setFooter({ text: `${warnings.length} warning(s) found` })
                 .setTimestamp();

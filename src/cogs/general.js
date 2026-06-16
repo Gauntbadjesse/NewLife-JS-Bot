@@ -1373,13 +1373,13 @@ const slashCommands = [
                     `\`/add <user>\` - Add user to ticket`,
                     `\`/remove <user>\` - Remove user from ticket`,
                     `\`/escalate <level>\` - Escalate ticket`,
-                    `\`/ban <player> <reason> <duration>\` - Ban from MC server`,
-                    `\`/unban <player>\` - Unban from MC server`,
+                    `\`/ban <player> <reason> <duration>\` - Ban linked Minecraft account(s)`,
+                    `\`/unban <player>\` - Unban linked Minecraft account(s)`,
                     `\`/checkban <player>\` - Check if banned`,
-                    `\`/warn <target> <reason>\` - Issue Discord warning`,
-                    `\`/warnings <target>\` - View Discord warnings`,
-                    `\`/mute <duration> <reason> <target>\` - Mute a user`,
-                    `\`/unmute <target>\` - Unmute a user`
+                    `\`/warn <target> <reason>\` - Issue a Minecraft-linked warning`,
+                    `\`/warnings <target>\` - View linked warnings`,
+                    `\`/mute <duration> <reason> <target>\` - Mute a linked Minecraft player`,
+                    `\`/unmute <target>\` - Unmute a linked Minecraft player`
                 ];
                 embed.addFields({ name: 'Staff Commands', value: staffCommands.join('\n'), inline: false });
             }

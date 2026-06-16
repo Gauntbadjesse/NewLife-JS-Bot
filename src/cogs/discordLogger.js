@@ -38,6 +38,41 @@ function formatRoleNames(roles) {
     return filtered.map(r => r.name).join(', ');
 }
 
+function truncate(value, limit = 1024) {
+    if (!value) return '';
+    const text = String(value);
+    return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
+}
+
+function formatEmbedSummary(embed, index) {
+    const parts = [];
+
+    if (embed.title) parts.push(`Title: ${embed.title}`);
+    if (embed.description) parts.push(`Description: ${embed.description}`);
+    if (embed.url) parts.push(`URL: ${embed.url}`);
+
+    if (Array.isArray(embed.fields) && embed.fields.length > 0) {
+        const fieldLines = embed.fields.map(field => `${field.name}: ${field.value}`).join('\n');
+        parts.push(`Fields:\n${fieldLines}`);
+    }
+
+    if (embed.author?.name) parts.push(`Author: ${embed.author.name}`);
+    if (embed.footer?.text) parts.push(`Footer: ${embed.footer.text}`);
+    if (embed.image?.url) parts.push(`Image: ${embed.image.url}`);
+    if (embed.thumbnail?.url) parts.push(`Thumbnail: ${embed.thumbnail.url}`);
+
+    if (parts.length === 0) return null;
+    return truncate(`Embed ${index + 1}\n${parts.join('\n')}`, 1024);
+}
+
+function formatAttachments(attachments) {
+    const lines = attachments.map(att => {
+        const type = att.contentType ? ` (${att.contentType})` : '';
+        return `${att.name || 'attachment'}: ${att.url}${type}`;
+    });
+    return truncate(lines.join('\n'), 1024);
+}
+
 /**
  * Handle member leave event
  * Logs user who left with their previous roles
@@ -139,6 +174,15 @@ async function handleMessageDelete(message, client) {
 
         const content = message.content || '*No text content*';
         const truncatedContent = content.length > 1024 ? content.substring(0, 1020) + '...' : content;
+        const embedSummaries = (message.embeds || [])
+            .map((embedData, index) => formatEmbedSummary(embedData, index))
+            .filter(Boolean);
+        const firstImageAttachment = message.attachments.find(att => {
+            const type = att.contentType || '';
+            return type.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(att.url);
+        });
+        const firstEmbedImage = message.embeds.find(embedData => embedData.image?.url || embedData.thumbnail?.url);
+        const previewImage = firstImageAttachment?.url || firstEmbedImage?.image?.url || firstEmbedImage?.thumbnail?.url || null;
 
         const embed = new EmbedBuilder()
             .setColor(0xFF6B6B)
@@ -155,10 +199,16 @@ async function handleMessageDelete(message, client) {
             embed.addFields({ name: 'Deleted By', value: `${deletedBy.tag} (${deletedBy.id})`, inline: false });
         }
 
-        // Add attachment info if any
         if (message.attachments.size > 0) {
-            const attachmentList = message.attachments.map(a => a.name || a.url).join('\n');
-            embed.addFields({ name: 'Attachments', value: attachmentList.substring(0, 1024), inline: false });
+            embed.addFields({ name: 'Attachments', value: formatAttachments([...message.attachments.values()]), inline: false });
+        }
+
+        if (embedSummaries.length > 0) {
+            embed.addFields({ name: 'Embeds', value: truncate(embedSummaries.join('\n\n'), 1024), inline: false });
+        }
+
+        if (previewImage) {
+            embed.setImage(previewImage);
         }
 
         await logChannel.send({ embeds: [embed] });
@@ -181,6 +231,13 @@ async function handleMessageEdit(oldMessage, newMessage, client) {
     try {
         const oldContent = oldMessage.content || '*No content cached*';
         const newContent = newMessage.content || '*No content*';
+        const oldEmbeds = (oldMessage.embeds || []).map((embedData, index) => formatEmbedSummary(embedData, index)).filter(Boolean);
+        const newEmbeds = (newMessage.embeds || []).map((embedData, index) => formatEmbedSummary(embedData, index)).filter(Boolean);
+        const newAttachments = newMessage.attachments.size > 0 ? formatAttachments([...newMessage.attachments.values()]) : null;
+        const previewImage = newMessage.attachments.find(att => {
+            const type = att.contentType || '';
+            return type.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(att.url);
+        })?.url || newMessage.embeds.find(embedData => embedData.image?.url || embedData.thumbnail?.url)?.image?.url || null;
 
         const truncatedOld = oldContent.length > 1024 ? oldContent.substring(0, 1020) + '...' : oldContent;
         const truncatedNew = newContent.length > 1024 ? newContent.substring(0, 1020) + '...' : newContent;
@@ -197,6 +254,22 @@ async function handleMessageEdit(oldMessage, newMessage, client) {
             )
             .setFooter({ text: `Message ID: ${newMessage.id}` })
             .setTimestamp();
+
+        if (oldEmbeds.length > 0) {
+            embed.addFields({ name: 'Before Embeds', value: truncate(oldEmbeds.join('\n\n'), 1024), inline: false });
+        }
+
+        if (newEmbeds.length > 0) {
+            embed.addFields({ name: 'After Embeds', value: truncate(newEmbeds.join('\n\n'), 1024), inline: false });
+        }
+
+        if (newAttachments) {
+            embed.addFields({ name: 'Attachments', value: newAttachments, inline: false });
+        }
+
+        if (previewImage) {
+            embed.setImage(previewImage);
+        }
 
         await logChannel.send({ embeds: [embed] });
     } catch (e) {
