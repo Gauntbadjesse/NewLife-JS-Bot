@@ -156,6 +156,56 @@ async function logBan(client, ban, linkedAccounts) {
 }
 
 /**
+ * Log softban to channel
+ */
+async function logSoftban(client, softban, linkedAccounts) {
+    if (!LOG_CHANNEL_ID) return;
+
+    try {
+        const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+        if (!channel) return;
+
+        const accountsList = linkedAccounts.map(acc => {
+            const platform = acc.platform === 'bedrock' ? 'Bedrock' : 'Java';
+            return `${acc.minecraftUsername} (${platform})`;
+        }).join('\n') || 'None linked';
+
+        const embed = new EmbedBuilder()
+            .setTitle('Player Softbanned')
+            .setColor(0xff4444)
+            .addFields(
+                { name: 'Player', value: `**${softban.primaryUsername}**\n\`${softban.primaryUuid}\``, inline: true },
+                { name: 'Platform', value: softban.primaryPlatform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                { name: 'Softbanned By', value: `<@${softban.staffId}>`, inline: true },
+                { name: 'Reason', value: softban.reason, inline: false },
+                { name: 'Duration', value: '**Softban**', inline: true }
+            )
+            .setFooter({ text: `Case #${softban.caseNumber || 'N/A'}` })
+            .setTimestamp();
+
+        if (softban.discordId) {
+            embed.addFields({ name: 'Discord', value: `<@${softban.discordId}>`, inline: true });
+        }
+
+        if (!softban.isPermanent && softban.expiresAt) {
+            embed.addFields({ name: 'Expires', value: `<t:${Math.floor(softban.expiresAt.getTime() / 1000)}:R>`, inline: true });
+        }
+
+        if (linkedAccounts.length > 1) {
+            embed.addFields({
+                name: `All Linked Accounts (${linkedAccounts.length})`,
+                value: accountsList,
+                inline: false
+            });
+        }
+
+        await channel.send({ embeds: [embed] });
+    } catch (e) {
+        console.error('Failed to log softban:', e);
+    }
+}
+
+/**
  * Log unban to channel
  */
 async function logUnban(client, ban, staffMember) {
@@ -226,6 +276,43 @@ async function sendKickDm(client, discordId, kickData) {
         });
     }
     
+    return sendDm(client, discordId, { embeds: [embed] });
+}
+
+/**
+ * Send softban DM to user
+ */
+async function sendSoftbanDm(client, discordId, softbanData) {
+    const viewUrl = softbanData.caseNumber
+        ? `https://staff.newlifesmp.com/home?case=ban-${softbanData.caseNumber}`
+        : null;
+
+    const embed = new EmbedBuilder()
+        .setTitle('You Have Been Softbanned')
+        .setColor(0xff4444)
+        .setDescription(`You have been softbanned from **NewLife SMP**.`)
+        .addFields(
+            { name: 'Reason', value: softbanData.reason, inline: false },
+            { name: 'Duration', value: 'Softban', inline: true },
+            { name: 'Banned At', value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+        )
+        .setFooter({ text: 'NewLife SMP' })
+        .setTimestamp();
+
+    if (viewUrl) {
+        embed.addFields({
+            name: 'View Case Details',
+            value: `[Click here to view this case with evidence](${viewUrl})`,
+            inline: false
+        });
+    }
+
+    embed.addFields({
+        name: 'Appeal',
+        value: 'If you believe this softban was issued in error, you may appeal in our Discord server.',
+        inline: false
+    });
+
     return sendDm(client, discordId, { embeds: [embed] });
 }
 
@@ -645,6 +732,188 @@ const slashCommands = [
                     name: 'Expires', 
                     value: `<t:${Math.floor(durationData.expiresAt.getTime() / 1000)}:F>`, 
                     inline: false 
+                });
+            }
+
+            return interaction.editReply({ embeds: [embed] });
+        }
+    },
+    {
+        data: new SlashCommandBuilder()
+            .setName('softban')
+            .setDescription('Softban a player by banning and immediately unbanning them')
+            .addStringOption(opt => opt
+                .setName('target')
+                .setDescription('Minecraft username or @Discord user')
+                .setRequired(true)
+            )
+            .addStringOption(opt => opt
+                .setName('reason')
+                .setDescription('Reason for the softban')
+                .setRequired(true)
+            )
+            .addStringOption(opt => opt
+                .setName('platform')
+                .setDescription('Platform (if softbanning by username)')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'Java', value: 'java' },
+                    { name: 'Bedrock', value: 'bedrock' }
+                )
+            ),
+
+        async execute(interaction, client) {
+            if (!isStaff(interaction.member)) {
+                return interaction.reply({
+                    content: 'You do not have permission to use this command.',
+                    flags: 64
+                });
+            }
+
+            await interaction.deferReply();
+
+            const target = interaction.options.getString('target');
+            const reason = interaction.options.getString('reason');
+            const platformOption = interaction.options.getString('platform') || 'java';
+
+            let primaryProfile = null;
+            let discordId = null;
+            let discordUser = null;
+            let linkedAccounts = [];
+
+            const mentionMatch = target.match(/<@!?(\d+)>/);
+            if (mentionMatch) {
+                discordId = mentionMatch[1];
+
+                try {
+                    discordUser = await client.users.fetch(discordId);
+                } catch (e) {
+                    return interaction.editReply({ content: 'Could not find that Discord user.' });
+                }
+
+                linkedAccounts = await getAllLinkedAccounts(discordId);
+
+                if (linkedAccounts.length > 0) {
+                    const primary = linkedAccounts[0];
+                    const freshProfile = await lookupMcProfile(primary.minecraftUsername, primary.platform);
+
+                    if (freshProfile) {
+                        primaryProfile = {
+                            uuid: normalizeUuid(freshProfile.uuid),
+                            name: freshProfile.name,
+                            platform: freshProfile.platform
+                        };
+                    } else {
+                        primaryProfile = {
+                            uuid: normalizeUuid(primary.uuid),
+                            name: primary.minecraftUsername,
+                            platform: primary.platform
+                        };
+                    }
+                }
+            } else {
+                primaryProfile = await lookupMcProfile(target, platformOption);
+
+                if (!primaryProfile && platformOption === 'java') {
+                    primaryProfile = await lookupMcProfile(target, 'bedrock');
+                }
+
+                if (!primaryProfile) {
+                    return interaction.editReply({
+                        content: `Could not find Minecraft account: **${target}**\n\nTry specifying the platform with the \`platform\` option.`
+                    });
+                }
+
+                primaryProfile.uuid = normalizeUuid(primaryProfile.uuid);
+
+                linkedAccounts = await getAllLinkedAccounts(null, primaryProfile.uuid);
+
+                if (linkedAccounts.length > 0) {
+                    discordId = linkedAccounts[0].discordId;
+                    try {
+                        discordUser = await client.users.fetch(discordId);
+                    } catch (e) {
+                        // Continue without the user object
+                    }
+                }
+            }
+
+            if (!discordId) {
+                return interaction.editReply({
+                    content: 'Softban requires a Discord user. Please target a Discord mention or a linked Minecraft account.'
+                });
+            }
+
+            const caseNumber = await getNextCaseNumber('ban').catch(() => Date.now());
+            const { randomUUID } = require('crypto');
+            const softban = new ServerBan({
+                _id: randomUUID(),
+                caseNumber,
+                primaryUuid: primaryProfile?.uuid || discordId,
+                primaryUsername: primaryProfile?.name || discordUser?.tag || target,
+                primaryPlatform: primaryProfile?.platform || 'java',
+                bannedUuids: [
+                    normalizeUuid(primaryProfile?.uuid || discordId),
+                    ...linkedAccounts.map(account => normalizeUuid(account.uuid))
+                ].filter((uuid, index, list) => uuid && list.indexOf(uuid) === index),
+                discordId,
+                discordTag: discordUser?.tag || null,
+                reason,
+                duration: 'softban',
+                isPermanent: false,
+                expiresAt: new Date(),
+                staffId: interaction.user.id,
+                staffTag: interaction.user.tag,
+                active: false,
+                bannedAt: new Date(),
+                unbannedAt: new Date(),
+                unbannedBy: interaction.user.id,
+                unbannedByTag: interaction.user.tag,
+                unbanReason: `Softban: ${reason}`
+            });
+
+            try {
+                await interaction.guild.members.ban(discordId, {
+                    deleteMessageSeconds: 60 * 60 * 24 * 7,
+                    reason: `Softban: ${reason}`
+                });
+                await interaction.guild.members.unban(discordId, `Softban: ${reason}`);
+            } catch (error) {
+                console.error('Error executing softban:', error);
+                return interaction.editReply({ content: `Failed to softban the user: ${error.message}` });
+            }
+
+            await softban.save();
+
+            if (discordId) {
+                await sendSoftbanDm(client, discordId, {
+                    reason,
+                    caseNumber: softban.caseNumber
+                }).catch(() => {});
+            }
+
+            await logSoftban(client, softban, linkedAccounts);
+
+            const embed = new EmbedBuilder()
+                .setTitle('Player Softbanned')
+                .setColor(0xff4444)
+                .addFields(
+                    { name: 'Player', value: `**${softban.primaryUsername}**`, inline: true },
+                    { name: 'Platform', value: softban.primaryPlatform === 'bedrock' ? 'Bedrock' : 'Java', inline: true },
+                    { name: 'Reason', value: reason, inline: false }
+                )
+                .setFooter({ text: `Case #${caseNumber || 'N/A'} | Softbanned by ${interaction.user.tag}` })
+                .setTimestamp();
+
+            if (discordUser) {
+                embed.addFields({ name: 'Discord', value: `${discordUser.tag} (<@${discordId}>)`, inline: false });
+            }
+
+            if (linkedAccounts.length > 1) {
+                embed.addFields({
+                    name: `Linked Accounts`,
+                    value: linkedAccounts.map(a => `• ${a.minecraftUsername} (${a.platform})`).join('\n'),
+                    inline: false
                 });
             }
 
