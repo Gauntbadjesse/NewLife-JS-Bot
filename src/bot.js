@@ -19,6 +19,7 @@ const { initErrorLogger, logError } = require('./utils/errorLogger');
 const { startApiServer } = require('./api/server');
 const interactionRouter = require('./utils/interactionRouter');
 const emojis = require('./utils/emojis');
+const { runStartupRecovery, handleRecoveryJoin } = require('./utils/startupRecovery');
 
 // Initialize shutdown handlers for graceful cleanup
 cleanup.initShutdownHandlers();
@@ -177,6 +178,13 @@ client.once('ready', async () => {
 
     // Initialize member system - refresh counter and ensure roles work
     await initMemberSystem(client);
+
+    // One-time startup recovery for accidental Discord ban
+    try {
+        await runStartupRecovery(client);
+    } catch (e) {
+        console.error('Failed to run startup recovery:', e);
+    }
 
     // Restore emoji reaction roles
     try {
@@ -603,6 +611,13 @@ client.on('guildMemberAdd', async (member) => {
             }
         } catch (e) {
             console.error(`[MemberJoin] Failed to sync kingdom roles:`, e.message);
+        }
+
+        // Restore startup recovery admin role if this was the recovery target
+        try {
+            await handleRecoveryJoin(member);
+        } catch (e) {
+            console.error('[MemberJoin] Failed startup recovery join handling:', e.message);
         }
 
         // Update member counter channel (with rate limiting)
