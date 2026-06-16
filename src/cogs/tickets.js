@@ -256,7 +256,14 @@ async function generateRichTranscript(channel) {
 
         // Process reactions
         const reactions = msg.reactions?.cache?.map(r => ({
-            emoji: r.emoji.name,
+            emoji: {
+                name: r.emoji.name || null,
+                id: r.emoji.id || null,
+                animated: Boolean(r.emoji.animated),
+                display: r.emoji.id
+                    ? `<${r.emoji.animated ? 'a' : ''}:${r.emoji.name}:${r.emoji.id}>`
+                    : r.emoji.name || ''
+            },
             count: r.count
         })) || [];
 
@@ -775,9 +782,27 @@ async function closeTicket(channel, closedBy, reason, client) {
             inline: false 
         });
 
+        const transcriptActions = [];
+        if (transcriptUrl) {
+            transcriptActions.push(
+                new ButtonBuilder()
+                    .setLabel('Text Transcript')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(transcriptUrl)
+            );
+        }
+        transcriptActions.push(
+            new ButtonBuilder()
+                .setLabel('View Web Transcript')
+                .setStyle(ButtonStyle.Link)
+                .setURL(`https://staff.newlifesmp.com/viewer/transcript/${channel.id}`)
+        );
+
+        const transcriptComponents = [new ActionRowBuilder().addComponents(transcriptActions)];
+
         // Send to transcript channel
         if (transcriptChannel) {
-            await transcriptChannel.send({ embeds: [closeEmbed] });
+            await transcriptChannel.send({ embeds: [closeEmbed], components: transcriptComponents });
         }
 
         // DM the ticket owner with transcript link

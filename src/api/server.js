@@ -2319,6 +2319,7 @@ const transcriptStyles = `
   margin-bottom:28px
 }
 .transcript-header h2{margin:0 0 20px 0;color:var(--text-primary);font-size:1.3rem;font-weight:700}
+.ticket-name{color:var(--secondary-light);font-weight:700}
 
 .transcript-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
 .transcript-meta-item{
@@ -2379,6 +2380,20 @@ const transcriptStyles = `
   word-wrap:break-word;
   white-space:pre-wrap
 }
+.inline-emoji{
+  width:20px;
+  height:20px;
+  vertical-align:-4px;
+  display:inline-block;
+  margin:0 1px;
+  object-fit:contain
+}
+.reaction-emoji{
+  width:16px;
+  height:16px;
+  display:inline-block;
+  object-fit:contain
+}
 .message-text a{color:var(--primary-light);text-decoration:none}
 .message-text a:hover{text-decoration:underline;color:var(--secondary)}
 
@@ -2414,6 +2429,31 @@ const transcriptStyles = `
 .embed-thumbnail{width:80px;height:80px;border-radius:var(--radius-sm);margin:12px 16px 0 0;object-fit:cover}
 .embed-image{max-width:100%;border-radius:var(--radius-sm);margin-top:16px}
 .embed-footer{margin-top:12px;font-size:0.75rem;color:var(--text-muted)}
+
+/* Reactions */
+.message-reactions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px
+}
+.reaction-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--border-light);
+  color:var(--text-secondary);
+  font-size:0.8rem;
+  font-weight:600
+}
+.reaction-pill img{
+  width:18px;
+  height:18px;
+  object-fit:contain
+}
 
 /* Reply */
 .message-reply{
@@ -2578,7 +2618,7 @@ app.get('/viewer/transcripts', staffAuth, async (req, res) => {
         
         let rows = transcripts.map(t => `<tr>
             <td>${getTypeTag(t.ticketType)}</td>
-            <td>${t.ticketName || '—'}</td>
+            <td class="ticket-name">${escapeHtml(t.ticketName || '—')}</td>
             <td>${t.ownerTag || '—'}</td>
             <td>${(t.closeReason || '').substring(0, 40)}${(t.closeReason || '').length > 40 ? '...' : ''}</td>
             <td>${t.messageCount || 0}</td>
@@ -2699,62 +2739,13 @@ ${getHeader('transcripts', req.session)}
                 const repliedMsg = transcript.messages.find(m => m.id === msg.replyTo);
                 if (repliedMsg) {
                     const replyContent = (repliedMsg.content || '[Embed or attachment]').substring(0, 50) + (repliedMsg.content?.length > 50 ? '...' : '');
-                    replyHtml = `<div class="message-reply">Replying to <strong>${repliedMsg.authorTag}</strong>: ${escapeHtml(replyContent)}</div>`;
+                    replyHtml = `<div class="message-reply">Replying to <strong>${escapeHtml(repliedMsg.authorTag)}</strong>: ${formatMessageContent(replyContent)}</div>`;
                 }
             }
             
-            // Build attachments
-            let attachmentsHtml = '';
-            if (msg.attachments && msg.attachments.length > 0) {
-                for (const att of msg.attachments) {
-                    if (att.contentType?.startsWith('image/')) {
-                        attachmentsHtml += `<div class="message-attachment"><img src="${att.url}" alt="${att.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><a href="${att.url}" target="_blank" style="display:none">${att.name}</a></div>`;
-                    } else {
-                        attachmentsHtml += `<div class="message-attachment"><a href="${att.url}" target="_blank">${att.name || 'Attachment'}</a></div>`;
-                    }
-                }
-            }
-            
-            // Build embeds
-            let embedsHtml = '';
-            if (msg.embeds && msg.embeds.length > 0) {
-                for (const embed of msg.embeds) {
-                    const colorBar = embed.color ? `style="background:#${embed.color.toString(16).padStart(6, '0')}"` : 'style="background:#202225"';
-                    
-                    let fieldsHtml = '';
-                    if (embed.fields && embed.fields.length > 0) {
-                        fieldsHtml = '<div class="embed-fields">';
-                        for (const field of embed.fields) {
-                            fieldsHtml += `<div class="embed-field${field.inline ? '' : ' full'}">
-                                <div class="embed-field-name">${escapeHtml(field.name)}</div>
-                                <div class="embed-field-value">${escapeHtml(field.value)}</div>
-                            </div>`;
-                        }
-                        fieldsHtml += '</div>';
-                    }
-                    
-                    let authorHtml = '';
-                    if (embed.author) {
-                        authorHtml = `<div class="embed-author">
-                            ${embed.author.iconUrl ? `<img class="embed-author-icon" src="${embed.author.iconUrl}">` : ''}
-                            <span class="embed-author-name">${escapeHtml(embed.author.name)}</span>
-                        </div>`;
-                    }
-                    
-                    embedsHtml += `<div class="message-embed">
-                        <div class="embed-color-bar" ${colorBar}></div>
-                        <div class="embed-content">
-                            ${authorHtml}
-                            ${embed.title ? `<div class="embed-title">${escapeHtml(embed.title)}</div>` : ''}
-                            ${embed.description ? `<div class="embed-description">${escapeHtml(embed.description)}</div>` : ''}
-                            ${fieldsHtml}
-                            ${embed.image ? `<img class="embed-image" src="${embed.image}" onerror="this.style.display='none'">` : ''}
-                            ${embed.footer ? `<div class="embed-footer">${escapeHtml(embed.footer)}</div>` : ''}
-                        </div>
-                        ${embed.thumbnail ? `<img class="embed-thumbnail" src="${embed.thumbnail}" onerror="this.style.display='none'">` : ''}
-                    </div>`;
-                }
-            }
+            const attachmentsHtml = renderTranscriptAttachments(msg.attachments || []);
+            const embedsHtml = renderTranscriptEmbeds(msg.embeds || []);
+            const reactionsHtml = renderTranscriptReactions(msg.reactions || []);
             
             // Render message
             if (isContinuation && !msg.replyTo) {
@@ -2763,6 +2754,7 @@ ${getHeader('transcripts', req.session)}
                     ${msg.content ? `<div class="message-text">${formatMessageContent(msg.content)}</div>` : ''}
                     ${attachmentsHtml}
                     ${embedsHtml}
+                    ${reactionsHtml}
                 </div>`;
             } else {
                 messagesHtml += `<div class="message-group">
@@ -2776,6 +2768,7 @@ ${getHeader('transcripts', req.session)}
                         ${msg.content ? `<div class="message-text">${formatMessageContent(msg.content)}</div>` : ''}
                         ${attachmentsHtml}
                         ${embedsHtml}
+                        ${reactionsHtml}
                     </div>
                 </div>`;
             }
@@ -2813,7 +2806,7 @@ ${getHeader('transcripts', req.session)}
     
     <div class="transcript-container">
         <div class="transcript-header">
-            <h2>${escapeHtml(transcript.ticketName)} <span class="ticket-type-tag ${typeTagClass}">${transcript.ticketType || 'Unknown'}</span></h2>
+            <h2><span class="ticket-name">${escapeHtml(transcript.ticketName)}</span> <span class="ticket-type-tag ${typeTagClass}">${transcript.ticketType || 'Unknown'}</span></h2>
             <div class="transcript-meta">
                 <div class="transcript-meta-item"><label>Owner</label><span>${escapeHtml(transcript.ownerTag)}</span></div>
                 <div class="transcript-meta-item"><label>Closed By</label><span>${escapeHtml(transcript.closedByTag || 'Unknown')}</span></div>
@@ -3238,7 +3231,7 @@ app.get('/viewer/my-transcripts', userAuth, async (req, res) => {
             
             for (const t of transcripts) {
                 transcriptsHtml += `<div class="case-detail" style="margin-bottom:16px">
-                    <h2>${getTypeTag(t.ticketType)} ${escapeHtml(t.ticketName || 'Untitled')}</h2>
+                    <h2>${getTypeTag(t.ticketType)} <span class="ticket-name">${escapeHtml(t.ticketName || 'Untitled')}</span></h2>
                     <div class="info-grid">
                         <div class="info-item"><label>Closed</label><span>${t.closedAt ? formatCentralDateTime(t.closedAt) : '—'}</span></div>
                         <div class="info-item"><label>Closed By</label><span>${escapeHtml(t.closedByTag || 'Unknown')}</span></div>
@@ -3316,60 +3309,13 @@ ${getUserHeader('my-transcripts', req.session)}
                 const repliedMsg = transcript.messages.find(m => m.id === msg.replyTo);
                 if (repliedMsg) {
                     const replyContent = (repliedMsg.content || '[Embed or attachment]').substring(0, 50) + (repliedMsg.content?.length > 50 ? '...' : '');
-                    replyHtml = `<div class="message-reply">Replying to <strong>${repliedMsg.authorTag}</strong>: ${escapeHtml(replyContent)}</div>`;
+                    replyHtml = `<div class="message-reply">Replying to <strong>${escapeHtml(repliedMsg.authorTag)}</strong>: ${formatMessageContent(replyContent)}</div>`;
                 }
             }
             
-            let attachmentsHtml = '';
-            if (msg.attachments && msg.attachments.length > 0) {
-                for (const att of msg.attachments) {
-                    if (att.contentType?.startsWith('image/')) {
-                        attachmentsHtml += `<div class="message-attachment"><img src="${att.url}" alt="${att.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><a href="${att.url}" target="_blank" style="display:none">${att.name}</a></div>`;
-                    } else {
-                        attachmentsHtml += `<div class="message-attachment"><a href="${att.url}" target="_blank">${att.name || 'Attachment'}</a></div>`;
-                    }
-                }
-            }
-            
-            let embedsHtml = '';
-            if (msg.embeds && msg.embeds.length > 0) {
-                for (const embed of msg.embeds) {
-                    const colorBar = embed.color ? `style="background:#${embed.color.toString(16).padStart(6, '0')}"` : 'style="background:#202225"';
-                    
-                    let fieldsHtml = '';
-                    if (embed.fields && embed.fields.length > 0) {
-                        fieldsHtml = '<div class="embed-fields">';
-                        for (const field of embed.fields) {
-                            fieldsHtml += `<div class="embed-field${field.inline ? '' : ' full'}">
-                                <div class="embed-field-name">${escapeHtml(field.name)}</div>
-                                <div class="embed-field-value">${escapeHtml(field.value)}</div>
-                            </div>`;
-                        }
-                        fieldsHtml += '</div>';
-                    }
-                    
-                    let authorHtml = '';
-                    if (embed.author) {
-                        authorHtml = `<div class="embed-author">
-                            ${embed.author.iconUrl ? `<img class="embed-author-icon" src="${embed.author.iconUrl}">` : ''}
-                            <span class="embed-author-name">${escapeHtml(embed.author.name)}</span>
-                        </div>`;
-                    }
-                    
-                    embedsHtml += `<div class="message-embed">
-                        <div class="embed-color-bar" ${colorBar}></div>
-                        <div class="embed-content">
-                            ${authorHtml}
-                            ${embed.title ? `<div class="embed-title">${escapeHtml(embed.title)}</div>` : ''}
-                            ${embed.description ? `<div class="embed-description">${escapeHtml(embed.description)}</div>` : ''}
-                            ${fieldsHtml}
-                            ${embed.image ? `<img class="embed-image" src="${embed.image}" onerror="this.style.display='none'">` : ''}
-                            ${embed.footer ? `<div class="embed-footer">${escapeHtml(embed.footer)}</div>` : ''}
-                        </div>
-                        ${embed.thumbnail ? `<img class="embed-thumbnail" src="${embed.thumbnail}" onerror="this.style.display='none'">` : ''}
-                    </div>`;
-                }
-            }
+            const attachmentsHtml = renderTranscriptAttachments(msg.attachments || []);
+            const embedsHtml = renderTranscriptEmbeds(msg.embeds || []);
+            const reactionsHtml = renderTranscriptReactions(msg.reactions || []);
             
             if (isContinuation && !msg.replyTo) {
                 messagesHtml += `<div class="continuation-message">
@@ -3377,6 +3323,7 @@ ${getUserHeader('my-transcripts', req.session)}
                     ${msg.content ? `<div class="message-text">${formatMessageContent(msg.content)}</div>` : ''}
                     ${attachmentsHtml}
                     ${embedsHtml}
+                    ${reactionsHtml}
                 </div>`;
             } else {
                 messagesHtml += `<div class="message-group">
@@ -3390,6 +3337,7 @@ ${getUserHeader('my-transcripts', req.session)}
                         ${msg.content ? `<div class="message-text">${formatMessageContent(msg.content)}</div>` : ''}
                         ${attachmentsHtml}
                         ${embedsHtml}
+                        ${reactionsHtml}
                     </div>
                 </div>`;
             }
@@ -3412,7 +3360,7 @@ ${getUserHeader('my-transcripts', req.session)}
     
     <div class="transcript-container">
         <div class="transcript-header">
-            <h2>${escapeHtml(transcript.ticketName)} <span class="ticket-type-tag ${typeTagClass}">${transcript.ticketType || 'Unknown'}</span></h2>
+            <h2><span class="ticket-name">${escapeHtml(transcript.ticketName)}</span> <span class="ticket-type-tag ${typeTagClass}">${transcript.ticketType || 'Unknown'}</span></h2>
             <div class="transcript-meta">
                 <div class="transcript-meta-item"><label>Closed By</label><span>${escapeHtml(transcript.closedByTag || 'Unknown')}</span></div>
                 <div class="transcript-meta-item"><label>Created</label><span>${transcript.createdAt ? formatCentralDateTime(transcript.createdAt) : '—'}</span></div>
@@ -3469,8 +3417,119 @@ function formatMessageContent(content) {
     formatted = formatted.replace(/&lt;#(\d+)&gt;/g, '<span style="background:#5865f233;color:#dee0fc;padding:0 2px;border-radius:3px">#channel</span>');
     // Discord role mentions
     formatted = formatted.replace(/&lt;@&amp;(\d+)&gt;/g, '<span style="background:#5865f233;color:#dee0fc;padding:0 2px;border-radius:3px">@role</span>');
+    // Custom emojis
+    formatted = formatted.replace(/&lt;(a?):([a-zA-Z0-9_]+):(\d+)&gt;/g, (_, animated, name, id) => {
+        const ext = animated ? 'gif' : 'png';
+        const alt = `:${name}:`;
+        return `<img class="inline-emoji" src="https://cdn.discordapp.com/emojis/${id}.${ext}?size=32&quality=lossless" alt="${alt}" title="${alt}">`;
+    });
     
     return formatted;
+}
+
+function renderTranscriptEmoji(emoji) {
+    if (!emoji) return '';
+    if (typeof emoji === 'string') {
+        const customMatch = emoji.match(/^<a?:([a-zA-Z0-9_]+):(\d+)>$/);
+        if (customMatch) {
+            const animated = emoji.startsWith('<a:');
+            const ext = animated ? 'gif' : 'png';
+            const alt = `:${customMatch[1]}:`;
+            return `<img class="reaction-emoji" src="https://cdn.discordapp.com/emojis/${customMatch[2]}.${ext}?size=32&quality=lossless" alt="${alt}" title="${alt}">`;
+        }
+        return escapeHtml(emoji);
+    }
+
+    if (emoji.id) {
+        const animated = Boolean(emoji.animated);
+        const ext = animated ? 'gif' : 'png';
+        const alt = emoji.name ? `:${emoji.name}:` : 'emoji';
+        return `<img class="reaction-emoji" src="https://cdn.discordapp.com/emojis/${emoji.id}.${ext}?size=32&quality=lossless" alt="${alt}" title="${alt}">`;
+    }
+
+    if (emoji.display) {
+        return escapeHtml(emoji.display);
+    }
+
+    return escapeHtml(emoji.name || '');
+}
+
+function renderTranscriptReactions(reactions = []) {
+    if (!reactions || reactions.length === 0) return '';
+
+    const items = reactions.map(reaction => {
+        const emojiHtml = renderTranscriptEmoji(reaction.emoji);
+        const label = `${reaction.count || 0}`;
+        return `<span class="reaction-pill">${emojiHtml}<span>${label}</span></span>`;
+    }).join('');
+
+    return `<div class="message-reactions">${items}</div>`;
+}
+
+function renderTranscriptAttachments(attachments = []) {
+    if (!attachments || attachments.length === 0) return '';
+
+    let html = '';
+    for (const att of attachments) {
+        const safeName = escapeHtml(att.name || 'Attachment');
+        const isImage = att.contentType?.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(att.url || '');
+        if (isImage) {
+            html += `<div class="message-attachment"><img src="${att.url}" alt="${safeName}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><a href="${att.url}" target="_blank" style="display:none">${safeName}</a></div>`;
+        } else {
+            html += `<div class="message-attachment"><a href="${att.url}" target="_blank">${safeName}</a></div>`;
+        }
+    }
+    return html;
+}
+
+function renderTranscriptEmbeds(embeds = []) {
+    if (!embeds || embeds.length === 0) return '';
+
+    let html = '';
+    for (const embed of embeds) {
+        const colorValue = typeof embed.color === 'number'
+            ? embed.color.toString(16).padStart(6, '0')
+            : '202225';
+        const colorBar = `style="background:#${colorValue}"`;
+
+        let fieldsHtml = '';
+        if (embed.fields && embed.fields.length > 0) {
+            fieldsHtml = '<div class="embed-fields">';
+            for (const field of embed.fields) {
+                fieldsHtml += `<div class="embed-field${field.inline ? '' : ' full'}">
+                    <div class="embed-field-name">${escapeHtml(field.name)}</div>
+                    <div class="embed-field-value">${escapeHtml(field.value)}</div>
+                </div>`;
+            }
+            fieldsHtml += '</div>';
+        }
+
+        let authorHtml = '';
+        if (embed.author) {
+            authorHtml = `<div class="embed-author">
+                ${embed.author.iconUrl ? `<img class="embed-author-icon" src="${embed.author.iconUrl}">` : ''}
+                <span class="embed-author-name">${escapeHtml(embed.author.name)}</span>
+            </div>`;
+        }
+
+        const imageHtml = embed.image ? `<img class="embed-image" src="${embed.image}" onerror="this.style.display='none'">` : '';
+        const thumbnailHtml = embed.thumbnail ? `<img class="embed-thumbnail" src="${embed.thumbnail}" onerror="this.style.display='none'">` : '';
+
+        html += `<div class="message-embed">
+            <div class="embed-color-bar" ${colorBar}></div>
+            <div class="embed-content">
+                ${authorHtml}
+                ${embed.title ? `<div class="embed-title">${escapeHtml(embed.title)}</div>` : ''}
+                ${embed.description ? `<div class="embed-description">${escapeHtml(embed.description)}</div>` : ''}
+                ${fieldsHtml}
+                ${imageHtml}
+                ${embed.footer ? `<div class="embed-footer">${escapeHtml(embed.footer)}</div>` : ''}
+            </div>
+            ${thumbnailHtml}
+        </div>`;
+    }
+
+    return html;
 }
 
 // =====================================================

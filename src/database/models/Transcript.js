@@ -37,7 +37,12 @@ const messageSchema = new mongoose.Schema({
         }
     }],
     reactions: [{
-        emoji: String,
+        emoji: {
+            name: String,
+            id: String,
+            animated: Boolean,
+            display: String
+        },
         count: Number
     }],
     replyTo: String // Message ID being replied to

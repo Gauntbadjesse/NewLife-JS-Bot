@@ -465,7 +465,10 @@ client.on('messageCreate', async (message) => {
             channel: message.channel.name,
             content: message.content
         });
-        await message.reply({ content: `${emojis.CROSS} An error occurred while executing this command.`, allowedMentions: { repliedUser: false } });
+    } finally {
+        if (message.deletable) {
+            await message.delete().catch(() => {});
+        }
     }
 });
 
