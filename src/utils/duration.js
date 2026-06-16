@@ -90,10 +90,10 @@ function formatDuration(ms, options = {}) {
     const weeks = Math.floor(days / 7);
     
     if (short) {
-        if (weeks > 0 && !precise) return `${weeks}w ${days % 7}d`;
-        if (days > 0 && !precise) return `${days}d ${hours % 24}h`;
-        if (hours > 0 && !precise) return `${hours}h ${minutes % 60}m`;
-        if (minutes > 0 && !precise) return `${minutes}m ${seconds % 60}s`;
+        if (weeks > 0 && !precise) return days % 7 > 0 ? `${weeks}w ${days % 7}d` : `${weeks}w`;
+        if (days > 0 && !precise) return hours % 24 > 0 ? `${days}d ${hours % 24}h` : `${days}d`;
+        if (hours > 0 && !precise) return minutes % 60 > 0 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+        if (minutes > 0 && !precise) return seconds % 60 > 0 ? `${minutes}m ${seconds % 60}s` : `${minutes}m`;
         return `${seconds}s`;
     }
     

@@ -5,7 +5,9 @@
 
 const { randomUUID } = require('crypto');
 const Ban = require('../database/models/Ban');
+const Mute = require('../database/models/Mute');
 const Warning = require('../database/models/Warning');
+const LinkedAccount = require('../database/models/LinkedAccount');
 const { getNextCaseNumber } = require('../database/caseCounter');
 const {
     createErrorEmbed,
@@ -17,10 +19,9 @@ const {
     createHistoryEmbed
 } = require('../utils/embeds');
 const { isAdmin, isModerator } = require('../utils/permissions');
-const { testProxyConnection } = require('../utils/rcon');
-const { parseDuration } = require('../utils/duration');
+const { testProxyConnection, mutePlayer, unmutePlayer } = require('../utils/rcon');
+const { parseDurationFull } = require('../utils/duration');
 
-// parseDuration now imported from utils/duration.js
 // Default 10 minutes if not provided
 const DEFAULT_MUTE_DURATION = 10 * 60 * 1000;
 
@@ -239,10 +240,10 @@ const commands = {
     },
 
     // !mute <user> [duration] [reason]
-    // Uses Discord timeout (milliseconds). Duration formats: 10m,1h,2d. Default 10m.
+    // Uses Minecraft-side mute enforcement. Duration formats: 10m,1h,2d,1w,perm. Default 10m.
     mute: {
         name: 'mute',
-        description: 'Timeout a member (Moderator+)',
+        description: 'Mute a linked Minecraft player (Moderator+)',
         usage: '!mute <user> [duration] [reason]',
         async execute(message, args, client) {
             if (!isModerator(message.member)) {
@@ -254,50 +255,71 @@ const commands = {
             const member = await resolveMember(message, args[0]);
             if (!member) return message.reply({ embeds: [createErrorEmbed('Not Found', 'Member not found.')], allowedMentions: { repliedUser: false } });
 
-            // optional duration
-            let durationMs = parseDuration(args[1], DEFAULT_MUTE_DURATION);
-            let reason = '';
-            if (args.length >= 3) {
-                // args[1] was duration, rest is reason
-                reason = args.slice(2).join(' ');
-            } else {
-                reason = args.slice(1).join(' ') || 'Muted by staff';
+            const linkedAccounts = await LinkedAccount.find({ discordId: member.id });
+            if (linkedAccounts.length === 0) {
+                return message.reply({ embeds: [createErrorEmbed('Not Linked', 'That member does not have a linked Minecraft account, so this mute cannot be applied in-game.')], allowedMentions: { repliedUser: false } });
             }
 
-            // cap to Discord timeout max (28 days)
-            const MAX = 28 * 24 * 60 * 60 * 1000;
-            if (durationMs > MAX) durationMs = MAX;
+            const durationParsed = parseDurationFull(args[1]);
+            let durationMs = DEFAULT_MUTE_DURATION;
+            let reasonStartIndex = 1;
+            let durationDisplay = '10m';
+
+            if (durationParsed) {
+                durationMs = durationParsed.ms;
+                durationDisplay = durationParsed.display;
+                reasonStartIndex = 2;
+            }
+
+            const reason = args.length > reasonStartIndex ? args.slice(reasonStartIndex).join(' ') : 'Muted by staff';
+            const primaryLink = linkedAccounts.find(acc => acc.primary) || linkedAccounts[0];
+            const targetName = primaryLink.minecraftUsername;
+            const targetProfile = {
+                uuid: primaryLink.uuid,
+                name: primaryLink.minecraftUsername,
+                platform: primaryLink.platform
+            };
+
+            const muteTargets = linkedAccounts.map(acc => ({
+                uuid: acc.uuid,
+                name: acc.minecraftUsername,
+                platform: acc.platform
+            }));
 
             const caseId = randomUUID();
             const caseNumber = await getNextCaseNumber();
 
             try {
-                await member.timeout(durationMs, `${message.author.tag}: ${reason}`);
+                const muteResults = [];
+                for (const target of muteTargets) {
+                    const result = await mutePlayer(target.name, durationMs);
+                    muteResults.push({ target, result });
+                }
 
-                // Create a warning record to represent the mute so it can be pardoned
-                const warning = new Warning({
+                const mute = new Mute({
                     _id: caseId,
                     caseNumber,
-                    uuid: member.id,
-                    playerName: member.user.tag,
-                    staffUuid: message.author.id,
+                    discordId: member.id,
+                    discordTag: member.user.tag,
+                    uuid: targetProfile.uuid,
+                    playerName: targetProfile.name,
+                    platform: targetProfile.platform,
+                    staffId: message.author.id,
                     staffName: message.author.tag,
-                    reason: `Mute: ${reason}`,
+                    reason,
+                    duration: durationParsed ? durationDisplay : '10m',
+                    durationMs,
+                    expiresAt: durationMs === null ? null : new Date(Date.now() + durationMs),
                     createdAt: new Date(),
                     active: true
                 });
-                await warning.save();
+                await mute.save();
 
-                // DM the user
-                try {
-                    const u = await client.users.fetch(member.id).catch(() => null);
-                    if (u) await u.send({ embeds: [createWarningDMEmbed(warning)] }).catch(() => null);
-                } catch (e) { /* ignore DM failures */ }
-
-                await message.channel.send(`**Case #${warning.caseNumber} - ${member.user.tag}** (id: ${warning._id}) has been muted for ${Math.round(durationMs/60000)} minute(s).`);
+                const enforcement = muteResults.map(entry => `**${entry.target.name}**: ${entry.result.success ? 'Muted' : 'Failed'}${entry.result.success ? '' : ` (${entry.result.response})`}`).join('\n');
+                console.log(`[Moderation] Muted ${targetName} via Minecraft bridge. ${enforcement}`);
             } catch (error) {
                 console.error('Error timing out member:', error);
-                return message.reply({ embeds: [createErrorEmbed('Error', 'Failed to timeout (mute) the user.')], allowedMentions: { repliedUser: false } });
+                return message.reply({ embeds: [createErrorEmbed('Error', 'Failed to mute the user in-game.')], allowedMentions: { repliedUser: false } });
             } finally {
                 try { await message.delete(); } catch (e) { /* ignore */ }
             }
@@ -307,7 +329,7 @@ const commands = {
     // !unmute <user>
     unmute: {
         name: 'unmute',
-        description: 'Remove timeout from a member (Moderator+)',
+        description: 'Remove Minecraft mute from a member (Moderator+)',
         usage: '!unmute <user>',
         async execute(message, args, client) {
             if (!isModerator(message.member)) {
@@ -323,27 +345,35 @@ const commands = {
             try {
                 if (!member) return message.reply({ embeds: [createErrorEmbed('Not Found', 'Member not found.')], allowedMentions: { repliedUser: false } });
 
-                await member.timeout(null, `Unmuted by ${message.author.tag}`);
-
-                // Mark latest mute-warning as removed (reason starts with 'Mute:')
-                const warn = await Warning.findOne({ uuid: member.id, active: true, reason: { $regex: '^Mute:' } }).sort({ createdAt: -1 });
-                if (warn) {
-                    warn.active = false;
-                    warn.removedBy = message.author.tag;
-                    warn.removedAt = new Date();
-                    await warn.save();
+                const linkedAccounts = await LinkedAccount.find({ discordId: member.id });
+                if (linkedAccounts.length === 0) {
+                    return message.reply({ embeds: [createErrorEmbed('Not Linked', 'That member does not have a linked Minecraft account, so this mute cannot be removed in-game.')], allowedMentions: { repliedUser: false } });
                 }
 
-                // DM the user
-                try {
-                    const u = await client.users.fetch(member.id).catch(() => null);
-                    if (u && warn) await u.send({ embeds: [createWarningDMEmbed(warn)] }).catch(() => null);
-                } catch (e) { /* ignore */ }
+                const primaryLink = linkedAccounts.find(acc => acc.primary) || linkedAccounts[0];
+                const targetName = primaryLink.minecraftUsername;
 
-                await message.channel.send(`**Unmute - ${member.user.tag}** (performed by ${message.author.tag}).`);
+                const muteRecords = await Mute.find({
+                    discordId: member.id,
+                    active: true
+                }).sort({ createdAt: -1 });
+
+                for (const muteRecord of muteRecords) {
+                    muteRecord.active = false;
+                    muteRecord.unmutedAt = new Date();
+                    muteRecord.unmutedBy = message.author.id;
+                    muteRecord.unmutedByTag = message.author.tag;
+                    await muteRecord.save();
+                }
+
+                for (const account of linkedAccounts) {
+                    await unmutePlayer(account.minecraftUsername);
+                }
+
+                console.log(`[Moderation] Unmuted ${targetName} via Minecraft bridge by ${message.author.tag}.`);
             } catch (error) {
-                console.error('Error removing timeout from member:', error);
-                return message.reply({ embeds: [createErrorEmbed('Error', 'Failed to unmute the user.')], allowedMentions: { repliedUser: false } });
+                console.error('Error removing Minecraft mute from member:', error);
+                return message.reply({ embeds: [createErrorEmbed('Error', 'Failed to unmute the user in-game.')], allowedMentions: { repliedUser: false } });
             } finally {
                 try { await message.delete(); } catch (e) { /* ignore */ }
             }

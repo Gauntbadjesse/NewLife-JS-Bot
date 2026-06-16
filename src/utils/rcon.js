@@ -6,6 +6,9 @@
 
 const { Rcon } = require('rcon-client');
 
+const LP_PREFIX = process.env.LP_COMMAND_PREFIX || 'lp';
+const MUTE_GROUP_NAME = process.env.MUTE_GROUP_NAME || 'muted';
+
 // Persistent connection state
 let rconConnection = null;
 let isConnecting = false;
@@ -127,6 +130,35 @@ async function executeRcon(command) {
 }
 
 /**
+ * Convert milliseconds into a LuckPerms-friendly duration string.
+ * Examples: 1w2d, 3h30m, 10m
+ */
+function formatLuckPermsDuration(ms) {
+    if (ms === null || ms === undefined) return null;
+    const totalSeconds = Math.max(1, Math.floor(ms / 1000));
+    const units = [
+        ['w', 7 * 24 * 60 * 60],
+        ['d', 24 * 60 * 60],
+        ['h', 60 * 60],
+        ['m', 60],
+        ['s', 1]
+    ];
+
+    let remaining = totalSeconds;
+    const parts = [];
+
+    for (const [suffix, size] of units) {
+        const value = Math.floor(remaining / size);
+        if (value > 0) {
+            parts.push(`${value}${suffix}`);
+            remaining -= value * size;
+        }
+    }
+
+    return parts.join('') || '1s';
+}
+
+/**
  * Warn a player via RCON
  * @param {string} playerName - The player to warn
  * @param {string} reason - The warning reason
@@ -138,6 +170,29 @@ async function warnPlayer(playerName, reason) {
         success: false,
         response: 'RCON warn disabled: warnings are stored in the database only'
     };
+}
+
+/**
+ * Apply a Minecraft mute using LuckPerms group membership.
+ * The server must have a `muted` group (configurable via MUTE_GROUP_NAME)
+ * that blocks chat through its permission setup.
+ */
+async function mutePlayer(playerName, durationMs = null) {
+    const safePlayerName = String(playerName).trim();
+    const duration = formatLuckPermsDuration(durationMs);
+    const command = duration
+        ? `${LP_PREFIX} user ${safePlayerName} parent addtemp ${MUTE_GROUP_NAME} ${duration}`
+        : `${LP_PREFIX} user ${safePlayerName} parent add ${MUTE_GROUP_NAME}`;
+
+    return executeRcon(command);
+}
+
+/**
+ * Remove a Minecraft mute using LuckPerms group membership.
+ */
+async function unmutePlayer(playerName) {
+    const safePlayerName = String(playerName).trim();
+    return executeRcon(`${LP_PREFIX} user ${safePlayerName} parent remove ${MUTE_GROUP_NAME}`);
 }
 
 /**
@@ -259,8 +314,11 @@ module.exports = {
     warnPlayer,
     banPlayer,
     unbanPlayer,
+    mutePlayer,
+    unmutePlayer,
     testConnection,
     executeProxyRcon,
     kickFromProxy,
-    testProxyConnection
+    testProxyConnection,
+    formatLuckPermsDuration
 };

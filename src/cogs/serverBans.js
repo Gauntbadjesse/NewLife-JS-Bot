@@ -12,9 +12,9 @@ const Warning = require('../database/models/Warning');
 const Mute = require('../database/models/Mute');
 const { getNextCaseNumber } = require('../database/caseCounter');
 const { isStaff, isAdmin, isModerator } = require('../utils/permissions');
-const { banPlayer, unbanPlayer, kickFromProxy } = require('../utils/rcon');
+const { banPlayer, unbanPlayer, kickFromProxy, mutePlayer, unmutePlayer } = require('../utils/rcon');
 const { lookupMcProfile } = require('../utils/minecraft');
-const { parseDuration } = require('../utils/duration');
+const { parseDurationFull } = require('../utils/duration');
 const { getEmbedColor } = require('../utils/embeds');
 
 // Environment config
@@ -124,6 +124,24 @@ async function applyMinecraftUnban(targets) {
     const results = [];
     for (const target of targets) {
         const result = await unbanPlayer(target.name);
+        results.push({ target, result });
+    }
+    return results;
+}
+
+async function applyMinecraftMute(targets, durationMs) {
+    const results = [];
+    for (const target of targets) {
+        const result = await mutePlayer(target.name, durationMs);
+        results.push({ target, result });
+    }
+    return results;
+}
+
+async function applyMinecraftUnmute(targets) {
+    const results = [];
+    for (const target of targets) {
+        const result = await unmutePlayer(target.name);
         results.push({ target, result });
     }
     return results;
@@ -311,11 +329,15 @@ async function logWarning(client, warning, linkedAccounts = []) {
             severe: 0xFF4444
         };
         
+        const targetLabel = warning.discordId
+            ? `<@${warning.discordId}>${warning.discordTag ? ` (${warning.discordTag})` : ''}`
+            : warning.playerName || 'Unknown';
+
         const embed = new EmbedBuilder()
             .setTitle(`Player Warned`)
             .setColor(severityColors[warning.severity] || 0xFFA500)
             .addFields(
-                { name: 'Discord User', value: `<@${warning.discordId}> (${warning.discordTag})`, inline: true },
+                { name: 'Target', value: targetLabel, inline: true },
                 { name: 'Warned By', value: `<@${warning.staffId}>`, inline: true },
                 { name: 'Severity', value: warning.severity.charAt(0).toUpperCase() + warning.severity.slice(1), inline: true },
                 { name: 'Category', value: warning.category.charAt(0).toUpperCase() + warning.category.slice(1), inline: true },
@@ -340,6 +362,91 @@ async function logWarning(client, warning, linkedAccounts = []) {
         await channel.send({ embeds: [embed] });
     } catch (e) {
         console.error('Failed to log warning:', e);
+    }
+}
+
+async function logMute(client, mute, linkedAccounts = []) {
+    if (!LOG_CHANNEL_ID) return;
+
+    try {
+        const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+        if (!channel) return;
+
+        const targetLabel = mute.discordId
+            ? `<@${mute.discordId}>${mute.discordTag ? ` (${mute.discordTag})` : ''}`
+            : mute.playerName || 'Unknown';
+
+        const embed = new EmbedBuilder()
+            .setTitle('Player Muted')
+            .setColor(0xFF4444)
+            .addFields(
+                { name: 'Target', value: targetLabel, inline: true },
+                { name: 'Muted By', value: `<@${mute.staffId}>`, inline: true },
+                { name: 'Duration', value: mute.duration || 'Permanent', inline: true },
+                { name: 'Reason', value: mute.reason, inline: false }
+            )
+            .setFooter({ text: `Case #${mute.caseNumber || 'N/A'}` })
+            .setTimestamp();
+
+        if (mute.playerName) {
+            embed.addFields({ name: 'Minecraft', value: `**${mute.playerName}** (${mute.platform || 'java'})`, inline: true });
+        }
+
+        if (mute.expiresAt) {
+            embed.addFields({ name: 'Expires', value: `<t:${Math.floor(new Date(mute.expiresAt).getTime() / 1000)}:R>`, inline: true });
+        }
+
+        if (linkedAccounts.length > 1) {
+            embed.addFields({
+                name: `Linked Accounts (${linkedAccounts.length})`,
+                value: linkedAccounts.map(a => `• ${a.minecraftUsername} (${a.platform})`).join('\n'),
+                inline: false
+            });
+        }
+
+        await channel.send({ embeds: [embed] });
+    } catch (e) {
+        console.error('Failed to log mute:', e);
+    }
+}
+
+async function logUnmute(client, mute, staffMember, reason, linkedAccounts = []) {
+    if (!LOG_CHANNEL_ID) return;
+
+    try {
+        const channel = await client.channels.fetch(LOG_CHANNEL_ID).catch(() => null);
+        if (!channel) return;
+
+        const targetLabel = mute.discordId
+            ? `<@${mute.discordId}>${mute.discordTag ? ` (${mute.discordTag})` : ''}`
+            : mute.playerName || 'Unknown';
+
+        const embed = new EmbedBuilder()
+            .setTitle('Player Unmuted')
+            .setColor(0x57F287)
+            .addFields(
+                { name: 'Target', value: targetLabel, inline: true },
+                { name: 'Unmuted By', value: `<@${staffMember.id}>`, inline: true },
+                { name: 'Reason', value: reason || 'No reason provided', inline: false }
+            )
+            .setFooter({ text: `Case #${mute.caseNumber || 'N/A'}` })
+            .setTimestamp();
+
+        if (mute.playerName) {
+            embed.addFields({ name: 'Minecraft', value: `**${mute.playerName}** (${mute.platform || 'java'})`, inline: true });
+        }
+
+        if (linkedAccounts.length > 1) {
+            embed.addFields({
+                name: `Linked Accounts (${linkedAccounts.length})`,
+                value: linkedAccounts.map(a => `• ${a.minecraftUsername} (${a.platform})`).join('\n'),
+                inline: false
+            });
+        }
+
+        await channel.send({ embeds: [embed] });
+    } catch (e) {
+        console.error('Failed to log unmute:', e);
     }
 }
 
@@ -390,10 +497,10 @@ const slashCommands = [
             const platformOption = interaction.options.getString('platform') || 'java';
 
             // Parse duration
-            const durationData = parseDuration(durationInput);
+            const durationData = parseDurationFull(durationInput);
             if (!durationData) {
                 return interaction.editReply({
-                    content: 'Invalid duration format. Use formats like `1d`, `7d`, `30d`, `1h`, `30m`, or `perm` for permanent.'
+                    content: 'Invalid duration format. Use formats like `1m`, `1h`, `1d`, `1w`, `1mo`, or `perm` for permanent.'
                 });
             }
 
@@ -1064,11 +1171,8 @@ const slashCommands = [
             }
 
             const { discordId, discordUser, linkedAccounts, primaryProfile } = targetUserResolved;
-            const discordTag = discordUser?.tag || targetUser?.tag || linkedAccounts[0]?.minecraftUsername;
-
-            if (!discordId) {
-                return interaction.editReply({ content: 'That Minecraft account is not linked to Discord, so it cannot be warned from this command.' });
-            }
+            const targetName = primaryProfile?.name || linkedAccounts[0]?.minecraftUsername || targetUser?.tag || mcname;
+            const discordTag = discordUser?.tag || targetUser?.tag || null;
 
             // Get case number
             let caseNumber;
@@ -1090,7 +1194,7 @@ const slashCommands = [
                 playerName: primaryProfile?.name || null,
                 platform: primaryProfile?.platform || null,
                 warnedUuids,
-                discordId,
+                discordId: discordId || null,
                 discordTag,
                 reason,
                 severity,
@@ -1105,14 +1209,15 @@ const slashCommands = [
 
             await warning.save();
 
-            warning.dmSent = false;
-            await warning.save();
-
             // Log to channel
             await logWarning(client, warning, linkedAccounts);
 
             // Get total active warnings for this user
-            const totalWarnings = await Warning.countActiveWarnings(discordId);
+            const totalWarnings = await Warning.countActiveWarnings({
+                discordId: discordId || null,
+                uuid: primaryProfile?.uuid || null,
+                playerName: primaryProfile?.name || null
+            });
 
             // Build response embed
             const severityColors = {
@@ -1125,7 +1230,7 @@ const slashCommands = [
                 .setTitle('Warning Issued')
                 .setColor(severityColors[severity] || 0xFFA500)
                 .addFields(
-                    { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
+                    { name: 'Target', value: discordId ? `${discordTag} (<@${discordId}>)` : targetName, inline: true },
                     { name: 'Severity', value: severity.charAt(0).toUpperCase() + severity.slice(1), inline: true },
                     { name: 'Category', value: category.charAt(0).toUpperCase() + category.slice(1), inline: true },
                     { name: 'Reason', value: reason, inline: false },
@@ -1199,13 +1304,15 @@ const slashCommands = [
             }
 
             // Parse duration
-            const durationParsed = parseDuration(durationStr);
+            const durationParsed = parseDurationFull(durationStr);
             if (!durationParsed) {
-                return interaction.editReply({ content: 'Invalid duration format. Use formats like: 10m, 1h, 1d, 7d' });
+                return interaction.editReply({ content: 'Invalid duration format. Use formats like: 10m, 1h, 1d, 1w, 1mo, or perm.' });
             }
 
             const { discordId, discordUser, linkedAccounts, primaryProfile } = targetUserResolved;
-            const discordTag = discordUser?.tag || targetUser?.tag || linkedAccounts[0]?.minecraftUsername;
+            const targetName = primaryProfile?.name || linkedAccounts[0]?.minecraftUsername || mcname || targetUser?.tag;
+            const discordTag = discordUser?.tag || targetUser?.tag || null;
+            const muteTargets = dedupeTargets(primaryProfile, linkedAccounts);
 
             // Get case number
             let caseNumber;
@@ -1215,12 +1322,14 @@ const slashCommands = [
                 caseNumber = Date.now();
             }
 
+            const appliedMutes = await applyMinecraftMute(muteTargets, durationParsed.ms);
+
             // Create the mute record
             const { randomUUID } = require('crypto');
             const mute = new Mute({
                 _id: randomUUID(),
                 caseNumber,
-                discordId,
+                discordId: discordId || null,
                 discordTag,
                 uuid: primaryProfile?.uuid || null,
                 playerName: primaryProfile?.name || null,
@@ -1238,52 +1347,27 @@ const slashCommands = [
 
             await mute.save();
 
-            // Log to channel
-            if (LOG_CHANNEL_ID) {
-                try {
-                    const logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
-                    if (logChannel) {
-                        const logEmbed = new EmbedBuilder()
-                            .setTitle('User Muted')
-                            .setColor(0xFF4444)
-                            .addFields(
-                                { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
-                                { name: 'Duration', value: durationParsed.display, inline: true },
-                                { name: 'Expires', value: `<t:${Math.floor(durationParsed.expiresAt.getTime() / 1000)}:f>`, inline: true },
-                                { name: 'Reason', value: reason, inline: false },
-                                { name: 'Moderator', value: interaction.user.tag, inline: true }
-                            )
-                            .setFooter({ text: `Case #${caseNumber}` })
-                            .setTimestamp();
-
-                        if (primaryProfile) {
-                            logEmbed.addFields({ 
-                                name: 'Minecraft Account', 
-                                value: `${primaryProfile.name} (${primaryProfile.platform})`, 
-                                inline: false 
-                            });
-                        }
-
-                        await logChannel.send({ embeds: [logEmbed] });
-                    }
-                } catch (e) {
-                    console.error('Failed to log mute:', e);
-                }
-            }
+            await logMute(client, mute, linkedAccounts);
 
             // Build response embed
             const embed = new EmbedBuilder()
                 .setTitle('User Muted')
                 .setColor(0xFF4444)
                 .addFields(
-                    { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
+                    { name: 'Target', value: discordId ? `${discordTag} (<@${discordId}>)` : targetName, inline: true },
                     { name: 'Duration', value: durationParsed.display, inline: true },
-                    { name: 'Expires', value: `<t:${Math.floor(durationParsed.expiresAt.getTime() / 1000)}:R>`, inline: true },
+                    { name: 'Expires', value: durationParsed.expiresAt ? `<t:${Math.floor(durationParsed.expiresAt.getTime() / 1000)}:R>` : 'Permanent', inline: true },
                     { name: 'Reason', value: reason, inline: false },
                     { name: 'Minecraft Target', value: primaryProfile ? `**${primaryProfile.name}** (${primaryProfile.platform})` : 'Unknown', inline: false }
                 )
                 .setFooter({ text: `Case #${caseNumber} | Muted by ${interaction.user.tag}` })
                 .setTimestamp();
+
+            embed.addFields({
+                name: 'Minecraft Enforcement',
+                value: appliedMutes.map(entry => `**${entry.target.name}**: ${entry.result.success ? 'Muted' : 'Failed'}${entry.result.success ? '' : ` (${entry.result.response})`}`).join('\n').substring(0, 1024),
+                inline: false
+            });
 
             return interaction.editReply({ embeds: [embed] });
         }
@@ -1295,7 +1379,12 @@ const slashCommands = [
             .addUserOption(opt => opt
                 .setName('target')
                 .setDescription('Discord user linked to the Minecraft account')
-                .setRequired(true)
+                .setRequired(false)
+            )
+            .addStringOption(opt => opt
+                .setName('mcname')
+                .setDescription('Or enter a Minecraft username to lookup')
+                .setRequired(false)
             )
             .addStringOption(opt => opt
                 .setName('reason')
@@ -1315,58 +1404,64 @@ const slashCommands = [
             await interaction.deferReply();
 
             const targetUser = interaction.options.getUser('target');
+            const mcname = interaction.options.getString('mcname');
             const reason = interaction.options.getString('reason') || 'No reason provided';
-            const resolvedTarget = await resolveMinecraftTarget(`<@${targetUser.id}>`, 'java', interaction.client);
+            let resolvedTarget = null;
+
+            if (targetUser) {
+                resolvedTarget = await resolveMinecraftTarget(`<@${targetUser.id}>`, 'java', interaction.client);
+            } else if (mcname) {
+                resolvedTarget = await resolveMinecraftTarget(mcname, 'java', interaction.client);
+            }
+
             if (resolvedTarget.error) {
                 return interaction.editReply({ content: resolvedTarget.error });
             }
+            if (!resolvedTarget) {
+                return interaction.editReply({ content: 'You must provide either a Discord user or a Minecraft username.' });
+            }
 
             const { discordId, discordUser, linkedAccounts, primaryProfile } = resolvedTarget;
-            const discordTag = discordUser?.tag || targetUser.tag;
+            const discordTag = discordUser?.tag || targetUser?.tag || null;
+            const muteTargets = dedupeTargets(primaryProfile, linkedAccounts);
 
-            // Check if there's an active mute record and update it
-            const activeMute = await Mute.getActiveMute(discordId);
-            if (activeMute) {
+            const muteQuery = {
+                active: true,
+                $or: []
+            };
+            if (discordId) muteQuery.$or.push({ discordId });
+            if (primaryProfile?.uuid) muteQuery.$or.push({ uuid: normalizeUuid(primaryProfile.uuid) });
+            if (primaryProfile?.name) muteQuery.$or.push({ playerName: { $regex: new RegExp(`^${primaryProfile.name}$`, 'i') } });
+
+            const activeMutes = muteQuery.$or.length > 0 ? await Mute.find(muteQuery).sort({ createdAt: -1 }) : [];
+            for (const activeMute of activeMutes) {
                 activeMute.active = false;
                 activeMute.unmutedAt = new Date();
                 activeMute.unmutedBy = interaction.user.id;
                 activeMute.unmutedByTag = interaction.user.tag;
                 await activeMute.save();
             }
-            if (LOG_CHANNEL_ID) {
-                try {
-                    const logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
-                    if (logChannel) {
-                        const logEmbed = new EmbedBuilder()
-                            .setTitle('User Unmuted')
-                            .setColor(0x00FF00)
-                            .addFields(
-                                { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
-                                { name: 'Unmuted By', value: interaction.user.tag, inline: true },
-                                { name: 'Reason', value: reason, inline: false }
-                            )
-                            .setTimestamp();
 
-                        if (primaryProfile) {
-                            logEmbed.addFields({ name: 'Minecraft Target', value: `**${primaryProfile.name}** (${primaryProfile.platform})`, inline: false });
-                        }
-
-                        if (activeMute) {
-                            logEmbed.addFields({ name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true });
-                        }
-
-                        await logChannel.send({ embeds: [logEmbed] });
-                    }
-                } catch (e) {
-                    console.error('Failed to log unmute:', e);
-                }
-            }
+            const appliedUnmutes = await applyMinecraftUnmute(muteTargets);
+            await logUnmute(
+                client,
+                activeMutes[0] || {
+                    caseNumber: null,
+                    discordId: discordId || null,
+                    discordTag,
+                    playerName: primaryProfile?.name || null,
+                    platform: primaryProfile?.platform || null
+                },
+                interaction.user,
+                reason,
+                linkedAccounts
+            );
 
             const embed = new EmbedBuilder()
                 .setTitle('User Unmuted')
                 .setColor(0x00FF00)
                 .addFields(
-                    { name: 'User', value: `${discordTag} (<@${discordId}>)`, inline: true },
+                    { name: 'Target', value: discordId ? `${discordTag} (<@${discordId}>)` : (primaryProfile?.name || mcname || targetUser?.tag || 'Unknown'), inline: true },
                     { name: 'Reason', value: reason, inline: false }
                 )
                 .setFooter({ text: `Unmuted by ${interaction.user.tag}` })
@@ -1376,9 +1471,15 @@ const slashCommands = [
                 embed.addFields({ name: 'Minecraft Target', value: `**${primaryProfile.name}** (${primaryProfile.platform})`, inline: false });
             }
 
-            if (activeMute) {
-                embed.addFields({ name: 'Original Mute', value: `Case #${activeMute.caseNumber}`, inline: true });
+            if (activeMutes.length > 0) {
+                embed.addFields({ name: 'Original Mute', value: `Case #${activeMutes[0].caseNumber}${activeMutes.length > 1 ? ` (+${activeMutes.length - 1} more)` : ''}`, inline: true });
             }
+
+            embed.addFields({
+                name: 'Minecraft Enforcement',
+                value: appliedUnmutes.map(entry => `**${entry.target.name}**: ${entry.result.success ? 'Unmuted' : 'Failed'}${entry.result.success ? '' : ` (${entry.result.response})`}`).join('\n').substring(0, 1024),
+                inline: false
+            });
 
             return interaction.editReply({ embeds: [embed] });
         }
@@ -1426,16 +1527,20 @@ const slashCommands = [
             }
 
             const { discordId, discordUser, linkedAccounts, primaryProfile } = targetUserResolved;
-            const warnings = await Warning.getUserWarnings(discordId, includeRemoved);
+            const warnings = await Warning.getUserWarnings({
+                discordId: discordId || null,
+                uuid: primaryProfile?.uuid || null,
+                playerName: primaryProfile?.name || targetUser?.tag || mcname || null
+            }, includeRemoved);
 
             if (warnings.length === 0) {
                 return interaction.editReply({ 
-                    content: `**${discordUser?.tag || targetUser?.tag || linkedAccounts[0]?.minecraftUsername}** has no${includeRemoved ? '' : ' active'} warnings.` 
+                    content: `**${discordUser?.tag || targetUser?.tag || primaryProfile?.name || linkedAccounts[0]?.minecraftUsername || mcname}** has no${includeRemoved ? '' : ' active'} warnings.` 
                 });
             }
 
             const embed = new EmbedBuilder()
-                .setTitle(`Warnings: ${discordUser?.tag || targetUser?.tag || linkedAccounts[0]?.minecraftUsername}`)
+                .setTitle(`Warnings: ${discordUser?.tag || targetUser?.tag || primaryProfile?.name || linkedAccounts[0]?.minecraftUsername || mcname}`)
                 .setColor(0xFFA500)
                 .setFooter({ text: `${warnings.length} warning(s) found` })
                 .setTimestamp();
@@ -1504,7 +1609,7 @@ const slashCommands = [
                 .setColor(0x57F287)
                 .addFields(
                     { name: 'Case', value: `#${caseNumber}`, inline: true },
-                    { name: 'User', value: `<@${warning.discordId}>`, inline: true },
+                    { name: 'Target', value: warning.discordId ? `<@${warning.discordId}>` : (warning.playerName || 'Unknown'), inline: true },
                     { name: 'Original Reason', value: warning.reason, inline: false },
                     { name: 'Removal Reason', value: removeReason, inline: false }
                 )
@@ -1665,26 +1770,24 @@ const slashCommands = [
 ];
 
 /**
- * Process expired mutes - removes muted role from expired mutes
- * Should be called periodically
+ * Process expired mutes - removes the Minecraft mute from expired mutes.
+ * Should be called periodically.
  */
 async function processExpiredMutes(client) {
     try {
         const expiredMutes = await Mute.getExpiredMutes();
-        const mutedRoleId = process.env.MUTED_ROLE_ID;
         
         for (const mute of expiredMutes) {
             try {
-                // Find the guild and member
-                for (const [, guild] of client.guilds.cache) {
-                    try {
-                        const member = await guild.members.fetch(mute.discordId).catch(() => null);
-                        if (member && mutedRoleId) {
-                            await member.roles.remove(mutedRoleId, 'Mute expired');
-                            console.log(`[Mutes] Removed expired mute from ${mute.discordTag}`);
-                        }
-                    } catch (e) {
-                        // Member might not be in this guild
+                const targetName = mute.playerName || null;
+                if (targetName) {
+                    await unmutePlayer(targetName).catch(() => null);
+                }
+
+                if (mute.uuid) {
+                    const linkedAccounts = await getAllLinkedAccounts(null, mute.uuid).catch(() => []);
+                    for (const account of linkedAccounts) {
+                        await unmutePlayer(account.minecraftUsername).catch(() => null);
                     }
                 }
                 
@@ -1694,8 +1797,12 @@ async function processExpiredMutes(client) {
                 mute.unmutedBy = 'system';
                 mute.unmutedByTag = 'Auto-expire';
                 await mute.save();
+
+                if (targetName) {
+                    console.log(`[Mutes] Expired mute lifted for ${targetName}`);
+                }
             } catch (e) {
-                console.error(`Failed to process expired mute for ${mute.discordId}:`, e);
+                console.error(`Failed to process expired mute for ${mute.playerName || mute.discordId || mute._id}:`, e);
             }
         }
     } catch (e) {

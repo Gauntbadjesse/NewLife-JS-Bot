@@ -1,6 +1,6 @@
 /**
  * Warning Model
- * Schema for player warnings - supports Discord users and linked MC accounts
+ * Schema for player warnings - supports Discord users and Minecraft-only targets
  */
 
 const mongoose = require('mongoose');
@@ -34,15 +34,15 @@ const warningSchema = new mongoose.Schema({
     warnedUuids: [{
         type: String
     }],
-    // Discord info (required)
+    // Discord info (optional for Minecraft-only warnings)
     discordId: {
         type: String,
         index: true,
-        required: true
+        default: null
     },
     discordTag: {
         type: String,
-        required: true
+        default: null
     },
     // Staff info
     staffUuid: {
@@ -111,6 +111,7 @@ const warningSchema = new mongoose.Schema({
 
 // Indexes for faster lookups
 warningSchema.index({ playerName: 1 });
+warningSchema.index({ uuid: 1, active: 1 });
 warningSchema.index({ discordId: 1, active: 1 });
 warningSchema.index({ active: 1 });
 warningSchema.index({ createdAt: -1 });
@@ -118,18 +119,40 @@ warningSchema.index({ category: 1 });
 warningSchema.index({ severity: 1 });
 warningSchema.index({ staffId: 1 });
 
-// Static method to count active warnings for a user
-warningSchema.statics.countActiveWarnings = async function(discordId) {
-    return this.countDocuments({ discordId, active: true });
-};
-
-// Static method to get all warnings for a user
-warningSchema.statics.getUserWarnings = async function(discordId, includeRemoved = false) {
-    const query = { discordId };
+function buildTargetQuery(target, includeRemoved = false) {
+    const query = {};
     if (!includeRemoved) {
         query.active = true;
     }
-    return this.find(query).sort({ createdAt: -1 });
+
+    if (!target) {
+        return query;
+    }
+
+    if (typeof target === 'string') {
+        query.discordId = String(target);
+        return query;
+    }
+
+    if (target.discordId) {
+        query.discordId = String(target.discordId);
+    } else if (target.uuid) {
+        query.uuid = String(target.uuid).replace(/-/g, '').toLowerCase();
+    } else if (target.playerName) {
+        query.playerName = { $regex: new RegExp(`^${target.playerName}$`, 'i') };
+    }
+
+    return query;
+}
+
+// Static method to count active warnings for a user
+warningSchema.statics.countActiveWarnings = async function(target) {
+    return this.countDocuments(buildTargetQuery(target, false));
+};
+
+// Static method to get all warnings for a user
+warningSchema.statics.getUserWarnings = async function(target, includeRemoved = false) {
+    return this.find(buildTargetQuery(target, includeRemoved)).sort({ createdAt: -1 });
 };
 
 module.exports = mongoose.model('Warning', warningSchema);
